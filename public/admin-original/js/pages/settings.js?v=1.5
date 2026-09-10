@@ -1,0 +1,281 @@
+/**
+ * Company Info / Settings Component
+ */
+
+window.initSettings = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="settings.title">Company Settings</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="settings.subtitle">Manage site identity, contact info, and theme colors</p>
+            </div>
+            <button class="btn btn-primary" id="btn-save-settings">
+                <i class="fa-solid fa-save"></i>
+                <span data-i18n="settings.saveAll">Save All Changes</span>
+            </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+            
+            <!-- Basic Info Card -->
+            <div class="glass-card" style="padding: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: var(--primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;" data-i18n="settings.basicInfo">Basic Information</h3>
+                <form id="settings-basic-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label data-i18n="settings.companyNameEn">Company Name (EN)</label>
+                            <input type="text" id="set-name-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="settings.companyNameAr">Company Name (AR)</label>
+                            <input type="text" id="set-name-ar" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label data-i18n="settings.siteNameEn">Site Name (EN)</label>
+                            <input type="text" id="set-sitename-en" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="settings.siteNameAr">Site Name (AR)</label>
+                            <input type="text" id="set-sitename-ar" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="settings.addressEn">Address (EN)</label>
+                        <input type="text" id="set-addr-en" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="settings.addressAr">Address (AR)</label>
+                        <input type="text" id="set-addr-ar" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                </form>
+            </div>
+
+            <!-- Contact & Colors Card -->
+            <div style="display: flex; flex-direction: column; gap: 2rem;">
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1.5rem; color: var(--primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;" data-i18n="settings.contactInfo">Contact Info</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label data-i18n="settings.phoneNumber">Phone Number</label>
+                            <input type="text" id="set-phone" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                        <div class="form-group">
+                            <label>WhatsApp</label>
+                            <input type="text" id="set-whatsapp" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="settings.emailAddress">Email Address</label>
+                        <input type="email" id="set-email" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                </div>
+
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1.5rem; color: var(--primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;" data-i18n="settings.socialMedia">Social Media Links</h3>
+                    <div class="form-group">
+                        <label>Facebook URL</label>
+                        <input type="url" id="set-facebook" class="input-control" placeholder="https://facebook.com/..." style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                    <div class="form-group">
+                        <label>Instagram URL</label>
+                        <input type="url" id="set-instagram" class="input-control" placeholder="https://instagram.com/..." style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                    <div class="form-group">
+                        <label>TikTok URL</label>
+                        <input type="url" id="set-tiktok" class="input-control" placeholder="https://tiktok.com/..." style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                    </div>
+                </div>
+
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1.5rem; color: var(--primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;" data-i18n="settings.themeColors">Theme Colors</h3>
+                    <div class="form-row" style="flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 120px;">
+                            <label data-i18n="settings.primaryColor">Primary Color</label>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <input type="color" id="set-color-primary" style="height:40px; width:45px; cursor:pointer; background:transparent; border:none; padding:0;">
+                                <input type="text" id="set-color-primary-text" class="input-control" style="width: 100%; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 120px;">
+                            <label data-i18n="settings.secondaryColor">Secondary Color</label>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <input type="color" id="set-color-secondary" style="height:40px; width:45px; cursor:pointer; background:transparent; border:none; padding:0;">
+                                <input type="text" id="set-color-secondary-text" class="input-control" style="width: 100%; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Identity/Media Card -->
+        <div class="glass-card" style="padding: 1.5rem;">
+            <h3 style="margin-bottom: 1.5rem; color: var(--primary); border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;" data-i18n="settings.siteIdentity">Site Identity (Media)</h3>
+            <div class="form-row" style="gap: 3rem;">
+                <div style="flex:1;">
+                    <label style="display:block; margin-bottom: 1rem; font-weight: 500;" data-i18n="settings.mainLogo">Main Logo</label>
+                    <div style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 8px; text-align: center; border: 1px dashed var(--border-color);">
+                        <img id="set-logo-preview" src="" style="height: 60px; object-fit: contain; margin-bottom: 1rem; background: #fff; padding: 5px; border-radius: 4px;">
+                        <input type="file" id="set-logo-file" accept="image/*" style="display: block; width: 100%; color: var(--text-muted); font-size: 0.85rem;">
+                        <button class="btn btn-sm btn-outline" id="btn-upload-logo" style="margin-top: 1rem; width: 100%;"><i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="settings.uploadLogo">Upload New Logo</span></button>
+                    </div>
+                </div>
+                <div style="flex:1;">
+                    <label style="display:block; margin-bottom: 1rem; font-weight: 500;" data-i18n="settings.favicon">Favicon</label>
+                    <div style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 8px; text-align: center; border: 1px dashed var(--border-color);">
+                        <img id="set-favicon-preview" src="" style="width: 48px; height: 48px; object-fit: contain; margin-bottom: 1rem; background: #fff; padding: 2px; border-radius: 4px;">
+                        <input type="file" id="set-favicon-file" accept=".ico,.png" style="display: block; width: 100%; color: var(--text-muted); font-size: 0.85rem;">
+                        <button class="btn btn-sm btn-outline" id="btn-upload-favicon" style="margin-top: 1rem; width: 100%;"><i class="fa-solid fa-cloud-arrow-up"></i> <span data-i18n="settings.uploadFavicon">Upload Favicon</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupSettingsEvents = async () => {
+
+    // Sync color inputs
+    const syncColor = (colorId, textId) => {
+        const pC = document.getElementById(colorId);
+        const pT = document.getElementById(textId);
+        if (!pC || !pT) return;
+        pC.addEventListener('input', (e) => pT.value = e.target.value.toUpperCase());
+        pT.addEventListener('input', (e) => {
+            if (/^#[0-9A-F]{6}$/i.test(e.target.value)) pC.value = e.target.value;
+        });
+    };
+    syncColor('set-color-primary', 'set-color-primary-text');
+    syncColor('set-color-secondary', 'set-color-secondary-text');
+
+    // 1. Fetch current settings
+    try {
+        const response = await window.api.get('/api/admin/company-info');
+        const info = response.company_info || response || {};
+
+        document.getElementById('set-name-en').value = info.name_en || '';
+        document.getElementById('set-name-ar').value = info.name_ar || '';
+        document.getElementById('set-sitename-en').value = info.site_name_en || '';
+        document.getElementById('set-sitename-ar').value = info.site_name_ar || '';
+        document.getElementById('set-addr-en').value = info.address_en || '';
+        document.getElementById('set-addr-ar').value = info.address_ar || '';
+        document.getElementById('set-phone').value = info.phone || '';
+        document.getElementById('set-whatsapp').value = info.whatsapp || '';
+        document.getElementById('set-email').value = info.email || '';
+
+        // Social Links
+        document.getElementById('set-facebook').value = info.facebook_url || '';
+        document.getElementById('set-instagram').value = info.instagram_url || '';
+        document.getElementById('set-tiktok').value = info.tiktok_url || '';
+
+        // Colors
+        if (info.primary_color) {
+            document.getElementById('set-color-primary').value = info.primary_color;
+            document.getElementById('set-color-primary-text').value = info.primary_color;
+        }
+        if (info.secondary_color) {
+            document.getElementById('set-color-secondary').value = info.secondary_color;
+            document.getElementById('set-color-secondary-text').value = info.secondary_color;
+        }
+
+        // Images preview
+        document.getElementById('set-logo-preview').src = info.logo_url || 'https://via.placeholder.com/150x50?text=No+Logo';
+        document.getElementById('set-favicon-preview').src = info.favicon_url || 'https://via.placeholder.com/48?text=Ico';
+
+    } catch (e) {
+        window.app.showToast((window.i18n.t('settings.loadFailed') || 'Failed to load settings: ') + e.message, 'error');
+    }
+
+    // 2. Save Settings Handler (Text + Colors only)
+    document.getElementById('btn-save-settings').addEventListener('click', async () => {
+        const payload = {
+            name_en: document.getElementById('set-name-en').value.trim(),
+            name_ar: document.getElementById('set-name-ar').value.trim(),
+            site_name_en: document.getElementById('set-sitename-en').value.trim(),
+            site_name_ar: document.getElementById('set-sitename-ar').value.trim(),
+            address_en: document.getElementById('set-addr-en').value.trim(),
+            address_ar: document.getElementById('set-addr-ar').value.trim(),
+            phone: document.getElementById('set-phone').value.trim(),
+            whatsapp: document.getElementById('set-whatsapp').value.trim(),
+            email: document.getElementById('set-email').value.trim(),
+            facebook_url: document.getElementById('set-facebook').value.trim(),
+            instagram_url: document.getElementById('set-instagram').value.trim(),
+            tiktok_url: document.getElementById('set-tiktok').value.trim(),
+            primary_color: document.getElementById('set-color-primary-text').value.trim() || undefined,
+            secondary_color: document.getElementById('set-color-secondary-text').value.trim() || undefined,
+        };
+
+        if (!payload.name_en) {
+            window.app.showToast(window.i18n.t('settings.nameRequired') || 'Company Name (EN) is required', 'warning');
+            return;
+        }
+
+        const btn = document.getElementById('btn-save-settings');
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.saving') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            await window.api.put('/api/admin/company-info', payload);
+            window.app.showToast(window.i18n.t('settings.savedSuccess') || 'Settings saved successfully!', 'success');
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+
+    // 3. Upload Logo Handler
+    document.getElementById('btn-upload-logo').addEventListener('click', async () => {
+        const fileInput = document.getElementById('set-logo-file');
+        if (!fileInput.files.length) return window.app.showToast(window.i18n.t('settings.selectLogoFirst') || 'Please select a logo first', 'warning');
+
+        const fd = new FormData();
+        fd.append('logo', fileInput.files[0]);
+
+        const btn = document.getElementById('btn-upload-logo');
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.uploading') || 'Uploading...'}`;
+        btn.disabled = true;
+
+        try {
+            const res = await window.api.post('/api/admin/company-info/logo', fd);
+            document.getElementById('set-logo-preview').src = res.logo_url;
+            window.app.showToast(window.i18n.t('settings.logoUpdated') || 'Logo updated successfully!');
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+
+    // 4. Upload Favicon Handler
+    document.getElementById('btn-upload-favicon').addEventListener('click', async () => {
+        const fileInput = document.getElementById('set-favicon-file');
+        if (!fileInput.files.length) return window.app.showToast(window.i18n.t('settings.selectFaviconFirst') || 'Please select a favicon first', 'warning');
+
+        const fd = new FormData();
+        fd.append('favicon', fileInput.files[0]);
+
+        const btn = document.getElementById('btn-upload-favicon');
+        const origText = btn.innerHTML;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.uploading') || 'Uploading...'}`;
+        btn.disabled = true;
+
+        try {
+            const res = await window.api.post('/api/admin/company-info/favicon', fd);
+            document.getElementById('set-favicon-preview').src = res.favicon_url;
+            window.app.showToast(window.i18n.t('settings.faviconUpdated') || 'Favicon updated successfully!');
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};

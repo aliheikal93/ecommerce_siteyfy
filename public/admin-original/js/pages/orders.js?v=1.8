@@ -1,0 +1,465 @@
+/**
+ * Orders Management Component
+ */
+
+window.ordersState = {
+    orders: [],
+    page: 1,
+    limit: 20,
+    status: '',
+    search: '',
+    isLoading: false,
+    selectedOrder: null
+};
+
+function getLocalizedEntityName(entity) {
+    if (!entity) return 'N/A';
+    if (window.i18n.currentLang === 'ar') {
+        return entity.nameAr || entity.name_ar || entity.nameEn || entity.name_en || 'N/A';
+    }
+    return entity.nameEn || entity.name_en || entity.nameAr || entity.name_ar || 'N/A';
+}
+
+function getOrderItemDisplayName(item) {
+    return (
+        (window.i18n.currentLang === 'ar'
+            ? item.displayNameAr || item.productDetails?.displayNameAr
+            : item.displayName || item.productDetails?.displayNameEn) ||
+        item.product?.model ||
+        item.product?.modelAr ||
+        item.productDetails?.displayNameEn ||
+        `Product #${item.productId}`
+    );
+}
+
+function getOrderItemMeta(item) {
+    const lines = [];
+    const brandName = window.i18n.currentLang === 'ar'
+        ? item.productDetails?.brandNameAr || item.product?.brand?.nameAr || item.product?.brandAr
+        : item.productDetails?.brandNameEn || item.product?.brand?.nameEn || item.product?.brandEn;
+    const categoryName = window.i18n.currentLang === 'ar'
+        ? item.productDetails?.categoryNameAr || item.product?.category?.nameAr
+        : item.productDetails?.categoryNameEn || item.product?.category?.nameEn;
+    const variantSummary = window.i18n.currentLang === 'ar'
+        ? item.variantInfo?.summaryAr
+        : item.variantInfo?.summaryEn;
+
+    if (brandName) lines.push(brandName);
+    if (categoryName) lines.push(categoryName);
+    if (variantSummary) lines.push(variantSummary);
+    if (item.variantInfo?.sku) lines.push(`SKU: ${item.variantInfo.sku}`);
+
+    return lines;
+}
+
+window.initOrders = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="orders.title">Orders Management</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="orders.subtitle">View, track, and update customer orders</p>
+            </div>
+            <div class="stats-mini-grid" id="orders-stats-container" style="display: flex; gap: 1rem;">
+                <!-- Stats will be injected here -->
+            </div>
+        </div>
+
+        <div class="table-container">
+            <!-- Filter Bar -->
+            <div class="filter-bar" style="display: flex; gap: 1rem; align-items: center; padding: 1rem; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 250px;">
+                    <div class="search-box" style="width: 100%;">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" id="order-filter-search" data-i18n="orders.searchPlaceholder" placeholder="Search by Order ID, Client Name, Phone..." class="input-control" style="width: 100%;">
+                    </div>
+                </div>
+                <select id="order-filter-status" class="input-control" style="min-width: 180px; background: rgba(15, 23, 42, 0.6);">
+                    <option value="" data-i18n="orders.allStatuses">All Statuses</option>
+                    <option value="PENDING" data-i18n="orders.statusPending">Pending (جاري المراجعة)</option>
+                    <option value="PROCESSING" data-i18n="orders.statusProcessing">Processing (قيد التنفيذ)</option>
+                    <option value="SHIPPED" data-i18n="orders.statusShipped">Shipped (تم الشحن)</option>
+                    <option value="DELIVERED" data-i18n="orders.statusDelivered">Delivered (تم التوصيل)</option>
+                    <option value="CANCELLED" data-i18n="orders.statusCancelled">Cancelled (ملغي)</option>
+                    <option value="RETURNED" data-i18n="orders.statusReturned">Returned (مرتجع)</option>
+                </select>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-primary btn-sm" id="btn-apply-order-filters"><i class="fa-solid fa-filter"></i> <span data-i18n="orders.filter">Filter</span></button>
+                    <button class="btn btn-outline btn-sm" id="btn-clear-order-filters"><i class="fa-solid fa-times"></i> <span data-i18n="orders.clear">Clear</span></button>
+                </div>
+            </div>
+
+            <table class="data-table" id="orders-table">
+                <thead>
+                    <tr>
+                        <th width="150" data-i18n="orders.colOrderId">Order ID</th>
+                        <th data-i18n="orders.colCustomer">Customer</th>
+                        <th data-i18n="orders.colTotal">Total</th>
+                        <th data-i18n="orders.colStatus">Status</th>
+                        <th data-i18n="orders.colDate">Date</th>
+                        <th width="120" style="text-align: right;" data-i18n="orders.colActions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="orders.loading">Loading orders...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding: 0 1rem;">
+            <span style="color: var(--text-muted); font-size: 0.9rem;" id="order-pagination-info">Showing page 1</span>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-outline btn-sm" id="btn-order-prev" disabled><i class="fa-solid fa-chevron-left"></i> <span data-i18n="orders.prev">Prev</span></button>
+                <button class="btn btn-outline btn-sm" id="btn-order-next"><span data-i18n="orders.next">Next</span> <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+        </div>
+
+        <!-- Order View Modal -->
+        <div class="modal-overlay" id="order-detail-modal" style="z-index: 9999;">
+            <div class="modal modal-lg" style="max-width: 800px; width: 95%;">
+                <div class="modal-header">
+                    <h3 id="order-detail-title" data-i18n="orders.orderDetailsTitle">Order Details</h3>
+                    <button class="modal-close" id="close-order-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body" id="order-detail-content" style="padding: 1.5rem;">
+                    <!-- Order content will be injected here -->
+                </div>
+            </div>
+        </div>
+
+        <style>
+            .status-badge {
+                padding: 4px 10px;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                display: inline-block;
+            }
+            .status-pending { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+            .status-processing { background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+            .status-shipped { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; border: 1px solid rgba(139, 92, 246, 0.3); }
+            .status-delivered { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+            .status-cancelled { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+            .status-returned { background: rgba(107, 114, 128, 0.2); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.3); }
+            
+            .order-info-card {
+                background: rgba(0, 0, 0, 0.2);
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                padding: 1.2rem;
+                height: 100%;
+            }
+            .order-item-row {
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                padding: 0.8rem 0;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .order-item-row:last-child { border-bottom: none; }
+            .stat-mini-card {
+                background: rgba(255, 255, 255, 0.05);
+                padding: 0.5rem 1rem;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                text-align: center;
+            }
+            .stat-mini-card .value { font-weight: 700; color: var(--primary); display: block; }
+            .stat-mini-card .label { font-size: 0.7rem; color: var(--text-muted); }
+            
+            .btn-status-accept { background: #10b981 !important; color: white !important; border: none !important; }
+            .btn-status-ship { background: #6366f1 !important; color: white !important; border: none !important; }
+            .btn-status-deliver { background: #10b981 !important; color: white !important; border: none !important; }
+            .btn-status-cancel { background: #ef4444 !important; color: white !important; border: none !important; }
+            .btn-status-return { background: #6b7280 !important; color: white !important; border: none !important; }
+            
+            .btn-sm { padding: 4px 8px; font-size: 0.8rem; }
+        </style>
+    `;
+};
+
+window.setupOrdersEvents = async () => {
+    fetchOrdersStats();
+    fetchAndRenderOrders();
+
+    // Filters
+    document.getElementById('btn-apply-order-filters').addEventListener('click', () => {
+        window.ordersState.page = 1;
+        fetchAndRenderOrders();
+    });
+
+    document.getElementById('btn-clear-order-filters').addEventListener('click', () => {
+        document.getElementById('order-filter-search').value = '';
+        document.getElementById('order-filter-status').value = '';
+        window.ordersState.page = 1;
+        fetchAndRenderOrders();
+    });
+
+    // Pagination
+    document.getElementById('btn-order-prev').addEventListener('click', () => {
+        if (window.ordersState.page > 1) {
+            window.ordersState.page--;
+            fetchAndRenderOrders();
+        }
+    });
+
+    document.getElementById('btn-order-next').addEventListener('click', () => {
+        window.ordersState.page++;
+        fetchAndRenderOrders();
+    });
+
+    // Modal Close
+    document.getElementById('close-order-modal').addEventListener('click', () => {
+        document.getElementById('order-detail-modal').classList.remove('show');
+    });
+};
+
+async function fetchOrdersStats() {
+    try {
+        const res = await window.api.get('/api/admin/orders/orders-stats');
+        const data = res.data || res;
+        const stats = data.stats || data;
+        const container = document.getElementById('orders-stats-container');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="stat-mini-card">
+                <span class="value">${stats.totalOrders || 0}</span>
+                <span class="label">${window.i18n.t('orders.statTotal')}</span>
+            </div>
+            <div class="stat-mini-card">
+                <span class="value" style="color:#f59e0b">${stats.pendingOrders || 0}</span>
+                <span class="label">${window.i18n.t('orders.statPending')}</span>
+            </div>
+            <div class="stat-mini-card">
+                <span class="value" style="color:#3b82f6">${stats.processingOrders || 0}</span>
+                <span class="label">${window.i18n.t('orders.statProcessing')}</span>
+            </div>
+            <div class="stat-mini-card">
+                <span class="value" style="color:#10b981">${stats.deliveredOrders || 0}</span>
+                <span class="label">${window.i18n.t('orders.statCompleted')}</span>
+            </div>
+        `;
+    } catch (e) {
+        console.error('Stats loading failed', e);
+    }
+}
+
+async function fetchAndRenderOrders() {
+    const tbody = document.getElementById('orders-tbody');
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('orders.loading')}</td></tr>`;
+
+    try {
+        const search = document.getElementById('order-filter-search').value.trim();
+        const status = document.getElementById('order-filter-status').value;
+        const { page, limit } = window.ordersState;
+
+        let url = `/api/admin/orders?page=${page}&limit=${limit}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (status) url += `&status=${status}`;
+
+        const response = await window.api.get(url);
+        const data = response.data || response;
+        const orders = data.orders || [];
+
+        window.ordersState.orders = orders;
+
+        if (orders.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('orders.noOrdersFound')}</td></tr>`;
+        } else {
+            tbody.innerHTML = orders.map(order => `
+                <tr>
+                    <td><span style="font-family: monospace; font-weight: 600;">${order.id.substring(0, 10)}...</span></td>
+                    <td>
+                        <div style="font-weight: 600;">${order.guestFirstName || 'Member'} ${order.guestLastName || ''}</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">${order.guestPhone || order.guestEmail || 'N/A'}</div>
+                    </td>
+                    <td style="font-weight: 700; color: var(--primary);">${parseFloat(order.total).toFixed(2)} EGP</td>
+                    <td><span class="status-badge status-${order.status.toLowerCase()}">${window.i18n.t('orders.status' + order.status.charAt(0) + order.status.slice(1).toLowerCase() + 'Short') || order.status}</span></td>
+                    <td><div style="font-size: 0.85rem;">${new Date(order.createdAt).toLocaleDateString()}</div></td>
+                    <td style="text-align: right;">
+                        <div style="display: flex; gap: 0.3rem; justify-content: flex-end; flex-wrap: wrap;">
+                            <!-- Primary Status Transition -->
+                            ${order.status === 'PENDING' ? `
+                                <button class="btn btn-sm btn-status-accept" onclick="quickUpdateStatus('${order.id}', 'PENDING', 'PROCESSING')" title="Accept">
+                                    <i class="fa-solid fa-check"></i> ${window.i18n.t('orders.actionAccept')}
+                                </button>
+                            ` : ''}
+                            ${order.status === 'PROCESSING' ? `
+                                <button class="btn btn-sm btn-status-ship" onclick="quickUpdateStatus('${order.id}', 'PROCESSING', 'SHIPPED')" title="Ship">
+                                    <i class="fa-solid fa-truck"></i> ${window.i18n.t('orders.actionShip')}
+                                </button>
+                            ` : ''}
+                            ${order.status === 'SHIPPED' ? `
+                                <button class="btn btn-sm btn-status-deliver" onclick="quickUpdateStatus('${order.id}', 'SHIPPED', 'DELIVERED')" title="Deliver">
+                                    <i class="fa-solid fa-house-chimney"></i> ${window.i18n.t('orders.actionDeliver')}
+                                </button>
+                            ` : ''}
+
+                            <!-- View Details -->
+                            <button class="btn btn-sm btn-info" onclick="viewOrderDetails('${order.id}')" title="${window.i18n.t('orders.actionView')}">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+
+                            <!-- Destructive Actions -->
+                            ${['PENDING', 'PROCESSING'].includes(order.status) ? `
+                                <button class="btn btn-sm btn-status-cancel" onclick="quickUpdateStatus('${order.id}', '${order.status}', 'CANCELLED')" title="${window.i18n.t('orders.actionCancel')}">
+                                    <i class="fa-solid fa-ban"></i>
+                                </button>
+                            ` : ''}
+                            ${order.status === 'DELIVERED' ? `
+                                <button class="btn btn-sm btn-status-return" onclick="quickUpdateStatus('${order.id}', 'DELIVERED', 'RETURNED')" title="${window.i18n.t('orders.actionReturn')}">
+                                    <i class="fa-solid fa-rotate-left"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Update pagination
+        const paginationInfo = document.getElementById('order-pagination-info');
+        paginationInfo.textContent = `${window.i18n.t('orders.showingPage')}${page}${data.pagination?.total ? window.i18n.t('orders.showingPageTotal') + data.pagination.total + ')' : ''}`;
+        document.getElementById('btn-order-prev').disabled = page <= 1;
+        document.getElementById('btn-order-next').disabled = orders.length < limit;
+
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger);">Error: ${e.message}</td></tr>`;
+    }
+}
+
+window.viewOrderDetails = async (id) => {
+    const order = window.ordersState.orders.find(o => o.id === id);
+    if (!order) return;
+
+    window.ordersState.selectedOrder = order;
+    const modal = document.getElementById('order-detail-modal');
+    const content = document.getElementById('order-detail-content');
+
+    document.getElementById('order-detail-title').textContent = `${window.i18n.t('orders.orderDetailsTitle')}: ${order.id.substring(0, 8)}`;
+    modal.classList.add('show');
+
+    // Loading items if not present (usually they should be there from the list API if it's broad enough)
+    // If items aren't nested, we'd fetch them here.
+
+    renderOrderModalContent(order);
+};
+
+function renderOrderModalContent(order) {
+    const content = document.getElementById('order-detail-content');
+
+    const itemsHtml = (order.items || []).map(item => `
+        <div class="order-item-row">
+            <div style="width: 50px; height: 50px; background: #fff; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color);">
+                <img src="${item.product?.mainPhotoUrl || 'https://via.placeholder.com/50'}" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <div style="flex: 1;">
+                <div style="font-weight: 600; font-size: 0.9rem;">${getOrderItemDisplayName(item)}</div>
+                ${getOrderItemMeta(item).map(line => `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">${line}</div>`).join('')}
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">${window.i18n.t('orders.qty')} ${item.quantity} &times; ${parseFloat(item.unitPrice || item.price).toFixed(2)} EGP</div>
+            </div>
+            <div style="font-weight: 700;">${parseFloat(item.lineTotal || (item.quantity * parseFloat(item.price))).toFixed(2)} EGP</div>
+        </div>
+    `).join('');
+
+    content.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div class="order-info-card">
+                <h4 style="margin-bottom: 1rem; color: var(--primary); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                    <i class="fa-solid fa-user-tag"></i> ${window.i18n.t('orders.customerInfo')}
+                </h4>
+                <p><strong>${window.i18n.t('orders.name')}</strong> ${order.customerDisplayName || `${order.guestFirstName || 'N/A'} ${order.guestLastName || ''}`}</p>
+                <p><strong>${window.i18n.t('orders.phone')}</strong> ${order.guestPhone || order.user?.phone || 'N/A'}</p>
+                <p><strong>${window.i18n.t('orders.email')}</strong> ${order.guestEmail || order.user?.email || 'N/A'}</p>
+                <p><strong>${window.i18n.t('orders.governorate')}</strong> ${getLocalizedEntityName(order.governorate)}</p>
+                <p><strong>${window.i18n.t('orders.area')}</strong> ${getLocalizedEntityName(order.area)}</p>
+                <p><strong>${window.i18n.t('orders.street')}</strong> ${order.street || 'N/A'}</p>
+                <p><strong>${window.i18n.t('orders.bldg')}</strong> ${order.buildingNumber || 'N/A'} | <strong>${window.i18n.t('orders.floor')}</strong> ${order.floorNumber || 'N/A'} | <strong>${window.i18n.t('orders.apt')}</strong> ${order.apartmentNumber || 'N/A'}</p>
+                ${order.deliveryNotes ? `<p><strong>${window.i18n.t('orders.notes')}</strong> ${order.deliveryNotes}</p>` : ''}
+                <p style="margin-top:0.5rem; font-size:0.8rem; color:var(--text-muted); opacity:0.6;"><em>${window.i18n.t('orders.fullAddress')} ${order.shippingAddress || 'N/A'}</em></p>
+            </div>
+            <div class="order-info-card">
+                <h4 style="margin-bottom: 1rem; color: var(--primary); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                    <i class="fa-solid fa-clipboard-list"></i> ${window.i18n.t('orders.orderStatus')}
+                </h4>
+                <div class="form-group">
+                    <label>${window.i18n.t('orders.changeStatus')}</label>
+                    <select id="modal-order-status" class="input-control" style="width: 100%; padding: 0.8rem; border-radius: 8px;">
+                        <option value="PENDING" ${order.status === 'PENDING' ? 'selected' : ''}>${window.i18n.t('orders.statusPendingShort')}</option>
+                        <option value="PROCESSING" ${order.status === 'PROCESSING' ? 'selected' : ''}>${window.i18n.t('orders.statusProcessingShort')}</option>
+                        <option value="SHIPPED" ${order.status === 'SHIPPED' ? 'selected' : ''}>${window.i18n.t('orders.statusShippedShort')}</option>
+                        <option value="DELIVERED" ${order.status === 'DELIVERED' ? 'selected' : ''}>${window.i18n.t('orders.statusDeliveredShort')}</option>
+                        <option value="CANCELLED" ${order.status === 'CANCELLED' ? 'selected' : ''}>${window.i18n.t('orders.statusCancelledShort')}</option>
+                        <option value="RETURNED" ${order.status === 'RETURNED' ? 'selected' : ''}>${window.i18n.t('orders.statusReturnedShort')}</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary btn-block" onclick="updateOrderStatus('${order.id}')" id="btn-update-status" style="margin-top: 1rem;">
+                    ${window.i18n.t('orders.updateStatus')}
+                </button>
+            </div>
+        </div>
+
+        <div class="order-info-card">
+            <h4 style="margin-bottom: 1rem; color: var(--primary); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
+                <i class="fa-solid fa-boxes-stacked"></i> ${window.i18n.t('orders.items')}
+            </h4>
+            <div style="max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+                ${itemsHtml}
+            </div>
+            
+            <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+                    <span>${window.i18n.t('orders.shippingCost')}</span>
+                    <span>${parseFloat(order.shippingCost || 0).toFixed(2)} EGP</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 1.1rem; color: var(--primary);">
+                    <span>${window.i18n.t('orders.totalAmount')}</span>
+                    <span>${parseFloat(order.total).toFixed(2)} EGP</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.updateOrderStatus = async (id) => {
+    const newStatus = document.getElementById('modal-order-status').value;
+    const oldStatus = window.ordersState.selectedOrder?.status || 'UNKNOWN';
+    await performStatusUpdate(id, oldStatus, newStatus);
+    document.getElementById('order-detail-modal').classList.remove('show');
+};
+
+window.quickUpdateStatus = async (id, oldStatus, newStatus) => {
+    // No confirmation as requested by user
+    await performStatusUpdate(id, oldStatus, newStatus);
+};
+
+async function performStatusUpdate(id, oldStatus, newStatus) {
+    const btn = document.getElementById('btn-update-status');
+    const origText = btn ? btn.textContent : '';
+
+    try {
+        if (btn) {
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('orders.updating')}`;
+            btn.disabled = true;
+        }
+
+        const apiMethod = window.api.patch ? 'patch' : 'put';
+        await window.api[apiMethod](`/api/admin/orders/${id}/status`, { status: newStatus });
+
+        window.app.showToast(`${window.i18n.t('orders.statusUpdated')} ${window.i18n.t('orders.status' + oldStatus.charAt(0) + oldStatus.slice(1).toLowerCase() + 'Short') || oldStatus} &rarr; ${window.i18n.t('orders.status' + newStatus.charAt(0) + newStatus.slice(1).toLowerCase() + 'Short') || newStatus}`);
+
+        // Refresh lists and stats
+        await fetchAndRenderOrders();
+        await fetchOrdersStats();
+
+    } catch (e) {
+        window.app.showToast(e.message, 'error');
+    } finally {
+        if (btn) {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    }
+}

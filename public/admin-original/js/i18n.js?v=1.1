@@ -1,0 +1,116 @@
+class I18n {
+    constructor() {
+        this.currentLang = localStorage.getItem('admin_lang') || 'en';
+        this.translations = {};
+        this.initialized = false;
+        this.localeVersion = '1.1';
+        // Observers can subscribe to language changes
+        this.listeners = [];
+    }
+
+    async init() {
+        try {
+            const res = await fetch(`locales/${this.currentLang}.json?v=${this.localeVersion}`);
+            if (!res.ok) throw new Error(`Failed to load locales/${this.currentLang}.json`);
+            this.translations = await res.json();
+            this.applyLanguageDirection();
+            this.initialized = true;
+            this.translateDOM();
+            this.notifyListeners();
+        } catch (err) {
+            console.error('I18n init error:', err);
+        }
+    }
+
+    async setLanguage(lang) {
+        if (this.currentLang === lang) return;
+        this.currentLang = lang;
+        localStorage.setItem('admin_lang', lang);
+        await this.init();
+    }
+
+    applyLanguageDirection() {
+        const html = document.documentElement;
+        html.lang = this.currentLang;
+        if (this.currentLang === 'ar') {
+            html.dir = 'rtl';
+            document.body.classList.add('rtl');
+        } else {
+            html.dir = 'ltr';
+            document.body.classList.remove('rtl');
+        }
+    }
+
+    // Get translation by dot notation key (e.g. "sidebar.dashboard")
+    t(key) {
+        if (!this.initialized) return key;
+        const keys = key.split('.');
+        let value = this.translations;
+        for (const k of keys) {
+            if (value && typeof value === 'object' && k in value) {
+                value = value[k];
+            } else {
+                return key; // return the path if missing
+            }
+        }
+        return value || key;
+    }
+
+    // Translates all elements with data-i18n attribute within a container
+    translateDOM(container = document) {
+        const elements = container.querySelectorAll('[data-i18n]');
+        elements.forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const translation = this.t(key);
+
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                if (el.hasAttribute('placeholder')) {
+                    el.placeholder = translation;
+                }
+            } else if (el.tagName === 'OPTION') {
+                // <option> elements must use textContent
+                el.textContent = translation;
+            } else if (el.children.length === 0) {
+                // Leaf node — no child elements, safe to set innerText
+                el.innerText = translation;
+            } else {
+                // Has child elements (icons, etc.)
+                // Update the first text node found, or prepend one
+                let found = false;
+                el.childNodes.forEach(node => {
+                    if (!found && node.nodeType === Node.TEXT_NODE) {
+                        node.textContent = translation + ' ';
+                        found = true;
+                    }
+                });
+                if (!found) {
+                    // No text node: prepend the translation as a text node before icons
+                    el.insertBefore(document.createTextNode(translation + ' '), el.firstChild);
+                }
+            }
+        });
+
+        // Also handle data-i18n-placeholder specifically
+        const placeholders = container.querySelectorAll('[data-i18n-placeholder]');
+        placeholders.forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            el.placeholder = this.t(key);
+        });
+    }
+
+    subscribe(callback) {
+        this.listeners.push(callback);
+    }
+
+    notifyListeners() {
+        this.listeners.forEach(cb => cb(this.currentLang));
+    }
+}
+
+// Global instance
+window.i18n = new I18n();
+
+// Initialize asap, but we also re-translate dynamically loaded views later
+document.addEventListener('DOMContentLoaded', () => {
+    window.i18n.init();
+});

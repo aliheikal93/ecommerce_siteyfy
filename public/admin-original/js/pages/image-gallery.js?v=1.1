@@ -1,0 +1,372 @@
+window.initImageGallery = async () => {
+    return `
+    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h2 class="page-title" data-i18n="imageGallery.title">معرض الصور</h2>
+            <p class="page-subtitle" data-i18n="imageGallery.subtitle">إدارة جميع صور النظام المرفوعة وتنظيف المساحة</p>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-warning" onclick="window.openTrashModal()">
+                <i class="fas fa-trash-restore"></i> <span data-i18n="imageGallery.trash">سلة المهملات</span>
+            </button>
+            <button class="btn btn-secondary" onclick="window.syncGallery()">
+                <i class="fas fa-sync"></i> <span data-i18n="imageGallery.syncGallery">مزامنة الصور</span>
+            </button>
+            <button class="btn btn-danger" onclick="window.deleteUnusedImages()">
+                <i class="fas fa-trash-alt"></i> <span data-i18n="imageGallery.moveUnusedToTrash">نقل الصور غير المستخدمة للمهملات</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 2rem;">
+        <div class="card-header" style="display: flex; gap: 1rem; align-items: center;">
+            <div class="search-box" style="flex: 1; max-width: 300px;">
+                <i class="fas fa-search"></i>
+                <input type="text" id="gallery-search" data-i18n-placeholder="imageGallery.searchPlaceholder" class="input-control" placeholder="ابحث باسم الصورة او التاج..." onkeyup="if(event.key==='Enter') window.fetchGallery()">
+            </div>
+            <select id="gallery-category-filter" class="input-control" style="width: auto;" onchange="window.fetchGallery()">
+                <option value="" data-i18n="imageGallery.allCategories">كل الاقسام</option>
+                <option value="product" data-i18n="imageGallery.products">المنتجات</option>
+                <option value="category" data-i18n="imageGallery.categories">الفئات</option>
+                <option value="content" data-i18n="imageGallery.content">المحتوى</option>
+                <option value="logo" data-i18n="imageGallery.logoIcon">الشعار / الايقونة</option>
+                <option value="general" data-i18n="imageGallery.general">عام</option>
+            </select>
+            <select id="gallery-usage-filter" class="input-control" style="width: auto;" onchange="window.fetchGallery()">
+                <option value="" data-i18n="imageGallery.usageAll">حالة الاستخدام (الكل)</option>
+                <option value="true" data-i18n="imageGallery.usedOnly">مستخدمة فقط</option>
+                <option value="false" data-i18n="imageGallery.unusedOnly">غير مستخدمة فقط</option>
+            </select>
+            <button class="btn btn-primary" onclick="window.fetchGallery()" data-i18n="common.search">بحث</button>
+        </div>
+        <div class="card-body">
+            <div id="gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                <!-- Images will be rendered here -->
+                <div style="text-align: center; color: var(--text-secondary); grid-column: 1 / -1; padding: 2rem;"><span data-i18n="common.loading">جاري التحميل...</span></div>
+            </div>
+
+            <div id="gallery-pagination" class="pagination" style="margin-top: 2rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
+                <!-- Pagination buttons -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Replace Modal -->
+    <div class="modal" id="image-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-content" style="max-width: 500px; margin: 10% auto; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <h3 id="image-modal-title" style="margin: 0;" data-i18n="imageGallery.replaceImage">استبدال الصورة</h3>
+                <button class="close-modal" onclick="document.getElementById('image-modal').style.display='none'" style="background: none; border: none; color: var(--text-color); font-size: 1.2rem; cursor: pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <form id="image-form" onsubmit="window.saveImageReplace(event)">
+                    <input type="hidden" id="edit-image-id">
+                    
+                    <div class="form-group" style="text-align: center; margin-bottom: 1.5rem;">
+                        <img id="edit-img-preview" src="" style="max-width: 100%; max-height: 200px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem; display: none;">
+                        <input type="file" id="edit-file" class="input-control" accept="image/*" required onchange="window.previewReplaceImage(this)">
+                    </div>
+                    
+                    <p style="font-size: 0.9rem; color: var(--warning-color); text-align: center;" data-i18n="imageGallery.replaceWarning">تحذير: استبدال هذه الصورة سيقوم بتغييرها في جميع الأماكن التي استخدمت فيها داخل النظام مع الحفاظ على الرابط السابق.</p>
+
+                    <div class="form-actions" style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('image-modal').style.display='none'" data-i18n="common.cancel">إلغاء</button>
+                        <button type="submit" class="btn btn-primary" data-i18n="imageGallery.replaceNow">استبدال الان</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trash Modal -->
+    <div class="modal" id="trash-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-content" style="max-width: 600px; margin: 5% auto; background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border-color);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0;" data-i18n="imageGallery.trashModalTitle">سلة المهملات</h3>
+                <button class="close-modal" onclick="document.getElementById('trash-modal').style.display='none'" style="background: none; border: none; color: var(--text-color); font-size: 1.2rem; cursor: pointer;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; max-height: 60vh; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1rem; align-items: center;">
+                    <span id="trash-info" style="font-weight: bold; color: var(--text-color);"><span data-i18n="common.loading">جاري التحميل...</span></span>
+                    <button class="btn btn-danger btn-sm" onclick="window.emptyTrashPermanently()">
+                        <i class="fas fa-dumpster-fire"></i> <span data-i18n="imageGallery.emptyTrash">تفريغ السلة بالكامل</span>
+                    </button>
+                </div>
+                <div id="trash-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+};
+
+window.setupImageGalleryEvents = () => {
+    window.galleryState = {
+        images: [],
+        page: 1,
+        limit: 20,
+        totalPages: 1
+    };
+
+    window.fetchGallery(1);
+};
+
+window.fetchGallery = async (page = 1) => {
+    if (page < 1) page = 1;
+    window.galleryState.page = page;
+
+    const searchTerm = document.getElementById('gallery-search')?.value || '';
+    const category = document.getElementById('gallery-category-filter')?.value || '';
+    const isUsed = document.getElementById('gallery-usage-filter')?.value || '';
+
+    try {
+        let url = `/api/admin/image-gallery?page=${page}&limit=${window.galleryState.limit}`;
+        if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+        if (category) url += `&category=${encodeURIComponent(category)}`;
+        if (isUsed !== '') url += `&isUsed=${isUsed}`;
+
+        const data = await window.api.get(url);
+        window.galleryState.images = data.images || [];
+        window.galleryState.totalPages = data.totalPages || 1;
+        
+        window.renderGallery();
+        window.renderGalleryPagination();
+    } catch (error) {
+        window.app.showToast(window.i18n.t('imageGallery.loadFailed') || 'Failed to load gallery', 'error');
+        document.getElementById('gallery-grid').innerHTML = `<div style="color:red; text-align:center; padding: 2rem; grid-column: 1/-1;">${window.i18n.t('imageGallery.errorLoading') || 'Error loading images'}</div>`;
+    }
+};
+
+window.renderGallery = () => {
+    const grid = document.getElementById('gallery-grid');
+    if (!grid) return;
+
+    if (window.galleryState.images.length === 0) {
+        grid.innerHTML = `<div style="text-align:center; padding: 2rem; color: var(--text-secondary); grid-column: 1/-1;">${window.i18n.t('imageGallery.noImagesFound') || 'No images found matching your search'}</div>`;
+        return;
+    }
+
+    grid.innerHTML = window.galleryState.images.map(img => {
+        const isUsed = img.isUsed;
+        const badgeColor = isUsed ? 'var(--success-color)' : 'var(--danger-color)';
+        const badgeText = isUsed ? (window.i18n.t('imageGallery.used') || 'Used') : (window.i18n.t('imageGallery.unused') || 'Unused');
+        
+        return `
+        <div class="card" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.05);">
+            <div style="position: relative; padding-top: 100%; border-radius: 8px; overflow: hidden; background: rgba(0,0,0,0.2);">
+                <img src="${img.url}" alt="${img.original_name}" style="position: absolute; top:0; left:0; width: 100%; height: 100%; object-fit: contain;">
+                <div style="position: absolute; top: 10px; right: 10px; background: white; color: black; border: 2px solid ${badgeColor}; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                    ${badgeText}
+                </div>
+            </div>
+            <div style="flex: 1; min-width:0; margin-top: 5px;">
+                <div style="font-size: 0.85rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px;" title="${img.original_name}">
+                    ${img.original_name}
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                    <span>${img.category || (window.i18n.t('imageGallery.general') || 'General')}</span>
+                    <span>${Math.round((img.file_size || 0)/1024)} KB</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: space-between; margin-top: 10px;">
+                <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="window.openReplaceModal(${img.id}, '${img.url}')">
+                    <i class="fas fa-edit"></i> ${window.i18n.t('common.replace') || 'Replace'}
+                </button>
+                <button class="btn btn-sm ${isUsed ? 'btn-secondary' : 'btn-danger'}" style="padding: 0 12px;" onclick="window.deleteSingleImage(${img.id})" ${isUsed ? `disabled title="${window.i18n.t('imageGallery.cannotMoveUsed') || 'Cannot move used image'}" style="opacity: 0.5; cursor: not-allowed;"` : `title="${window.i18n.t('imageGallery.deleteToTrash') || 'Delete to trash'}"`}>
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        `;
+    }).join('');
+};
+
+window.renderGalleryPagination = () => {
+    const container = document.getElementById('gallery-pagination');
+    if (!container) return;
+
+    const { page, totalPages } = window.galleryState;
+    if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    html += `<button class="btn btn-secondary btn-sm" onclick="window.fetchGallery(${page - 1})" ${page === 1 ? 'disabled' : ''}>${window.i18n.t('common.prev') || 'Prev'}</button>`;
+    html += `<span style="margin: 0 1rem; color: var(--text-muted);">${page} / ${totalPages}</span>`;
+    html += `<button class="btn btn-secondary btn-sm" onclick="window.fetchGallery(${page + 1})" ${page === totalPages ? 'disabled' : ''}>${window.i18n.t('common.next') || 'Next'}</button>`;
+    
+    container.innerHTML = html;
+};
+
+window.openReplaceModal = (id, currentUrl) => {
+    document.getElementById('edit-image-id').value = id;
+    document.getElementById('edit-file').value = '';
+    
+    const preview = document.getElementById('edit-img-preview');
+    preview.src = currentUrl;
+    preview.style.display = 'block';
+    
+    document.getElementById('image-modal').style.display = 'block';
+};
+
+window.previewReplaceImage = (input) => {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const preview = document.getElementById('edit-img-preview');
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+};
+
+window.saveImageReplace = async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-image-id').value;
+    const fileInput = document.getElementById('edit-file');
+    
+    if (!fileInput.files || fileInput.files.length === 0) {
+        window.app.showToast(window.i18n.t('imageGallery.selectImageToReplace') || 'Please select an image to replace with', 'warning');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', fileInput.files[0]);
+
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const origText = submitBtn.innerHTML;
+    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${window.i18n.t('common.saving') || 'Saving...'}`;
+    submitBtn.disabled = true;
+
+    try {
+        await window.api.post(`/api/admin/image-gallery/${id}/replace`, formData, true);
+        window.app.showToast(window.i18n.t('imageGallery.replaceSuccess') || 'Image replaced successfully');
+        document.getElementById('image-modal').style.display = 'none';
+        window.fetchGallery(window.galleryState.page);
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.replaceFailed') || 'Failed to replace image', 'error');
+    } finally {
+        submitBtn.innerHTML = origText;
+        submitBtn.disabled = false;
+    }
+};
+
+window.deleteSingleImage = async (id) => {
+    if (!confirm(window.i18n.t('imageGallery.confirmMoveToTrash') || 'Are you sure you want to move this image to the trash? You can restore it later.')) return;
+    
+    try {
+        await window.api.delete(`/api/admin/image-gallery/${id}`);
+        window.app.showToast(window.i18n.t('imageGallery.movedToTrashSuccess') || 'Image moved to trash');
+        if (window.galleryState.images.length === 1 && window.galleryState.page > 1) {
+            window.fetchGallery(window.galleryState.page - 1);
+        } else {
+            window.fetchGallery(window.galleryState.page);
+        }
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.moveToTrashFailed') || 'Failed to move image to trash', 'error');
+    }
+};
+
+window.deleteUnusedImages = async () => {
+    if (!confirm(window.i18n.t('imageGallery.confirmMoveUnused') || 'All unused images will be moved to the trash. Continue?')) return;
+
+    try {
+        const res = await window.api.delete(`/api/admin/image-gallery/unused`);
+        const count = res.deleted_count || res.data?.deleted_count || 0;
+        const msg = (window.i18n.t('imageGallery.movedUnusedSuccess') || 'Successfully moved {count} images to trash').replace('{count}', count);
+        window.app.showToast(msg);
+        window.fetchGallery(1);
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.moveUnusedFailed') || 'Failed to move unused images', 'error');
+    }
+};
+
+window.syncGallery = async () => {
+    if (!confirm(window.i18n.t('imageGallery.confirmSync') || 'Syncing will add any unmatched files from the storage to the gallery database. Continue?')) return;
+    
+    try {
+        const res = await window.api.post(`/api/admin/image-gallery/sync`, {}, false);
+        const count = res.synced || res.data?.synced || 0;
+        const msg = (window.i18n.t('imageGallery.syncSuccess') || 'Successfully synced {count} new images').replace('{count}', count);
+        window.app.showToast(msg);
+        window.fetchGallery(1);
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.syncFailed') || 'Failed to sync gallery', 'error');
+    }
+};
+
+window.openTrashModal = async () => {
+    document.getElementById('trash-modal').style.display = 'block';
+    await window.loadTrashFiles();
+};
+
+window.loadTrashFiles = async () => {
+    const listContainer = document.getElementById('trash-list');
+    const infoContainer = document.getElementById('trash-info');
+    listContainer.innerHTML = `<div style="text-align: center; padding: 1rem;">${window.i18n.t('common.loading') || 'Loading...'}</div>`;
+    
+    try {
+        const res = await window.api.get('/api/admin/image-gallery/trash');
+        const files = res.files || [];
+        const totalSize = res.totalSize || 0;
+        
+        const sizeMb = (totalSize / (1024 * 1024)).toFixed(2);
+        infoContainer.innerHTML = (window.i18n.t('imageGallery.trashInfo') || 'Count: {count} images | Total Size: {size} MB').replace('{count}', files.length).replace('{size}', sizeMb);
+        
+        if (files.length === 0) {
+            listContainer.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1rem;">${window.i18n.t('imageGallery.trashEmpty') || 'Trash is empty'}</div>`;
+            return;
+        }
+
+        listContainer.innerHTML = files.map(file => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 6px;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;" title="${file.filename}">
+                        ${file.filename}
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                        ${(file.size / 1024).toFixed(1)} KB
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="window.restoreFromTrash('${file.filename}')" style="margin-right: 1rem;">
+                    <i class="fas fa-undo"></i> ${window.i18n.t('imageGallery.restore') || 'Restore'}
+                </button>
+            </div>
+        `).join('');
+    } catch (error) {
+        listContainer.innerHTML = `<div style="color: red; text-align: center;">${window.i18n.t('imageGallery.loadTrashFailed') || 'Failed to load trash'}</div>`;
+    }
+};
+
+window.restoreFromTrash = async (filename) => {
+    const msg = (window.i18n.t('imageGallery.confirmRestore') || 'Restore image {filename}?').replace('{filename}', filename);
+    if (!confirm(msg)) return;
+    
+    try {
+        await window.api.post('/api/admin/image-gallery/trash/restore', { filename });
+        window.app.showToast(window.i18n.t('imageGallery.restoreSuccess') || 'Image restored successfully');
+        await window.loadTrashFiles();
+        window.fetchGallery(window.galleryState.page);
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.restoreFailed') || 'Failed to restore image', 'error');
+    }
+};
+
+window.emptyTrashPermanently = async () => {
+    if (!confirm(window.i18n.t('imageGallery.confirmEmptyTrash') || 'Warning: Emptying the trash will permanently delete images and they cannot be restored. Are you sure you want to empty the trash?')) return;
+    
+    try {
+        const res = await window.api.delete('/api/admin/image-gallery/trash/empty');
+        const count = res.deletedCount || 0;
+        window.app.showToast((window.i18n.t('imageGallery.emptyTrashSuccess') || 'Permanently deleted {count} images').replace('{count}', count));
+        await window.loadTrashFiles();
+    } catch (error) {
+        window.app.showToast(error.message || window.i18n.t('imageGallery.emptyTrashFailed') || 'Failed to empty trash', 'error');
+    }
+};

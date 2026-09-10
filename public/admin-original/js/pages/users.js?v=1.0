@@ -1,0 +1,524 @@
+/**
+ * Users Management Component
+ */
+
+window.usersState = {
+    users: [],
+    stats: null,
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 1,
+    i18nBound: false,
+};
+
+window.userManageableStatuses = [
+    'ACTIVE',
+    'INACTIVE',
+    'DISABLED',
+    'BLOCKED',
+    'SUSPENDED'
+];
+
+window.initUsers = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="users.title">Users Management</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="users.subtitle">View customer accounts and control their access state</p>
+            </div>
+        </div>
+
+        <div id="users-stats-container" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <div class="glass-card" style="padding: 1.25rem; min-height: 110px; display:flex; align-items:center; justify-content:center;">
+                <i class="fa-solid fa-circle-notch fa-spin" style="font-size:1.5rem; color: var(--primary);"></i>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <div class="filter-bar" style="display: flex; gap: 1rem; align-items: center; padding: 1rem; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color); flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 260px;">
+                    <div class="search-box" style="width: 100%;">
+                        <i class="fa-solid fa-search"></i>
+                        <input
+                            type="text"
+                            id="user-filter-search"
+                            class="input-control"
+                            data-i18n-placeholder="users.searchPlaceholder"
+                            placeholder="Search by email or name..."
+                            style="width: 100%;"
+                        >
+                    </div>
+                </div>
+
+                <select id="user-filter-status" class="input-control" style="min-width: 220px; background: rgba(15, 23, 42, 0.6);">
+                    <option value="" data-i18n="users.allStatuses">All Statuses</option>
+                    <option value="PENDING_VERIFICATION" data-i18n="users.statusPendingVerification">Pending Verification</option>
+                    <option value="ACTIVE" data-i18n="users.statusActive">Active</option>
+                    <option value="INACTIVE" data-i18n="users.statusInactive">Inactive</option>
+                    <option value="DISABLED" data-i18n="users.statusDisabled">Disabled</option>
+                    <option value="BLOCKED" data-i18n="users.statusBlocked">Blocked</option>
+                    <option value="SUSPENDED" data-i18n="users.statusSuspended">Suspended</option>
+                </select>
+
+                <div style="display:flex; gap: 0.5rem;">
+                    <button class="btn btn-primary btn-sm" id="btn-apply-user-filters">
+                        <i class="fa-solid fa-filter"></i>
+                        <span data-i18n="users.filter">Filter</span>
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="btn-clear-user-filters">
+                        <i class="fa-solid fa-times"></i>
+                        <span data-i18n="users.clear">Clear</span>
+                    </button>
+                </div>
+            </div>
+
+            <table class="data-table" id="users-table">
+                <thead>
+                    <tr>
+                        <th data-i18n="users.colUser">User</th>
+                        <th data-i18n="users.colVerification">Verification</th>
+                        <th data-i18n="users.colStatus">Status</th>
+                        <th data-i18n="users.colActivity">Activity</th>
+                        <th data-i18n="users.colJoined">Joined</th>
+                        <th style="text-align: right;" data-i18n="users.colActions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr>
+                        <td colspan="6" style="text-align: center;">
+                            <i class="fa-solid fa-spinner fa-spin"></i>
+                            <span data-i18n="users.loading">Loading users...</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.5rem; padding:0 0.25rem; gap: 1rem; flex-wrap: wrap;">
+            <span style="color: var(--text-muted); font-size: 0.9rem;" id="users-pagination-info">Showing page 1</span>
+            <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-outline btn-sm" id="btn-users-prev" disabled>
+                    <i class="fa-solid fa-chevron-left"></i>
+                    <span data-i18n="users.prev">Prev</span>
+                </button>
+                <button class="btn btn-outline btn-sm" id="btn-users-next" disabled>
+                    <span data-i18n="users.next">Next</span>
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <style>
+            .user-stat-card {
+                padding: 1.25rem;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+            }
+
+            .user-stat-card .value {
+                display: block;
+                font-size: 1.85rem;
+                font-weight: 700;
+                color: var(--text-main);
+            }
+
+            .user-stat-card .label {
+                display: block;
+                margin-top: 0.35rem;
+                color: var(--text-muted);
+                font-size: 0.85rem;
+            }
+
+            .user-status-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 999px;
+                padding: 0.35rem 0.8rem;
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+            }
+
+            .user-status-active {
+                background: rgba(16, 185, 129, 0.18);
+                color: #34d399;
+                border: 1px solid rgba(16, 185, 129, 0.25);
+            }
+
+            .user-status-pending_verification {
+                background: rgba(245, 158, 11, 0.18);
+                color: #fbbf24;
+                border: 1px solid rgba(245, 158, 11, 0.28);
+            }
+
+            .user-status-inactive,
+            .user-status-disabled,
+            .user-status-blocked,
+            .user-status-suspended {
+                background: rgba(239, 68, 68, 0.16);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.25);
+            }
+
+            .user-activity-metric {
+                display: flex;
+                flex-direction: column;
+                gap: 0.15rem;
+            }
+
+            .user-activity-metric strong {
+                color: var(--text-main);
+                font-size: 1rem;
+            }
+
+            .user-activity-metric span {
+                color: var(--text-muted);
+                font-size: 0.78rem;
+            }
+
+            .user-status-select {
+                min-width: 190px;
+                background: rgba(15, 23, 42, 0.6);
+            }
+        </style>
+    `;
+};
+
+window.setupUsersEvents = async () => {
+    if (!window.usersState.i18nBound) {
+        window.i18n.subscribe(() => {
+            if (!document.getElementById('users-table')) return;
+            if (window.usersState.stats) renderUsersStats(window.usersState.stats);
+            renderUsersTable(window.usersState.users || []);
+            updateUsersPagination(
+                window.usersState.page,
+                window.usersState.totalPages,
+                window.usersState.total
+            );
+        });
+        window.usersState.i18nBound = true;
+    }
+
+    document.getElementById('btn-apply-user-filters').addEventListener('click', () => {
+        window.usersState.page = 1;
+        fetchUsersStats();
+        fetchAndRenderUsers();
+    });
+
+    document.getElementById('btn-clear-user-filters').addEventListener('click', () => {
+        document.getElementById('user-filter-search').value = '';
+        document.getElementById('user-filter-status').value = '';
+        window.usersState.page = 1;
+        fetchUsersStats();
+        fetchAndRenderUsers();
+    });
+
+    document.getElementById('btn-users-prev').addEventListener('click', () => {
+        if (window.usersState.page > 1) {
+            window.usersState.page -= 1;
+            fetchAndRenderUsers();
+        }
+    });
+
+    document.getElementById('btn-users-next').addEventListener('click', () => {
+        window.usersState.page += 1;
+        fetchAndRenderUsers();
+    });
+
+    await Promise.all([fetchUsersStats(), fetchAndRenderUsers()]);
+};
+
+async function fetchUsersStats() {
+    const container = document.getElementById('users-stats-container');
+    if (!container) return;
+
+    try {
+        const response = await window.api.get('/api/admin/users/stats');
+        const stats = response.stats || response.data?.stats || response;
+        window.usersState.stats = stats;
+
+        renderUsersStats(stats);
+    } catch (error) {
+        container.innerHTML = `
+            <div class="glass-card" style="padding: 1.25rem; color: var(--danger);">
+                ${window.i18n.t('users.statsLoadFailed')}: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function renderUsersStats(stats) {
+    const container = document.getElementById('users-stats-container');
+    if (!container) return;
+
+    container.innerHTML = `
+            <div class="glass-card user-stat-card">
+                <div>
+                    <span class="value">${stats.totalUsers || 0}</span>
+                    <span class="label">${window.i18n.t('users.totalUsers')}</span>
+                </div>
+                <i class="fa-solid fa-users" style="font-size:1.4rem; color: var(--primary);"></i>
+            </div>
+            <div class="glass-card user-stat-card">
+                <div>
+                    <span class="value">${stats.activeUsers || 0}</span>
+                    <span class="label">${window.i18n.t('users.activeUsers')}</span>
+                </div>
+                <i class="fa-solid fa-user-check" style="font-size:1.4rem; color: #34d399;"></i>
+            </div>
+            <div class="glass-card user-stat-card">
+                <div>
+                    <span class="value">${stats.pendingVerificationUsers || 0}</span>
+                    <span class="label">${window.i18n.t('users.pendingVerification')}</span>
+                </div>
+                <i class="fa-solid fa-envelope-circle-check" style="font-size:1.4rem; color: #fbbf24;"></i>
+            </div>
+            <div class="glass-card user-stat-card">
+                <div>
+                    <span class="value">${stats.unverifiedUsers || 0}</span>
+                    <span class="label">${window.i18n.t('users.unverifiedUsers')}</span>
+                </div>
+                <i class="fa-solid fa-envelope-open-text" style="font-size:1.4rem; color: #60a5fa;"></i>
+            </div>
+            <div class="glass-card user-stat-card">
+                <div>
+                    <span class="value">${stats.restrictedUsers || 0}</span>
+                    <span class="label">${window.i18n.t('users.restrictedUsers')}</span>
+                </div>
+                <i class="fa-solid fa-user-lock" style="font-size:1.4rem; color: #f87171;"></i>
+            </div>
+        `;
+}
+
+async function fetchAndRenderUsers() {
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="6" style="text-align: center;">
+                <i class="fa-solid fa-spinner fa-spin"></i>
+                ${window.i18n.t('users.loading')}
+            </td>
+        </tr>
+    `;
+
+    try {
+        const search = document.getElementById('user-filter-search').value.trim();
+        const status = document.getElementById('user-filter-status').value;
+        const { page, limit } = window.usersState;
+
+        let url = `/api/admin/users?page=${page}&limit=${limit}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (status) url += `&status=${encodeURIComponent(status)}`;
+
+        const response = await window.api.get(url);
+        const users = response.users || response.data?.users || [];
+        const totalPages = response.totalPages || response.data?.totalPages || 1;
+        const total = response.total || response.data?.total || 0;
+
+        window.usersState.users = users;
+        window.usersState.totalPages = totalPages;
+        window.usersState.total = total;
+
+        renderUsersTable(users);
+        updateUsersPagination(page, totalPages, total);
+    } catch (error) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: var(--danger);">
+                    ${window.i18n.t('users.loadFailed')}: ${escapeHtml(error.message)}
+                </td>
+            </tr>
+        `;
+        updateUsersPagination(window.usersState.page, 1, 0);
+    }
+}
+
+function renderUsersTable(users) {
+    const tbody = document.getElementById('users-tbody');
+
+    if (!users || users.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center;">
+                    ${window.i18n.t('users.noUsersFound')}
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = users.map((user) => {
+        const currentStatus = normalizeStatusValue(user.status);
+        const fullName = user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+        const joinDate = formatUserDate(user.createdAt);
+        const verificationBadge = user.isEmailVerified
+            ? `<span class="badge badge-success">${window.i18n.t('users.verified')}</span>`
+            : `<span class="badge badge-danger">${window.i18n.t('users.unverified')}</span>`;
+
+        return `
+            <tr>
+                <td>
+                    <div style="font-weight: 600;">${escapeHtml(fullName || window.i18n.t('users.nameNotProvided'))}</div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted);">${escapeHtml(user.email || '')}</div>
+                </td>
+                <td>
+                    ${verificationBadge}
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.45rem;">
+                        ${user.emailVerifiedAt ? formatUserDate(user.emailVerifiedAt) : window.i18n.t('users.notVerifiedYet')}
+                    </div>
+                </td>
+                <td>
+                    <span class="user-status-pill user-status-${currentStatus.toLowerCase()}">
+                        ${escapeHtml(getUserStatusLabel(currentStatus))}
+                    </span>
+                </td>
+                <td>
+                    <div style="display:flex; gap: 1rem; flex-wrap: wrap;">
+                        <div class="user-activity-metric">
+                            <strong>${user.ordersCount || 0}</strong>
+                            <span>${window.i18n.t('users.ordersCount')}</span>
+                        </div>
+                        <div class="user-activity-metric">
+                            <strong>${user.cartEventsCount || 0}</strong>
+                            <span>${window.i18n.t('users.cartEventsCount')}</span>
+                        </div>
+                    </div>
+                </td>
+                <td>${joinDate}</td>
+                <td style="text-align: right;">
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap;">
+                        <select
+                            id="user-status-${user.id}"
+                            class="input-control btn-sm user-status-select"
+                            data-current-status="${currentStatus}"
+                            onchange="toggleUserStatusSave('${user.id}')"
+                        >
+                            ${renderUserStatusOptions(currentStatus)}
+                        </select>
+                        <button
+                            class="btn btn-primary btn-sm"
+                            id="user-status-save-${user.id}"
+                            onclick="saveManagedUserStatus('${user.id}')"
+                            disabled
+                        >
+                            ${window.i18n.t('users.saveStatus')}
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateUsersPagination(page, totalPages, total) {
+    const info = document.getElementById('users-pagination-info');
+    const prevBtn = document.getElementById('btn-users-prev');
+    const nextBtn = document.getElementById('btn-users-next');
+
+    if (info) {
+        info.textContent = `${window.i18n.t('users.showingPage')}${page}${window.i18n.t('users.showingPageTotal')}${total})`;
+    }
+
+    if (prevBtn) {
+        prevBtn.disabled = page <= 1;
+    }
+
+    if (nextBtn) {
+        nextBtn.disabled = page >= totalPages;
+    }
+}
+
+window.toggleUserStatusSave = (userId) => {
+    const select = document.getElementById(`user-status-${userId}`);
+    const saveBtn = document.getElementById(`user-status-save-${userId}`);
+
+    if (!select || !saveBtn) return;
+
+    const currentStatus = normalizeStatusValue(select.dataset.currentStatus || '');
+    const nextStatus = normalizeStatusValue(select.value);
+    saveBtn.disabled = currentStatus === nextStatus;
+};
+
+window.saveManagedUserStatus = async (userId) => {
+    const select = document.getElementById(`user-status-${userId}`);
+    const saveBtn = document.getElementById(`user-status-save-${userId}`);
+
+    if (!select || !saveBtn) return;
+
+    const nextStatus = normalizeStatusValue(select.value);
+    const currentStatus = normalizeStatusValue(select.dataset.currentStatus || '');
+
+    if (!nextStatus || nextStatus === currentStatus) {
+        saveBtn.disabled = true;
+        return;
+    }
+
+    const originalLabel = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('users.savingStatus')}`;
+
+    try {
+        const response = await window.api.patch(`/api/admin/users/${userId}/status`, {
+            status: nextStatus
+        });
+
+        window.app.showToast(response.message || window.i18n.t('users.updateSuccess'));
+        await Promise.all([fetchUsersStats(), fetchAndRenderUsers()]);
+    } catch (error) {
+        window.app.showToast(error.message, 'error');
+        select.value = currentStatus;
+        saveBtn.disabled = true;
+    } finally {
+        saveBtn.textContent = originalLabel;
+    }
+};
+
+function renderUserStatusOptions(currentStatus) {
+    const uniqueStatuses = Array.from(new Set([currentStatus, ...window.userManageableStatuses]));
+
+    return uniqueStatuses.map((status) => `
+        <option value="${status}" ${status === currentStatus ? 'selected' : ''}>
+            ${escapeHtml(getUserStatusLabel(status))}
+        </option>
+    `).join('');
+}
+
+function getUserStatusLabel(status) {
+    const labelsMap = {
+        PENDING_VERIFICATION: 'users.statusPendingVerification',
+        ACTIVE: 'users.statusActive',
+        INACTIVE: 'users.statusInactive',
+        DISABLED: 'users.statusDisabled',
+        BLOCKED: 'users.statusBlocked',
+        SUSPENDED: 'users.statusSuspended'
+    };
+
+    return window.i18n.t(labelsMap[normalizeStatusValue(status)] || '') || status;
+}
+
+function normalizeStatusValue(status) {
+    return String(status || '').trim().toUpperCase();
+}
+
+function formatUserDate(value) {
+    if (!value) return '—';
+    const locale = window.i18n.currentLang === 'ar' ? 'ar-EG' : 'en-US';
+    return new Date(value).toLocaleDateString(locale, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}

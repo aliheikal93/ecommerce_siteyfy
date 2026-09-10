@@ -1,0 +1,215 @@
+/**
+ * Colors Management Component
+ */
+
+window.colorsState = {
+    colors: [],
+    editingId: null
+};
+
+window.initColors = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="sidebar.colors">Colors</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="colors.subtitle">Manage product color options</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-color">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="colors.addColor">Add Color</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="colors-table">
+                <thead>
+                    <tr>
+                        <th width="50" data-i18n="common.id">ID</th>
+                        <th width="60" data-i18n="colors.hex">Hex</th>
+                        <th data-i18n="categories.nameEn">Name (EN)</th>
+                        <th data-i18n="categories.nameAr">Name (AR)</th>
+                        <th data-i18n="products.status">Status</th>
+                        <th width="120" style="text-align: right;" data-i18n="common.actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="colors-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="common.loading">Loading...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div class="modal-overlay" id="color-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="color-modal-title" data-i18n="colors.addColor">Add Color</h3>
+                    <button class="modal-close" id="close-color-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="color-form">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="categories.nameEn">Name (EN)</label>
+                                <input type="text" id="color-name-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="categories.nameAr">Name (AR)</label>
+                                <input type="text" id="color-name-ar" class="input-control" required dir="rtl" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <label data-i18n="colors.hexCode">Hex Code</label>
+                                <input type="color" id="color-hex" class="input-control" required style="width: 100%; height: 50px; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;">
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label data-i18n="products.status">Status</label>
+                                <select id="color-is-active" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                                    <option value="true" data-i18n="common.active">Active</option>
+                                    <option value="false" data-i18n="common.inactive">Inactive</option>
+                                </select>
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="btn-cancel-color" data-i18n="common.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-color" data-i18n="colors.saveColor">Save Color</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupColorsEvents = async () => {
+    await fetchAndRenderColors();
+
+    const modal = document.getElementById('color-modal');
+
+    const closeModal = () => {
+        modal.classList.remove('show');
+        document.getElementById('color-form').reset();
+        window.colorsState.editingId = null;
+    };
+
+    document.getElementById('btn-add-color').addEventListener('click', () => {
+        document.getElementById('color-modal-title').textContent = window.i18n.t('colors.addColor') || 'Add Color';
+        document.getElementById('color-hex').value = '#000000'; // Default black
+        modal.classList.add('show');
+    });
+
+    document.getElementById('close-color-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-color').addEventListener('click', closeModal);
+
+    // Save Event
+    document.getElementById('btn-save-color').addEventListener('click', async () => {
+        const name_en = document.getElementById('color-name-en').value.trim();
+        const name_ar = document.getElementById('color-name-ar').value.trim();
+        const hex_code = document.getElementById('color-hex').value;
+        const is_active = document.getElementById('color-is-active').value === 'true';
+
+        if (!name_en || !name_ar || !hex_code) {
+            window.app.showToast('All fields are required', 'warning');
+            return;
+        }
+
+        const id = window.colorsState.editingId;
+        const btn = document.getElementById('btn-save-color');
+        const origText = btn.textContent;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.loading') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            const payload = { name_en, name_ar, hex_code, is_active };
+
+            if (id) {
+                await window.api.put(`/api/admin/colors/${id}`, payload, false);
+                window.app.showToast(window.i18n.t('colors.updated') || 'Color updated successfully!');
+            } else {
+                await window.api.post('/api/admin/colors', payload, false);
+                window.app.showToast(window.i18n.t('colors.created') || 'Color created successfully!');
+            }
+            closeModal();
+            await fetchAndRenderColors();
+        } catch (error) {
+            window.app.showToast(error.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};
+
+async function fetchAndRenderColors() {
+    try {
+        const response = await window.api.get('/api/admin/colors?includeInactive=true');
+        const colors = Array.isArray(response) ? response : (response.colors || []);
+        window.colorsState.colors = colors;
+        renderColorsTable(colors);
+    } catch (e) {
+        document.getElementById('colors-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Failed to load colors: ${e.message}</td></tr>`;
+    }
+}
+
+function renderColorsTable(colors) {
+    const tbody = document.getElementById('colors-tbody');
+    if (!colors || colors.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('colors.noColorsFound') || 'No colors found'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = colors.map(color => `
+        <tr>
+            <td>#${color.id}</td>
+            <td>
+                <div style="width: 24px; height: 24px; border-radius: 50%; background-color: ${color.hex_code}; border: 1px solid rgba(255,255,255,0.2);" title="${color.hex_code}"></div>
+            </td>
+            <td style="font-weight:600;">${color.name_en || ''}</td>
+            <td dir="rtl">${color.name_ar || ''}</td>
+            <td>
+                <span class="badge" style="background: ${color.is_active ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${color.is_active ? '#4ade80' : '#f87171'}">
+                    ${color.is_active ? (window.i18n.t('common.active') || 'Active') : (window.i18n.t('common.inactive') || 'Inactive')}
+                </span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-icon btn-action-edit" onclick="editColor(${color.id})" title="${window.i18n.t('common.edit') || 'Edit'}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-icon btn-action-delete" onclick="deleteColor(${color.id})" title="${window.i18n.t('common.delete') || 'Delete'}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.editColor = (id) => {
+    const color = window.colorsState.colors.find(c => c.id === id);
+    if (!color) return;
+
+    window.colorsState.editingId = id;
+
+    document.getElementById('color-modal-title').textContent = window.i18n.t('colors.editColor') || 'Edit Color';
+    document.getElementById('color-name-en').value = color.name_en || '';
+    document.getElementById('color-name-ar').value = color.name_ar || '';
+    document.getElementById('color-hex').value = color.hex_code || '#000000';
+    document.getElementById('color-is-active').value = color.is_active !== false ? 'true' : 'false';
+
+    const modal = document.getElementById('color-modal');
+    modal.classList.add('show');
+};
+
+window.deleteColor = async (id) => {
+    if (confirm(window.i18n.t('colors.confirmDelete') || 'Are you sure you want to delete this color? Products using it might be affected.')) {
+        try {
+            await window.api.delete(`/api/admin/colors/${id}`);
+            window.app.showToast(window.i18n.t('colors.deleted') || 'Color deleted successfully');
+            await fetchAndRenderColors();
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        }
+    }
+};

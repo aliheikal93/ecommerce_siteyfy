@@ -1,0 +1,225 @@
+/**
+ * Labels Management Component
+ */
+
+window.labelsState = {
+    labels: [],
+    editingId: null
+};
+
+window.initLabels = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="sidebar.labels">Labels</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="labels.subtitle">Manage product labels (e.g. New, Hot Sale)</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-label">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="labels.addLabel">Add Label</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="labels-table">
+                <thead>
+                    <tr>
+                        <th width="50" data-i18n="common.id">ID</th>
+                        <th data-i18n="labels.preview">Preview</th>
+                        <th data-i18n="categories.nameEn">Name (EN)</th>
+                        <th data-i18n="categories.nameAr">Name (AR)</th>
+                        <th data-i18n="products.status">Status</th>
+                        <th width="120" style="text-align: right;" data-i18n="common.actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="labels-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="common.loading">Loading...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div class="modal-overlay" id="label-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="label-modal-title" data-i18n="labels.addLabel">Add Label</h3>
+                    <button class="modal-close" id="close-label-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="label-form">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="categories.nameEn">Name (EN)</label>
+                                <input type="text" id="label-name-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="categories.nameAr">Name (AR)</label>
+                                <input type="text" id="label-name-ar" class="input-control" required dir="rtl" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 1;">
+                                <label data-i18n="labels.textColor">Text Color (Hex)</label>
+                                <input type="color" id="label-color" class="input-control" value="#ffffff" required style="width: 100%; height: 50px; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;">
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label data-i18n="labels.bgColor">Background Color (Hex)</label>
+                                <input type="color" id="label-bg-color" class="input-control" value="#ef4444" required style="width: 100%; height: 50px; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer;">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="products.status">Status</label>
+                            <select id="label-is-active" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                                <option value="true" data-i18n="common.active">Active</option>
+                                <option value="false" data-i18n="common.inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="btn-cancel-label" data-i18n="common.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-label" data-i18n="labels.saveLabel">Save Label</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupLabelsEvents = async () => {
+    await fetchAndRenderLabels();
+
+    const modal = document.getElementById('label-modal');
+
+    const closeModal = () => {
+        modal.classList.remove('show');
+        document.getElementById('label-form').reset();
+        window.labelsState.editingId = null;
+    };
+
+    document.getElementById('btn-add-label').addEventListener('click', () => {
+        document.getElementById('label-modal-title').textContent = window.i18n.t('labels.addLabel') || 'Add Label';
+        document.getElementById('label-color').value = '#ffffff'; // Default White Text
+        document.getElementById('label-bg-color').value = '#ef4444'; // Default Red BG
+        modal.classList.add('show');
+    });
+
+    document.getElementById('close-label-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-label').addEventListener('click', closeModal);
+
+    // Save Event
+    document.getElementById('btn-save-label').addEventListener('click', async () => {
+        const name_en = document.getElementById('label-name-en').value.trim();
+        const name_ar = document.getElementById('label-name-ar').value.trim();
+        const color = document.getElementById('label-color').value;
+        const background_color = document.getElementById('label-bg-color').value;
+        const is_active = document.getElementById('label-is-active').value === 'true';
+
+        if (!name_en || !name_ar) {
+            window.app.showToast('Names are required', 'warning');
+            return;
+        }
+
+        const id = window.labelsState.editingId;
+        const btn = document.getElementById('btn-save-label');
+        const origText = btn.textContent;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.loading') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            const payload = { name_en, name_ar, color, background_color, is_active };
+
+            if (id) {
+                await window.api.put(`/api/admin/labels/${id}`, payload, false);
+                window.app.showToast(window.i18n.t('labels.updated') || 'Label updated successfully!');
+            } else {
+                await window.api.post('/api/admin/labels', payload, false);
+                window.app.showToast(window.i18n.t('labels.created') || 'Label created successfully!');
+            }
+            closeModal();
+            await fetchAndRenderLabels();
+        } catch (error) {
+            window.app.showToast(error.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};
+
+async function fetchAndRenderLabels() {
+    try {
+        const response = await window.api.get('/api/admin/labels?includeInactive=true');
+        const labels = Array.isArray(response) ? response : (response.labels || []);
+        window.labelsState.labels = labels;
+        renderLabelsTable(labels);
+    } catch (e) {
+        document.getElementById('labels-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Failed to load labels: ${e.message}</td></tr>`;
+    }
+}
+
+function renderLabelsTable(labels) {
+    const tbody = document.getElementById('labels-tbody');
+    if (!labels || labels.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('labels.noLabelsFound') || 'No labels found'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = labels.map(label => `
+        <tr>
+            <td>#${label.id}</td>
+            <td>
+                <span style="display:inline-block; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; color: ${label.color || '#fff'}; background-color: ${label.background_color || '#ef4444'};">
+                    ${label.name_en}
+                </span>
+            </td>
+            <td style="font-weight:600;">${label.name_en || ''}</td>
+            <td dir="rtl">${label.name_ar || ''}</td>
+            <td>
+                <span class="badge" style="background: ${label.is_active ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${label.is_active ? '#4ade80' : '#f87171'}">
+                    ${label.is_active ? (window.i18n.t('common.active') || 'Active') : (window.i18n.t('common.inactive') || 'Inactive')}
+                </span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-icon btn-action-edit" onclick="editLabel(${label.id})" title="${window.i18n.t('common.edit') || 'Edit'}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-icon btn-action-delete" onclick="deleteLabel(${label.id})" title="${window.i18n.t('common.delete') || 'Delete'}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.editLabel = (id) => {
+    const label = window.labelsState.labels.find(l => l.id === id);
+    if (!label) return;
+
+    window.labelsState.editingId = id;
+
+    document.getElementById('label-modal-title').textContent = window.i18n.t('labels.editLabel') || 'Edit Label';
+    document.getElementById('label-name-en').value = label.name_en || '';
+    document.getElementById('label-name-ar').value = label.name_ar || '';
+    document.getElementById('label-color').value = label.color || '#ffffff';
+    document.getElementById('label-bg-color').value = label.background_color || '#ef4444';
+    document.getElementById('label-is-active').value = label.is_active !== false ? 'true' : 'false';
+
+    const modal = document.getElementById('label-modal');
+    modal.classList.add('show');
+};
+
+window.deleteLabel = async (id) => {
+    if (confirm(window.i18n.t('labels.confirmDelete') || 'Are you sure you want to delete this label?')) {
+        try {
+            await window.api.delete(`/api/admin/labels/${id}`);
+            window.app.showToast(window.i18n.t('labels.deleted') || 'Label deleted successfully');
+            await fetchAndRenderLabels();
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        }
+    }
+};

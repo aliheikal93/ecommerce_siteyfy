@@ -1,0 +1,24 @@
+# Secrets and persistent runtime data
+.env
+data/
+backups/
+*.sqlite
+*.sqlite-*
+
+# Dependencies and generated reports
+node_modules/
+public/uploads/
+public/image-cache/
+public/lighthouse-reports/
+graphify-out/
+qa-*.png
+/*.png
+
+# Mirrored and compiled reference assets are not application source
+mirror-front/
+mirror-admin/
+public/_next/
+
+# Local tooling
+.DS_Store
+*.log

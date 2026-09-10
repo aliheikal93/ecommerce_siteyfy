@@ -1,0 +1,212 @@
+/**
+ * Dynamic Pages Management Component
+ */
+
+window.pagesState = {
+    pages: [],
+    editingId: null
+};
+
+window.initPages = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="dynamicPages.title">Dynamic Pages</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="dynamicPages.subtitle">Manage legal and informational pages (Terms, Refund Policy, etc.)</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-page">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="dynamicPages.addPage">Add New Page</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="pages-table">
+                <thead>
+                    <tr>
+                        <th width="50" data-i18n="products.id">ID</th>
+                        <th data-i18n="dynamicPages.slug">Slug</th>
+                        <th data-i18n="dynamicPages.titleEn">Title (EN)</th>
+                        <th data-i18n="dynamicPages.titleAr">Title (AR)</th>
+                        <th width="150" data-i18n="dynamicPages.lastUpdated">Last Updated</th>
+                        <th width="120" style="text-align: right;" data-i18n="common.actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="pages-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="common.loading">Loading...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div class="modal-overlay" id="page-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="page-modal-title" data-i18n="dynamicPages.addPage">Add Page</h3>
+                    <button class="modal-close" id="close-page-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="page-form">
+                        <div class="form-group">
+                            <label data-i18n="dynamicPages.slugLabel">URL Slug (i.e. refund-policy)</label>
+                            <input type="text" id="page-slug" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="dynamicPages.titleEnLabel">Title (English)</label>
+                                <input type="text" id="page-title-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="dynamicPages.titleArLabel">Title (Arabic)</label>
+                                <input type="text" id="page-title-ar" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="dynamicPages.contentEn">Content (English - Supports HTML)</label>
+                            <textarea id="page-content-en" class="input-control" required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="dynamicPages.contentAr">Content (Arabic - Supports HTML)</label>
+                            <textarea id="page-content-ar" class="input-control" required dir="rtl"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="btn-cancel-page" data-i18n="common.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-page" data-i18n="dynamicPages.savePage">Save Page</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupPagesEvents = async () => {
+    await fetchAndRenderPages();
+
+    // Modal Events
+    const modal = document.getElementById('page-modal');
+
+    const closeModal = () => {
+        modal.classList.remove('show');
+        document.getElementById('page-form').reset();
+        window.pagesState.editingId = null;
+    };
+
+    document.getElementById('btn-add-page').addEventListener('click', () => {
+        document.getElementById('page-modal-title').textContent = window.i18n.t('dynamicPages.addPage') || 'Add New Page';
+        document.getElementById('page-slug').disabled = false; // Slug editable on create
+        modal.classList.add('show');
+    });
+
+    document.getElementById('close-page-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-page').addEventListener('click', closeModal);
+
+    // Save Event
+    document.getElementById('btn-save-page').addEventListener('click', async () => {
+        const slug = document.getElementById('page-slug').value.trim();
+        const title_en = document.getElementById('page-title-en').value.trim();
+        const title_ar = document.getElementById('page-title-ar').value.trim();
+        const content_en = document.getElementById('page-content-en').value;
+        const content_ar = document.getElementById('page-content-ar').value;
+
+        if (!slug || !title_en || !title_ar || !content_en || !content_ar) {
+            window.app.showToast(window.i18n.t('dynamicPages.allRequired') || 'All fields are required', 'warning');
+            return;
+        }
+
+        const payload = { slug, title_en, title_ar, content_en, content_ar };
+        const id = window.pagesState.editingId;
+
+        const btn = document.getElementById('btn-save-page');
+        const origText = btn.textContent;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.saving') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            if (id) {
+                await window.api.put(`/api/admin/pages/${id}`, payload);
+                window.app.showToast(window.i18n.t('dynamicPages.updated') || 'Page updated successfully!');
+            } else {
+                await window.api.post('/api/admin/pages', payload);
+                window.app.showToast(window.i18n.t('dynamicPages.created') || 'Page created successfully!');
+            }
+            closeModal();
+            await fetchAndRenderPages();
+        } catch (error) {
+            window.app.showToast(error.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};
+
+async function fetchAndRenderPages() {
+    try {
+        const response = await window.api.get('/api/admin/pages');
+        const pages = Array.isArray(response) ? response : (response.pages || []);
+        window.pagesState.pages = pages;
+        renderPagesTable(pages);
+    } catch (e) {
+        document.getElementById('pages-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">${window.i18n.t('dynamicPages.loadFailed') || 'Failed to load pages'}: ${e.message}</td></tr>`;
+    }
+}
+
+function renderPagesTable(pages) {
+    const tbody = document.getElementById('pages-tbody');
+    if (!pages || pages.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('dynamicPages.noPagesFound') || 'No pages found'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = pages.map(page => `
+        <tr>
+            <td>#${page.id}</td>
+            <td><span class="badge badge-success">${page.slug}</span></td>
+            <td>${page.title_en}</td>
+            <td dir="rtl" style="text-align:right">${page.title_ar}</td>
+            <td>${new Date(page.updatedAt).toLocaleDateString()}</td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-icon btn-action-edit" onclick="editPage(${page.id})" title="${window.i18n.t('common.edit') || 'Edit'}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-icon btn-action-delete" onclick="deletePage(${page.id})" title="${window.i18n.t('common.delete') || 'Delete'}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Global functions for inline onclick handlers
+window.editPage = (id) => {
+    const page = window.pagesState.pages.find(p => p.id === id);
+    if (!page) return;
+
+    window.pagesState.editingId = id;
+
+    document.getElementById('page-modal-title').textContent = window.i18n.t('dynamicPages.editPage') || 'Edit Page';
+    document.getElementById('page-slug').value = page.slug;
+    document.getElementById('page-title-en').value = page.title_en;
+    document.getElementById('page-title-ar').value = page.title_ar;
+    document.getElementById('page-content-en').value = page.content_en;
+    document.getElementById('page-content-ar').value = page.content_ar;
+
+    const modal = document.getElementById('page-modal');
+    modal.classList.add('show');
+};
+
+window.deletePage = async (id) => {
+    if (confirm(window.i18n.t('dynamicPages.confirmDelete') || 'Are you sure you want to delete this page? This cannot be undone.')) {
+        try {
+            await window.api.delete(`/api/admin/pages/${id}`);
+            window.app.showToast(window.i18n.t('dynamicPages.deleted') || 'Page deleted successfully');
+            await fetchAndRenderPages();
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        }
+    }
+};

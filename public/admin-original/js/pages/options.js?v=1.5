@@ -1,0 +1,206 @@
+/**
+ * Options Management Component
+ */
+
+window.optionsState = {
+    options: [],
+    editingId: null
+};
+
+window.initOptions = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="sidebar.options">Options</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="options.subtitle">Manage product options (like Sizes)</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-option">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="options.addOption">Add Option</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="options-table">
+                <thead>
+                    <tr>
+                        <th width="50" data-i18n="common.id">ID</th>
+                        <th data-i18n="categories.nameEn">Name (EN)</th>
+                        <th data-i18n="categories.nameAr">Name (AR)</th>
+                        <th data-i18n="options.type">Type</th>
+                        <th data-i18n="products.status">Status</th>
+                        <th width="120" style="text-align: right;" data-i18n="common.actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="options-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="common.loading">Loading...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div class="modal-overlay" id="option-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="option-modal-title" data-i18n="options.addOption">Add Option</h3>
+                    <button class="modal-close" id="close-option-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="option-form">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="categories.nameEn">Name (EN)</label>
+                                <input type="text" id="option-name-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="categories.nameAr">Name (AR)</label>
+                                <input type="text" id="option-name-ar" class="input-control" required dir="rtl" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="products.status">Status</label>
+                            <select id="option-is-active" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                                <option value="true" data-i18n="common.active">Active</option>
+                                <option value="false" data-i18n="common.inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="btn-cancel-option" data-i18n="common.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-option" data-i18n="options.saveOption">Save Option</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupOptionsEvents = async () => {
+    await fetchAndRenderOptions();
+
+    const modal = document.getElementById('option-modal');
+
+    const closeModal = () => {
+        modal.classList.remove('show');
+        document.getElementById('option-form').reset();
+        window.optionsState.editingId = null;
+    };
+
+    document.getElementById('btn-add-option').addEventListener('click', () => {
+        document.getElementById('option-modal-title').textContent = window.i18n.t('options.addOption') || 'Add Option';
+        modal.classList.add('show');
+    });
+
+    document.getElementById('close-option-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-option').addEventListener('click', closeModal);
+
+    // Save Event
+    document.getElementById('btn-save-option').addEventListener('click', async () => {
+        const name_en = document.getElementById('option-name-en').value.trim();
+        const name_ar = document.getElementById('option-name-ar').value.trim();
+        const is_active = document.getElementById('option-is-active').value === 'true';
+
+        if (!name_en || !name_ar) {
+            window.app.showToast('Names are required', 'warning');
+            return;
+        }
+
+        const id = window.optionsState.editingId;
+        const btn = document.getElementById('btn-save-option');
+        const origText = btn.textContent;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.loading') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            const payload = { name_en, name_ar, is_active };
+
+            if (id) {
+                await window.api.put(`/api/admin/options/${id}`, payload, false);
+                window.app.showToast(window.i18n.t('options.updated') || 'Option updated successfully!');
+            } else {
+                await window.api.post('/api/admin/options', payload, false);
+                window.app.showToast(window.i18n.t('options.created') || 'Option created successfully!');
+            }
+            closeModal();
+            await fetchAndRenderOptions();
+        } catch (error) {
+            window.app.showToast(error.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};
+
+async function fetchAndRenderOptions() {
+    try {
+        const response = await window.api.get('/api/admin/options?includeInactive=true');
+        const options = Array.isArray(response) ? response : (response.options || []);
+        window.optionsState.options = options;
+        renderOptionsTable(options);
+    } catch (e) {
+        document.getElementById('options-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Failed to load options: ${e.message}</td></tr>`;
+    }
+}
+
+function renderOptionsTable(options) {
+    const tbody = document.getElementById('options-tbody');
+    if (!options || options.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('options.noOptionsFound') || 'No options found'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = options.map(option => `
+        <tr>
+            <td>#${option.id}</td>
+            <td style="font-weight:600;">${option.name_en || ''}</td>
+            <td dir="rtl">${option.name_ar || ''}</td>
+            <td>
+                <span class="badge badge-primary">SIZE</span>
+            </td>
+            <td>
+                <span class="badge" style="background: ${option.is_active ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${option.is_active ? '#4ade80' : '#f87171'}">
+                    ${option.is_active ? (window.i18n.t('common.active') || 'Active') : (window.i18n.t('common.inactive') || 'Inactive')}
+                </span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-icon btn-action-edit" onclick="editOption(${option.id})" title="${window.i18n.t('common.edit') || 'Edit'}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-icon btn-action-delete" onclick="deleteOption(${option.id})" title="${window.i18n.t('common.delete') || 'Delete'}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.editOption = (id) => {
+    const option = window.optionsState.options.find(o => o.id === id);
+    if (!option) return;
+
+    window.optionsState.editingId = id;
+
+    document.getElementById('option-modal-title').textContent = window.i18n.t('options.editOption') || 'Edit Option';
+    document.getElementById('option-name-en').value = option.name_en || '';
+    document.getElementById('option-name-ar').value = option.name_ar || '';
+    document.getElementById('option-is-active').value = option.is_active !== false ? 'true' : 'false';
+
+    const modal = document.getElementById('option-modal');
+    modal.classList.add('show');
+};
+
+window.deleteOption = async (id) => {
+    if (confirm(window.i18n.t('options.confirmDelete') || 'Are you sure you want to delete this option? Products using it might be affected.')) {
+        try {
+            await window.api.delete(`/api/admin/options/${id}`);
+            window.app.showToast(window.i18n.t('options.deleted') || 'Option deleted successfully');
+            await fetchAndRenderOptions();
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        }
+    }
+};

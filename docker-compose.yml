@@ -1,0 +1,22 @@
+services:
+  slyrah:
+    build: .
+    container_name: slyrah-commerce
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      PUBLIC_DOMAIN: ecommerce.siteyfy.com
+      DB_PATH: /app/data/slyrah.sqlite
+    volumes:
+      - slyrah_data:/app/data
+      - ./public/uploads:/app/public/uploads
+      - ./public/image-cache:/app/public/image-cache
+      - ./public/lighthouse-reports:/app/public/lighthouse-reports
+
+volumes:
+  slyrah_data:

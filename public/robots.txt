@@ -1,0 +1,21 @@
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /profile/
+Disallow: /order-success/
+Disallow: /order-tracking/
+Disallow: /contact/
+Disallow: /shipping/
+
+User-Agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /profile/
+Disallow: /order-success/
+Disallow: /order-tracking/
+
+Sitemap: https://premiumbrandeg.com/sitemap.xml

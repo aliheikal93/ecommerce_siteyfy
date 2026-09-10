@@ -1,0 +1,58 @@
+/**
+ * Login Page Logic
+ */
+
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('login-form');
+    const loginBtn = document.getElementById('login-btn');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+
+    if (!loginForm) return;
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!email || !password) {
+            window.app.showToast('Please fill in all fields', 'warning');
+            return;
+        }
+
+        // Set Loading State
+        const originalBtnText = loginBtn.innerHTML;
+        loginBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Authenticating...</span>';
+        loginBtn.disabled = true;
+
+        try {
+            // Call API
+            const responseData = await window.api.login(email, password);
+
+            // Save Token & User Info
+            if (responseData.token) {
+                localStorage.setItem('admin_token', responseData.token);
+                if (responseData.admin) { // Depending on the actual API struct (admin vs user)
+                    localStorage.setItem('admin_user', JSON.stringify(responseData.admin));
+                } else if (responseData.user) {
+                    localStorage.setItem('admin_user', JSON.stringify(responseData.user));
+                }
+
+                window.app.showToast('Login successful', 'success');
+
+                // Route to Dashboard
+                window.app.checkAuth();
+            } else {
+                window.app.showToast('Invalid response from server', 'error');
+            }
+
+        } catch (error) {
+            window.app.showToast(error.message || 'Login failed', 'error');
+        } finally {
+            // Restore Button State
+            loginBtn.innerHTML = originalBtnText;
+            loginBtn.disabled = false;
+        }
+    });
+});

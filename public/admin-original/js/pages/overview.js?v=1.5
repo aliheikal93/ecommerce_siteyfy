@@ -1,0 +1,196 @@
+/**
+ * Overview Dashboard Component
+ */
+
+window.initOverview = async () => {
+    // Show spinner if we had one, otherwise just render empty state while loading, or load before render
+    let salesReport = { totalOrders: 0, totalSales: 0 };
+    let userStats = { activeUsers: 0 };
+    let engagementStats = { totalReviews: 0, totalAddToCart: 0 };
+    let topProducts = [];
+    let topCartProducts = [];
+
+    try {
+        const [salesData, usersData, engagementData, productsData, cartProductsData] = await Promise.all([
+            window.api.get('/api/admin/analytics/sales'),
+            window.api.get('/api/admin/analytics/user-stats'),
+            window.api.get('/api/admin/analytics/engagement'),
+            window.api.get('/api/admin/analytics/top-products?limit=5'),
+            window.api.get('/api/admin/analytics/top-cart-products?limit=5')
+        ]);
+
+        if (salesData && salesData.report) salesReport = salesData.report;
+        if (usersData && usersData.stats) userStats = usersData.stats;
+        if (engagementData && engagementData.stats) engagementStats = engagementData.stats;
+        if (productsData && productsData.products) topProducts = productsData.products;
+        if (cartProductsData && cartProductsData.products) topCartProducts = cartProductsData.products;
+    } catch (error) {
+        console.error('Failed to load analytics data', error);
+        if (window.app && window.app.showToast) {
+            window.app.showToast('Failed to load dashboard data', 'error');
+        }
+    }
+
+    // Format currency
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat('en-EG', { style: 'currency', currency: 'EGP' }).format(value);
+    };
+
+    // Generate HTML
+    const html = `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="overview.title">Dashboard Overview</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="overview.subtitle">Welcome to PremiumBrand Admin Portal</p>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="glass-card" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;" data-i18n="overview.totalOrders">Total Orders</p>
+                        <h3 style="font-size: 2rem;">${salesReport.totalOrders}</h3>
+                    </div>
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(59, 130, 246, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                        <i class="fa-solid fa-cart-shopping"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="glass-card" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;" data-i18n="overview.totalRevenue">Total Revenue</p>
+                        <h3 style="font-size: 2rem;">${formatCurrency(salesReport.totalSales)}</h3>
+                    </div>
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(16, 185, 129, 0.1); color: var(--success); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                        <i class="fa-solid fa-money-bill-wave"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="glass-card" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;" data-i18n="overview.activeUsers">Active Users</p>
+                        <h3 style="font-size: 2rem;">${userStats.activeUsers}</h3>
+                    </div>
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(245, 158, 11, 0.1); color: var(--warning); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;" data-i18n="overview.totalReviews">Total Reviews</p>
+                        <h3 style="font-size: 2rem;">${engagementStats.totalReviews}</h3>
+                    </div>
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(139, 92, 246, 0.1); color: var(--info); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                        <i class="fa-solid fa-star"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card" style="padding: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;" data-i18n="overview.addToCarts">Add to Carts</p>
+                        <h3 style="font-size: 2rem;">${engagementStats.totalAddToCart}</h3>
+                    </div>
+                    <div style="width: 48px; height: 48px; border-radius: 12px; background: rgba(236, 72, 153, 0.1); color: var(--danger); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                        <i class="fa-solid fa-cart-plus"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="glass-card" style="padding: 1.5rem; color: var(--text-main);">
+                <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-fire" style="color: var(--danger);"></i> <span data-i18n="overview.topProducts">Top Products (Sales)</span>
+                </h3>
+                
+                ${topProducts.length > 0 ? `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="overview.product">Product</th>
+                                <th style="text-align: center;" data-i18n="overview.unitsSold">Units Sold</th>
+                                <th style="text-align: right;" data-i18n="overview.revenue">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${topProducts.map(product => `
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 500;">${product.productName}</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-muted);"><span data-i18n="overview.id">ID</span>: ${product.productId}</div>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <div class="badge badge-primary">${product.totalSold}</div>
+                                    </td>
+                                    <td style="text-align: right; font-weight: 500; color: var(--success);">
+                                        ${formatCurrency(product.totalRevenue)}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                ` : `
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem 0;">
+                    <i class="fa-solid fa-box-open" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                    <p data-i18n="overview.noProductsSold">No products sold yet.</p>
+                </div>
+                `}
+            </div>
+
+            <div class="glass-card" style="padding: 1.5rem; color: var(--text-main);">
+                <h3 style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-cart-arrow-down" style="color: var(--info);"></i> <span data-i18n="overview.topAddedToCart">Top Added to Cart</span>
+                </h3>
+                
+                ${topCartProducts.length > 0 ? `
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="overview.product">Product</th>
+                                <th style="text-align: center;" data-i18n="overview.addCount">Add Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${topCartProducts.map(product => `
+                                <tr>
+                                    <td>
+                                        <div style="font-weight: 500;">${product.productName}</div>
+                                        <div style="font-size: 0.8rem; color: var(--text-muted);"><span data-i18n="overview.id">ID</span>: ${product.productId}</div>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <div class="badge badge-info">${product.addCount}</div>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                ` : `
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem 0;">
+                    <i class="fa-solid fa-cart-shopping" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+                    <p data-i18n="overview.noProductsAdded">No products added to carts yet.</p>
+                </div>
+                `}
+            </div>
+        </div>
+    `;
+
+    return html;
+};
+
+window.setupOverviewEvents = () => {
+    // Any events needed after render
+};

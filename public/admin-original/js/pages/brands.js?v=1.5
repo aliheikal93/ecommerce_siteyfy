@@ -1,0 +1,250 @@
+/**
+ * Brands Management Component
+ */
+
+window.brandsState = {
+    brands: [],
+    editingId: null
+};
+
+window.initBrands = async () => {
+    return `
+        <div class="page-header">
+            <div>
+                <h2 data-i18n="sidebar.brands">Brands</h2>
+                <p class="text-muted" style="color: var(--text-muted);" data-i18n="brands.subtitle">Manage product brands and logos</p>
+            </div>
+            <button class="btn btn-primary" id="btn-add-brand">
+                <i class="fa-solid fa-plus"></i>
+                <span data-i18n="brands.addBrand">Add Brand</span>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table" id="brands-table">
+                <thead>
+                    <tr>
+                        <th width="50" data-i18n="common.id">ID</th>
+                        <th width="80" data-i18n="brands.logo">Logo</th>
+                        <th data-i18n="categories.nameEn">Name (EN)</th>
+                        <th data-i18n="categories.nameAr">Name (AR)</th>
+                        <th data-i18n="products.status">Status</th>
+                        <th width="120" style="text-align: right;" data-i18n="common.actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="brands-tbody">
+                    <tr><td colspan="6" style="text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> <span data-i18n="common.loading">Loading...</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Create/Edit Modal -->
+        <div class="modal-overlay" id="brand-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="brand-modal-title" data-i18n="brands.addBrand">Add Brand</h3>
+                    <button class="modal-close" id="close-brand-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="brand-form">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="categories.nameEn">Name (EN)</label>
+                                <input type="text" id="brand-name-en" class="input-control" required style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="categories.nameAr">Name (AR)</label>
+                                <input type="text" id="brand-name-ar" class="input-control" required dir="rtl" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="products.status">Status</label>
+                            <select id="brand-is-active" class="input-control" style="width: 100%; padding: 0.8rem 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main);">
+                                <option value="true" data-i18n="common.active">Active</option>
+                                <option value="false" data-i18n="common.inactive">Inactive</option>
+                            </select>
+                        </div>
+
+                        <!-- Brand Logo -->
+                        <div class="form-group" style="padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                            <label data-i18n="brands.brandLogo">Brand Logo</label>
+                            <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                                <img id="brand-image-preview" src="/uploads/logo.png" style="width: 100px; height: 50px; object-fit: contain; border-radius: 8px; background: #fff;">
+                                <div style="flex: 1;">
+                                    <input type="file" id="brand-image-file" class="input-control" accept="image/*" style="width: 100%; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px dashed var(--primary); border-radius: 8px; color: var(--text-main);">
+                                </div>
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="btn-cancel-brand" data-i18n="common.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-save-brand" data-i18n="brands.saveBrand">Save Brand</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupBrandsEvents = async () => {
+    await fetchAndRenderBrands();
+
+    const modal = document.getElementById('brand-modal');
+    const imageInput = document.getElementById('brand-image-file');
+    const imagePreview = document.getElementById('brand-image-preview');
+
+    const closeModal = () => {
+        modal.classList.remove('show');
+        document.getElementById('brand-form').reset();
+        imagePreview.src = '/uploads/logo.png';
+        document.getElementById('brand-is-active').value = 'true';
+        window.brandsState.editingId = null;
+    };
+
+    document.getElementById('btn-add-brand').addEventListener('click', () => {
+        document.getElementById('brand-modal-title').textContent = window.i18n.t('brands.addBrand') || 'Add Brand';
+        modal.classList.add('show');
+    });
+
+    document.getElementById('close-brand-modal').addEventListener('click', closeModal);
+    document.getElementById('btn-cancel-brand').addEventListener('click', closeModal);
+
+    // Image preview handler
+    imageInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => imagePreview.src = e.target.result;
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+
+    // Save Event
+    document.getElementById('btn-save-brand').addEventListener('click', async () => {
+        const name_en = document.getElementById('brand-name-en').value.trim();
+        const name_ar = document.getElementById('brand-name-ar').value.trim();
+        const is_active = document.getElementById('brand-is-active').value === 'true';
+        const imageFile = imageInput.files[0];
+
+        if (!name_en || !name_ar) {
+            window.app.showToast('Names are required', 'warning');
+            return;
+        }
+
+        const id = window.brandsState.editingId;
+        const btn = document.getElementById('btn-save-brand');
+        const origText = btn.textContent;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${window.i18n.t('common.loading') || 'Saving...'}`;
+        btn.disabled = true;
+
+        try {
+            const payload = {
+                name_en,
+                name_ar,
+                is_active
+            };
+
+            if (imageFile) {
+                const fd = new FormData();
+                fd.append('image', imageFile);
+                const uploadRes = await window.api.post('/api/admin/upload/single', fd);
+                if (uploadRes && uploadRes.image_url) {
+                    payload.logo_url = uploadRes.image_url;
+                }
+            }
+
+            if (id) {
+                await window.api.put(`/api/admin/brands/${id}`, payload);
+                window.app.showToast(window.i18n.t('brands.updated') || 'Brand updated successfully!');
+            } else {
+                await window.api.post('/api/admin/brands', payload);
+                window.app.showToast(window.i18n.t('brands.created') || 'Brand created successfully!');
+            }
+            closeModal();
+            await fetchAndRenderBrands();
+        } catch (error) {
+            window.app.showToast(error.message, 'error');
+        } finally {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+        }
+    });
+};
+
+async function fetchAndRenderBrands() {
+    try {
+        const response = await window.api.get('/api/admin/brands?include_inactive=true');
+        const brands = Array.isArray(response) ? response : (response.brands || []);
+        window.brandsState.brands = brands;
+        renderBrandsTable(brands);
+    } catch (e) {
+        document.getElementById('brands-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Failed to load brands: ${e.message}</td></tr>`;
+    }
+}
+
+function renderBrandsTable(brands) {
+    const tbody = document.getElementById('brands-tbody');
+    if (!brands || brands.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">${window.i18n.t('brands.noBrandsFound') || 'No brands found'}</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = brands.map(brand => `
+        <tr>
+            <td>#${brand.id}</td>
+            <td>
+                <div style="background:#fff; padding:5px; border-radius:6px; display:inline-block;">
+                    <img src="${brand.logo_url || '/uploads/logo.png'}" 
+                         style="max-width:60px; max-height:30px; object-fit:contain; display:block;">
+                </div>
+            </td>
+            <td style="font-weight:600;">${brand.name_en || ''}</td>
+            <td dir="rtl">${brand.name_ar || ''}</td>
+            <td>
+                <span class="badge" style="background: ${brand.is_active !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}; color: ${brand.is_active !== false ? '#4ade80' : '#f87171'}">
+                    ${brand.is_active !== false ? (window.i18n.t('common.active') || 'Active') : (window.i18n.t('common.inactive') || 'Inactive')}
+                </span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button class="btn btn-icon btn-action-edit" onclick="editBrand(${brand.id})" title="${window.i18n.t('common.edit') || 'Edit'}">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-icon btn-action-delete" onclick="deleteBrand(${brand.id})" title="${window.i18n.t('common.delete') || 'Delete'}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.editBrand = (id) => {
+    const brand = window.brandsState.brands.find(b => b.id === id);
+    if (!brand) return;
+
+    window.brandsState.editingId = id;
+
+    document.getElementById('brand-modal-title').textContent = window.i18n.t('brands.editBrand') || 'Edit Brand';
+    document.getElementById('brand-name-en').value = brand.name_en || '';
+    document.getElementById('brand-name-ar').value = brand.name_ar || '';
+    document.getElementById('brand-is-active').value = brand.is_active !== false ? 'true' : 'false';
+
+    document.getElementById('brand-image-preview').src = brand.logo_url || '/uploads/logo.png';
+    document.getElementById('brand-image-file').value = '';
+
+    const modal = document.getElementById('brand-modal');
+    modal.classList.add('show');
+};
+
+window.deleteBrand = async (id) => {
+    if (confirm(window.i18n.t('brands.confirmDelete') || 'Are you sure you want to delete this brand? Products linked to it might break.')) {
+        try {
+            await window.api.delete(`/api/admin/brands/${id}`);
+            window.app.showToast(window.i18n.t('brands.deleted') || 'Brand deleted successfully');
+            await fetchAndRenderBrands();
+        } catch (e) {
+            window.app.showToast(e.message, 'error');
+        }
+    }
+};

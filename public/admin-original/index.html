@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PremiumBrand Admin</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="../../fonts.googleapis.com/css2%3Ffamily=Inter:wght@300%3B400%3B500%3B600%3B700&amp;display=swap.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="../../cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/styles.css%3Fv=1.9.css">
+</head>
+
+<body class="dark-theme">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- App Container -->
+    <div id="app" class="app-container">
+
+        <!-- Login View -->
+        <div id="login-view" class="view active-view">
+            <div class="login-wrapper">
+                <div class="glass-card login-card">
+                    <div class="login-header">
+                        <img src="../uploads/gallery-1766405641942-789801406.png"
+                            alt="PremiumBrand Logo" class="login-logo" style="filter: brightness(0) invert(1);"
+                            onerror="this.src='/uploads/gallery-1766405641942-789801406.png'">
+                        <h2 data-i18n="login.title">Admin Portal</h2>
+                        <p data-i18n="login.subtitle">Sign in to your account</p>
+                    </div>
+
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="email" data-i18n="login.emailLabel">Email Address</label>
+                            <div class="input-icon">
+                                <i class="fa-solid fa-envelope"></i>
+                                <input type="email" id="email" data-i18n-placeholder="login.emailLabel" placeholder="admin@watchesbrand.com" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password" data-i18n="login.passwordLabel">Password</label>
+                            <div class="input-icon">
+                                <i class="fa-solid fa-lock"></i>
+                                <input type="password" id="password" data-i18n-placeholder="login.passwordLabel" placeholder="••••••••" required>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary btn-block" id="login-btn">
+                                <span data-i18n="login.signIn">Sign In</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Animated Background -->
+            <div class="animated-bg">
+                <div class="blob blob-1"></div>
+                <div class="blob blob-2"></div>
+                <div class="blob blob-3"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard View (Hidden initially) -->
+        <div id="dashboard-view" class="view">
+            <!-- Sidebar -->
+            <aside class="sidebar glass-panel">
+                <div class="sidebar-header">
+                    <img src="../uploads/gallery-1766405641942-789801406.png" alt="Logo"
+                        class="sidebar-logo" style="filter: brightness(0) invert(1);"
+                        onerror="this.src='/uploads/gallery-1766405641942-789801406.png'">
+                </div>
+
+                <nav class="sidebar-nav">
+                    <a href="index.html#dashboard" class="nav-item active" data-view="overview">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span data-i18n="sidebar.dashboard">Dashboard</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.content">CONTENT</div>
+
+                    <a href="index.html#content" class="nav-item" data-view="content">
+                        <i class="fa-solid fa-images"></i>
+                        <span data-i18n="sidebar.homeContent">Home Content</span>
+                    </a>
+
+                    <a href="index.html#homeSections" class="nav-item" data-view="homeSections">
+                        <i class="fa-solid fa-bars-staggered"></i>
+                        <span data-i18n="sidebar.homeSections">Home Sections</span>
+                    </a>
+
+                    <a href="index.html#imageGallery" class="nav-item" data-view="imageGallery">
+                        <i class="fa-solid fa-photo-film"></i>
+                        <span data-i18n="sidebar.imageGallery">Image Gallery</span>
+                    </a>
+
+                    <a href="index.html#pages" class="nav-item" data-view="pages">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span data-i18n="sidebar.dynamicPages">Dynamic Pages</span>
+                    </a>
+                    <a href="index.html#categories" class="nav-item" data-view="categories">
+                        <i class="fa-solid fa-layer-group"></i>
+                        <span data-i18n="sidebar.categories">Categories</span>
+                    </a>
+                    <a href="index.html#brands" class="nav-item" data-view="brands">
+                        <i class="fa-solid fa-tag"></i>
+                        <span data-i18n="sidebar.brands">Brands</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.catalog">CATALOG</div>
+
+                    <a href="index.html#products" class="nav-item" data-view="products">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span data-i18n="sidebar.products">Products</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.sales">SALES</div>
+
+                    <a href="index.html#orders" class="nav-item" data-view="orders">
+                        <i class="fa-solid fa-cart-shopping"></i>
+                        <span data-i18n="sidebar.orders">Orders</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.customers">CUSTOMERS</div>
+
+                    <a href="index.html#users" class="nav-item" data-view="users">
+                        <i class="fa-solid fa-users"></i>
+                        <span data-i18n="sidebar.users">Users</span>
+                    </a>
+
+                    <a href="index.html#locations" class="nav-item" data-view="locations">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <span data-i18n="sidebar.locations">Locations & Shipping</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.attributes">PRODUCT ATTRIBUTES</div>
+
+                    <a href="index.html#colors" class="nav-item" data-view="colors">
+                        <i class="fa-solid fa-palette"></i>
+                        <span data-i18n="sidebar.colors">Colors</span>
+                    </a>
+                    <a href="index.html#options" class="nav-item" data-view="options">
+                        <i class="fa-solid fa-ruler-combined"></i>
+                        <span data-i18n="sidebar.options">Options & Sizes</span>
+                    </a>
+                    <a href="index.html#labels" class="nav-item" data-view="labels">
+                        <i class="fa-solid fa-tags"></i>
+                        <span data-i18n="sidebar.labels">Labels</span>
+                    </a>
+
+                    <div class="nav-section" data-i18n="sidebar.system">SYSTEM</div>
+
+                    <a href="index.html#settings" class="nav-item" data-view="settings">
+                        <i class="fa-solid fa-gear"></i>
+                        <span data-i18n="sidebar.settings">Settings</span>
+                    </a>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <button id="logout-btn" class="btn btn-outline btn-block">
+                        <i class="fa-solid fa-sign-out-alt"></i>
+                        <span data-i18n="sidebar.logout">Logout</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content Area -->
+            <main class="main-content">
+                <!-- Topbar -->
+                <header class="topbar glass-panel">
+                    <div class="topbar-left">
+                        <button class="menu-toggle" id="menu-toggle">
+                            <i class="fa-solid fa-bars"></i>
+                        </button>
+                        <h1 id="page-title">Dashboard</h1>
+                    </div>
+                    <div class="topbar-right">
+                        <div class="lang-switcher" style="margin-right: 15px;">
+                            <button id="lang-toggle" class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.85rem; font-weight: 600;">عربي</button>
+                        </div>
+                        <div class="user-profile">
+                            <div class="avatar"><i class="fa-solid fa-user"></i></div>
+                            <span class="user-name" id="user-display-name">Admin</span>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Page Content Container -->
+                <div class="content-wrapper" id="content-container">
+                    <!-- Views will be injected here via JS -->
+                </div>
+            </main>
+        </div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/i18n.js%3Fv=1.1"></script>
+    <script src="js/api.js%3Fv=1.7"></script>
+    <script src="js/app.js%3Fv=1.8"></script>
+    <script src="js/pages/login.js%3Fv=1.6"></script>
+
+    <!-- Feature Pages -->
+    <script src="js/pages/overview.js%3Fv=1.5"></script>
+    <script src="js/pages/content.js%3Fv=1.5"></script>
+    <script src="js/pages/home-sections.js%3Fv=1.1"></script>
+    <script src="js/pages/image-gallery.js%3Fv=1.1"></script>
+    <script src="js/pages/pages.js%3Fv=1.5"></script>
+    <script src="js/pages/categories.js%3Fv=1.5"></script>
+    <script src="js/pages/brands.js%3Fv=1.5"></script>
+    <script src="js/pages/products.js%3Fv=1.6"></script>
+    <script src="js/pages/colors.js%3Fv=1.5"></script>
+    <script src="js/pages/options.js%3Fv=1.5"></script>
+    <script src="js/pages/labels.js%3Fv=1.5"></script>
+    <script src="js/pages/settings.js%3Fv=1.5"></script>
+    <script src="js/pages/orders.js%3Fv=1.8"></script>
+    <script src="js/pages/users.js%3Fv=1.0"></script>
+    <script src="js/pages/locations.js%3Fv=1.8"></script>
+</body>
+
+</html>

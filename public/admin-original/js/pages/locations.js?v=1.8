@@ -1,0 +1,778 @@
+/**
+ * Locations & Shipping Management
+ */
+
+let allGovernorates = [];
+let selectedGovId = null;
+
+window.initLocations = async function () {
+    return `
+        <div class="locations-container">
+            <div class="page-header">
+                <div class="header-info">
+                    <h2 data-i18n="locations.title">Locations & Shipping</h2>
+                    <p data-i18n="locations.subtitle">Manage delivery areas and their associated costs</p>
+                </div>
+                <button class="btn btn-primary" id="add-governorate-btn">
+                    <i class="fa-solid fa-plus"></i>
+                    <span data-i18n="locations.addGov">Add Governorate</span>
+                </button>
+            </div>
+
+            <!-- Flat Shipping Settings -->
+            <div class="glass-card" style="margin-bottom: 2rem; padding: 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fa-solid fa-truck-fast text-primary"></i> 
+                        <span data-i18n="locations.flatRateTitle">Global Flat Shipping Rate</span>
+                    </h3>
+                    <p class="text-muted" style="margin: 0; font-size: 0.9rem;" data-i18n="locations.flatRateDesc">Enable this to apply a single unified shipping cost to all active areas regardless of their individual settings.</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 2rem;">
+                    <div class="form-group toggle-group" style="margin: 0;">
+                        <label class="toggle-container" style="margin: 0;">
+                            <input type="checkbox" id="flat-shipping-toggle">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label" id="flat-shipping-status-label" data-i18n="locations.disabled">Disabled</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group" style="margin: 0; display: flex; align-items: center; gap: 1rem;">
+                        <label style="margin: 0; white-space: nowrap;" data-i18n="locations.flatPrice">Flat Price (EGP)</label>
+                        <input type="number" id="flat-shipping-price" class="input-control" value="100" min="0" step="1" style="width: 120px;" disabled>
+                    </div>
+
+                    <button class="btn btn-primary btn-sm" id="btn-save-flat-shipping" style="display: none;" data-i18n="locations.saveFlatRate">Save Flat Rate</button>
+                    <div id="flat-shipping-loader" style="display: none;"><i class="fa-solid fa-circle-notch fa-spin text-primary"></i></div>
+                </div>
+            </div>
+
+            <!-- Stats Overview -->
+            <div class="stats-overview-grid" id="locations-stats">
+                <div class="stat-card glass-card">
+                    <div class="stat-icon"><i class="fa-solid fa-map-location-dot"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label" data-i18n="locations.govs">Governorates</span>
+                        <span class="stat-value" id="stat-total-govs">0</span>
+                    </div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-icon"><i class="fa-solid fa-location-crosshairs"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label" data-i18n="locations.totalAreas">Total Areas</span>
+                        <span class="stat-value" id="stat-total-areas">0</span>
+                    </div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-icon"><i class="fa-solid fa-truck-fast"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label" data-i18n="locations.avgShipping">Avg. Shipping</span>
+                        <span class="stat-value" id="stat-avg-shipping">0 EGP</span>
+                    </div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-icon"><i class="fa-solid fa-toggle-on"></i></div>
+                    <div class="stat-content">
+                        <span class="stat-label" data-i18n="locations.deliveringAreas">Delivering Areas</span>
+                        <span class="stat-value" id="stat-active-areas">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="locations-layout">
+                <!-- Master: Governorates List -->
+                <div class="glass-panel governorates-list-panel">
+                    <div class="panel-header">
+                        <h3 data-i18n="locations.govs">Governorates</h3>
+                        <div class="panel-actions">
+                             <div class="search-mini">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="gov-search" data-i18n-placeholder="locations.search" placeholder="Search...">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="governorate-list-container">
+                        <div class="loading-state">
+                            <i class="fa-solid fa-circle-notch fa-spin"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detail: Areas List -->
+                <div class="detail-container">
+                   <div class="glass-panel areas-detail-panel" id="areas-detail-panel" style="display: none;">
+                        <div class="panel-header">
+                            <div class="header-info">
+                                <div class="gov-title-row">
+                                    <h3 id="selected-governorate-name" data-i18n="locations.selectGov">Select a Governorate</h3>
+                                    <span class="gov-id-badge" id="selected-gov-id-badge"></span>
+                                </div>
+                                <p data-i18n="locations.manageAreas">Manage delivery areas for this region</p>
+                            </div>
+                            <div class="header-actions">
+                                <button class="btn btn-outline btn-sm" id="open-bulk-btn">
+                                    <i class="fa-solid fa-layer-group"></i>
+                                    <span data-i18n="locations.bulkUpdate">Bulk Update</span>
+                                </button>
+                                <button class="btn btn-primary btn-sm" id="add-area-btn">
+                                    <i class="fa-solid fa-plus"></i>
+                                    <span data-i18n="locations.addArea">Add Area</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="areas-table-container">
+                            <!-- Areas will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="glass-panel areas-placeholder" id="areas-placeholder">
+                        <div class="empty-state">
+                            <div class="pulse-icon"><i class="fa-solid fa-location-dot"></i></div>
+                            <h3 data-i18n="locations.regionMgmt">Region Management</h3>
+                            <p data-i18n="locations.regionMgmtDesc">Select a governorate from the left sidebar to view and manage its delivery areas and shipping costs.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create/Edit Governorate Modal -->
+        <div class="modal-overlay" id="governorate-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="gov-modal-title" data-i18n="locations.addGovModalTitle">Add Governorate</h3>
+                    <button class="modal-close close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="governorate-form">
+                        <input type="hidden" id="gov-id">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="locations.nameEn">Name (English)</label>
+                                <input type="text" id="gov-name-en" class="input-control" required placeholder="e.g. Cairo">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="locations.nameAr">Name (Arabic)</label>
+                                <input type="text" id="gov-name-ar" class="input-control" required placeholder="e.g. القاهرة" dir="rtl">
+                            </div>
+                        </div>
+                        <div class="form-group toggle-group" style="margin-bottom: 1rem;">
+                            <label class="toggle-container">
+                                <input type="checkbox" id="gov-is-active" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label" data-i18n="locations.deliveringToGov">Delivering to this Governorate</span>
+                            </label>
+                            <p class="field-hint" data-i18n="locations.deliveringToGovHint">If turned off, we won't deliver to any area in this governorate.</p>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal" data-i18n="common.cancel">Cancel</button>
+                    <button type="submit" form="governorate-form" class="btn btn-primary" data-i18n="locations.saveGov">Save Governorate</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Create/Edit Area Modal -->
+        <div class="modal-overlay" id="area-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 id="area-modal-title" data-i18n="locations.addAreaModalTitle">Add Area</h3>
+                    <button class="modal-close close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="area-form">
+                        <input type="hidden" id="area-id">
+                        <div class="form-group">
+                            <label data-i18n="locations.govLabel">Governorate</label>
+                            <select id="area-governorate-id" class="input-control" required></select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label data-i18n="locations.nameEn">Name (English)</label>
+                                <input type="text" id="area-name-en" class="input-control" required placeholder="e.g. Nasr City">
+                            </div>
+                            <div class="form-group">
+                                <label data-i18n="locations.nameAr">Name (Arabic)</label>
+                                <input type="text" id="area-name-ar" class="input-control" required placeholder="e.g. مدينة نصر" dir="rtl">
+                            </div>
+                        </div>
+                        <div class="form-group toggle-group" style="margin-bottom: 1.5rem;">
+                            <label class="toggle-container">
+                                <input type="checkbox" id="area-is-active" checked>
+                                <span class="toggle-slider"></span>
+                                <span class="toggle-label" data-i18n="locations.deliveringToArea">Delivering to this Area</span>
+                            </label>
+                            <p class="field-hint" data-i18n="locations.deliveringToAreaHint">Turn off if we don't deliver to this specific area.</p>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label data-i18n="locations.shippingCost">Shipping Cost (EGP)</label>
+                            <input type="number" id="area-shipping-cost" class="input-control" required min="0" step="0.5" value="50">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal" data-i18n="common.cancel">Cancel</button>
+                    <button type="submit" form="area-form" class="btn btn-primary" data-i18n="locations.saveArea">Save Area</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Shipping Modal -->
+        <div class="modal-overlay" id="bulk-shipping-modal">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 data-i18n="locations.bulkUpdateModalTitle">Bulk Update Shipping Cost</h3>
+                    <button class="modal-close close-modal"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="modal-body">
+                    <form id="bulk-shipping-form">
+                        <p class="modal-desc" style="margin-bottom:1.5rem; color:var(--text-muted);" data-i18n="locations.bulkUpdateDesc">This will immediately update the shipping cost for ALL areas in the selected governorate.</p>
+                        <div class="form-group">
+                            <label data-i18n="locations.selectGovBulk">Select Governorate</label>
+                            <select id="bulk-governorate-id" class="input-control" required></select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label data-i18n="locations.newShippingCost">New Shipping Cost (EGP)</label>
+                            <input type="number" id="bulk-shipping-cost-input" class="input-control" required min="0" step="0.5" value="50">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline close-modal" data-i18n="common.cancel">Cancel</button>
+                    <button type="submit" form="bulk-shipping-form" class="btn btn-primary" data-i18n="locations.updateAllAreas">Update All Areas</button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.setupLocationsEvents = function () {
+    fetchGovernorates();
+    setupFlatShippingSettings();
+
+    // Modal close events
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.onclick = (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show'));
+        };
+    });
+
+    // Handle area active toggle (auto-0 cost)
+    document.getElementById('area-is-active').addEventListener('change', (e) => {
+        const costInput = document.getElementById('area-shipping-cost');
+        if (!e.target.checked) {
+            costInput.value = 0;
+            costInput.disabled = true;
+        } else {
+            costInput.disabled = false;
+        }
+    });
+
+    // Add Governorate
+    document.getElementById('add-governorate-btn').onclick = () => {
+        document.getElementById('gov-modal-title').textContent = 'Add Governorate';
+        document.getElementById('governorate-form').reset();
+        document.getElementById('gov-id').value = '';
+        document.getElementById('governorate-modal').classList.add('show');
+    };
+
+    // Governorate Form Submit
+    document.getElementById('governorate-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const idStr = document.getElementById('gov-id').value;
+        const id = idStr ? parseInt(idStr) : null;
+        const data = {
+            name_en: document.getElementById('gov-name-en').value,
+            name_ar: document.getElementById('gov-name-ar').value,
+            is_active: document.getElementById('gov-is-active').checked
+        };
+
+        try {
+            if (id) {
+                await window.api.put(`/api/locations/governorates/${id}`, data);
+                window.app.showToast('Governorate updated successfully');
+            } else {
+                await window.api.post('/api/locations/governorates', data);
+                window.app.showToast('Governorate created successfully');
+            }
+            document.getElementById('governorate-modal').classList.remove('show');
+            fetchGovernorates();
+        } catch (error) {
+            window.app.showToast(error.message || 'Failed to save governorate', 'error');
+        }
+    };
+
+    // Add Area
+    document.getElementById('add-area-btn').onclick = () => {
+        document.getElementById('area-modal-title').textContent = 'Add Area';
+        document.getElementById('area-form').reset();
+        document.getElementById('area-id').value = '';
+
+        // Populate dropdowns and pre-select current Gov if available
+        populateGovDropdowns();
+        if (selectedGovId) {
+            document.getElementById('area-governorate-id').value = selectedGovId;
+        }
+
+        document.getElementById('area-shipping-cost').disabled = false;
+        document.getElementById('area-modal').classList.add('show');
+    };
+
+    // Area Form Submit
+    document.getElementById('area-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const idStr = document.getElementById('area-id').value;
+        const id = idStr ? parseInt(idStr) : null;
+        const currentGovId = parseInt(document.getElementById('area-governorate-id').value);
+        const data = {
+            name_en: document.getElementById('area-name-en').value,
+            name_ar: document.getElementById('area-name-ar').value,
+            shipping_cost: parseFloat(document.getElementById('area-shipping-cost').value) || 0,
+            governorate_id: currentGovId,
+            is_active: document.getElementById('area-is-active').checked
+        };
+
+        try {
+            if (id) {
+                await window.api.put(`/api/locations/areas/${id}`, data);
+                window.app.showToast('Area updated successfully');
+            } else {
+                await window.api.post('/api/locations/areas', data);
+                window.app.showToast('Area created successfully');
+            }
+            document.getElementById('area-modal').classList.remove('show');
+
+            // If we are looking at the governorate we just added to, refresh it
+            if (selectedGovId === currentGovId) {
+                fetchAreas(selectedGovId);
+            }
+            // Always refresh stats
+            fetchGovernorates(false);
+        } catch (error) {
+            window.app.showToast(error.message || 'Failed to save area', 'error');
+        }
+    };
+
+    // Bulk Shipping Update
+    document.getElementById('open-bulk-btn').onclick = () => {
+        populateGovDropdowns();
+        if (selectedGovId) {
+            document.getElementById('bulk-governorate-id').value = selectedGovId;
+        }
+        document.getElementById('bulk-shipping-modal').classList.add('show');
+    };
+
+    document.getElementById('bulk-shipping-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const cost = parseFloat(document.getElementById('bulk-shipping-cost-input').value) || 0;
+        const govId = parseInt(document.getElementById('bulk-governorate-id').value);
+
+        try {
+            await window.api.patch(`/api/locations/governorates/${govId}/areas/shipping-cost`, { shipping_cost: cost });
+            window.app.showToast('Bulk update successful');
+            document.getElementById('bulk-shipping-modal').classList.remove('show');
+
+            if (selectedGovId === govId) {
+                fetchAreas(govId);
+            }
+            fetchGovernorates(false);
+        } catch (error) {
+            window.app.showToast(error.message || 'Bulk update failed', 'error');
+        }
+    };
+
+    // Gov Search
+    document.getElementById('gov-search').oninput = (e) => {
+        const term = e.target.value.toLowerCase();
+        const filtered = allGovernorates.filter(g =>
+            (g.nameEn && g.nameEn.toLowerCase().includes(term)) ||
+            (g.nameAr && g.nameAr.toLowerCase().includes(term))
+        );
+        renderGovernorates(filtered);
+    };
+};
+
+function populateGovDropdowns() {
+    const areaSelect = document.getElementById('area-governorate-id');
+    const bulkSelect = document.getElementById('bulk-governorate-id');
+
+    let html = '';
+    allGovernorates.forEach(g => {
+        html += `<option value="${g.id}">${g.nameEn} - ${g.nameAr}</option>`;
+    });
+
+    areaSelect.innerHTML = html;
+    bulkSelect.innerHTML = html;
+}
+
+async function fetchGovernorates(reRenderList = true) {
+    const container = document.getElementById('governorate-list-container');
+    try {
+        const response = await window.api.get('/api/locations/governorates?include_inactive=true');
+        allGovernorates = response.governorates;
+
+        // Calculate Stats
+        const totalGovs = allGovernorates.length;
+        let totalAreas = 0;
+
+        allGovernorates.forEach(g => {
+            totalAreas += g._count?.areas || 0;
+        });
+
+        document.getElementById('stat-total-govs').textContent = totalGovs;
+        document.getElementById('stat-total-areas').textContent = totalAreas;
+
+        // Fetch areas independently to get active count and average
+        if (totalAreas > 0) {
+            const areasRes = await window.api.get('/api/locations/areas?limit=1000');
+            const allAreas = areasRes.areas || [];
+            const active = allAreas.filter(a => a.isActive).length;
+            const avg = allAreas.reduce((acc, curr) => acc + parseFloat(curr.shippingCost || 0), 0) / (allAreas.length || 1);
+
+            document.getElementById('stat-active-areas').textContent = active;
+            document.getElementById('stat-avg-shipping').textContent = `${Math.round(avg)} EGP`;
+        } else {
+            document.getElementById('stat-active-areas').textContent = 0;
+            document.getElementById('stat-avg-shipping').textContent = `0 EGP`;
+        }
+
+        if (reRenderList) {
+            renderGovernorates(allGovernorates);
+        }
+    } catch (error) {
+        if (reRenderList) {
+            container.innerHTML = `<div class="error-state">${window.i18n.t('common.error')}</div>`;
+        }
+    }
+}
+
+function renderGovernorates(govs) {
+    const container = document.getElementById('governorate-list-container');
+    if (govs.length === 0) {
+        container.innerHTML = `<div class="empty-state">${window.i18n.t('locations.noGovs')}</div>`;
+        return;
+    }
+
+    let html = `<ul class="gov-item-list">`;
+
+    govs.forEach(gov => {
+        html += `
+            <li class="gov-item ${selectedGovId === gov.id ? 'active' : ''}" data-id="${gov.id}">
+                <div class="gov-item-content">
+                    <div class="name-pair">
+                        <strong>${gov.nameEn}</strong>
+                        <span>${gov.nameAr}</span>
+                    </div>
+                    <div class="gov-meta">
+                        <span class="area-count"><i class="fa-solid fa-location-dot"></i> ${gov._count?.areas || 0}</span>
+                        <span class="status-indicator ${gov.isActive ? 'active' : 'inactive'}" title="${gov.isActive ? window.i18n.t('locations.delivering') : window.i18n.t('locations.notDelivering')}"></span>
+                    </div>
+                </div>
+                <div class="gov-item-actions">
+                    <button class="btn-icon-sm edit-gov" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icon-sm delete-gov delete-action" title="Delete"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            </li>
+        `;
+    });
+
+    html += `</ul>`;
+    container.innerHTML = html;
+
+    // Item Click to select
+    container.querySelectorAll('.gov-item').forEach(item => {
+        item.onclick = (e) => {
+            if (e.target.closest('.gov-item-actions')) return;
+            const id = parseInt(item.dataset.id);
+            selectGovernorate(id);
+        };
+    });
+
+    // Edit Gov
+    container.querySelectorAll('.edit-gov').forEach(btn => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.closest('.gov-item').dataset.id);
+            const gov = allGovernorates.find(g => g.id === id);
+            openEditGov(gov);
+        };
+    });
+
+    // Delete Gov
+    container.querySelectorAll('.delete-gov').forEach(btn => {
+        btn.onclick = async (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.closest('.gov-item').dataset.id);
+            if (confirm(window.i18n.t('locations.confirmDeleteGov'))) {
+                try {
+                    await window.api.delete(`/api/locations/governorates/${id}`);
+                    window.app.showToast('Governorate deleted');
+                    fetchGovernorates();
+                    if (selectedGovId === id) {
+                        selectedGovId = null;
+                        document.getElementById('areas-detail-panel').style.display = 'none';
+                        document.getElementById('areas-placeholder').style.display = 'flex';
+                    }
+                } catch (error) {
+                    window.app.showToast(error.message, 'error');
+                }
+            }
+        };
+    });
+}
+
+function selectGovernorate(id) {
+    selectedGovId = id;
+    const gov = allGovernorates.find(g => g.id === id);
+    document.getElementById('selected-governorate-name').textContent = gov.nameEn;
+    document.getElementById('selected-gov-id-badge').textContent = `#${gov.id}`;
+
+    // Update active row
+    document.querySelectorAll('.gov-item').forEach(r => {
+        r.classList.toggle('active', parseInt(r.dataset.id) === id);
+    });
+
+    document.getElementById('areas-placeholder').style.display = 'none';
+    document.getElementById('areas-detail-panel').style.display = 'block';
+
+    fetchAreas(id);
+}
+
+async function fetchAreas(govId) {
+    const container = document.getElementById('areas-table-container');
+    container.innerHTML = '<div class="loading-state"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
+
+    try {
+        const response = await window.api.get(`/api/locations/governorates/${govId}/areas?include_inactive=true`);
+        // We know areas are under response.areas
+        renderAreas(response.areas || []);
+    } catch (error) {
+        container.innerHTML = `<div class="error-state">${window.i18n.t('common.error')}</div>`;
+    }
+}
+
+function renderAreas(areas) {
+    const container = document.getElementById('areas-table-container');
+    if (areas.length === 0) {
+        container.innerHTML = `<div class="empty-state">${window.i18n.t('locations.noAreas')}</div>`;
+        return;
+    }
+
+    let html = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th data-i18n="locations.areaName">${window.i18n.t('locations.areaName')}</th>
+                    <th data-i18n="locations.shippingCost">${window.i18n.t('locations.shippingCost')}</th>
+                    <th data-i18n="locations.deliveryStatus">${window.i18n.t('locations.deliveryStatus')}</th>
+                    <th style="text-align: right;" data-i18n="common.actions">${window.i18n.t('common.actions')}</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    areas.forEach(area => {
+        // If not active, we style the cost to show it's disabled.
+        const costDisplay = area.isActive ? `${area.shippingCost} EGP` : `<span style="text-decoration: line-through; opacity: 0.5;">${area.shippingCost} EGP</span><br><small style="color:var(--danger)">${window.i18n.t('locations.noDelivery')}</small>`;
+
+        html += `
+            <tr data-id="${area.id}">
+                <td>
+                    <div class="name-pair">
+                        <strong>${area.nameEn}</strong>
+                        <span>${area.nameAr}</span>
+                    </div>
+                </td>
+                <td><strong class="cost-value">${costDisplay}</strong></td>
+                <td>
+                    <label class="toggle-container" style="display:inline-flex; width:auto; transform: scale(0.85); transform-origin: left center;">
+                        <input type="checkbox" class="inline-area-active" ${area.isActive ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label" style="margin-left:8px; font-weight:600; color: ${area.isActive ? 'var(--success)' : 'var(--danger)'};">${area.isActive ? window.i18n.t('locations.delivering') : window.i18n.t('locations.notDelivering')}</span>
+                    </label>
+                </td>
+                <td>
+                    <div class="table-actions" style="justify-content: flex-end;">
+                        <button class="btn-icon edit-area" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button class="btn-icon delete-area delete-action" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+
+    // Edit Area
+    container.querySelectorAll('.edit-area').forEach(btn => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            try {
+                const tr = btn.closest('tr');
+                if (!tr) return;
+                const id = parseInt(tr.dataset.id);
+                const area = areas.find(a => a.id === id);
+                if (area) openEditArea(area);
+            } catch (err) {
+                console.error(err);
+                window.app.showToast('Could not open edit area modal', 'error');
+            }
+        };
+    });
+
+    // Inline Area status toggle
+    container.querySelectorAll('.inline-area-active').forEach(checkbox => {
+        checkbox.addEventListener('change', async (e) => {
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            const id = parseInt(tr.dataset.id);
+            const isActive = e.target.checked;
+
+            // Re-fetch the current area data to keep things intact
+            const area = areas.find(a => a.id === id);
+            if (!area) return;
+
+            try {
+                // We send a put request with the changed active status.
+                // Depending on the backend schema, we might need to send complete data or partial.
+                // The backend uses z.object({...optional()}) for updates, so partial is fine.
+                await window.api.put(`/api/locations/areas/${id}`, { is_active: isActive });
+                window.app.showToast(isActive ? 'Delivery enabled for area' : 'Delivery disabled for area');
+
+                // Refresh cleanly after quick toggle
+                fetchAreas(selectedGovId);
+                fetchGovernorates(false);
+            } catch (error) {
+                e.target.checked = !isActive; // Revert switch if failed
+                window.app.showToast(error.message || 'Failed to update delivery status', 'error');
+            }
+        });
+    });
+
+    // Delete Area
+    container.querySelectorAll('.delete-area').forEach(btn => {
+        btn.onclick = async () => {
+            const id = parseInt(btn.closest('tr').dataset.id);
+            if (confirm(window.i18n.t('locations.confirmDeleteArea'))) {
+                try {
+                    await window.api.delete(`/api/locations/areas/${id}`);
+                    window.app.showToast('Area deleted');
+                    fetchAreas(selectedGovId);
+                    fetchGovernorates(false);
+                } catch (error) {
+                    window.app.showToast(error.message, 'error');
+                }
+            }
+        };
+    });
+}
+
+function openEditGov(gov) {
+    document.getElementById('gov-modal-title').textContent = 'Edit Governorate';
+    document.getElementById('gov-id').value = gov.id;
+    document.getElementById('gov-name-en').value = gov.nameEn;
+    document.getElementById('gov-name-ar').value = gov.nameAr;
+    document.getElementById('gov-is-active').checked = gov.isActive;
+    document.getElementById('governorate-modal').classList.add('show');
+}
+
+function openEditArea(area) {
+    populateGovDropdowns();
+    document.getElementById('area-modal-title').textContent = 'Edit Area';
+    document.getElementById('area-id').value = area.id;
+    document.getElementById('area-governorate-id').value = area.governorateId;
+    document.getElementById('area-name-en').value = area.nameEn;
+    document.getElementById('area-name-ar').value = area.nameAr;
+    document.getElementById('area-shipping-cost').value = area.shippingCost;
+    document.getElementById('area-is-active').checked = area.isActive;
+
+    // Manage cost field disabled state based on active toggle
+    document.getElementById('area-shipping-cost').disabled = !area.isActive;
+
+    document.getElementById('area-modal').classList.add('show');
+}
+
+async function setupFlatShippingSettings() {
+    const toggle = document.getElementById('flat-shipping-toggle');
+    const statusLabel = document.getElementById('flat-shipping-status-label');
+    const priceInput = document.getElementById('flat-shipping-price');
+    const saveBtn = document.getElementById('btn-save-flat-shipping');
+    const loader = document.getElementById('flat-shipping-loader');
+
+    // Make inputs react to UI changes immediately to show the Save button
+    const handleValueChange = () => {
+        saveBtn.style.display = 'block';
+    };
+
+    toggle.addEventListener('change', (e) => {
+        const isEnabled = e.target.checked;
+        statusLabel.textContent = isEnabled ? 'Enabled' : 'Disabled';
+        statusLabel.style.color = isEnabled ? 'var(--primary)' : 'var(--text-muted)';
+        priceInput.disabled = !isEnabled;
+        handleValueChange();
+    });
+
+    priceInput.addEventListener('input', handleValueChange);
+
+    // Initial load of settings from API
+    try {
+        loader.style.display = 'block';
+        const res = await window.api.get('/api/admin/settings');
+        // Admin settings API returns { settings: [...] } via ResponseHelper
+        const settingsArr = Array.isArray(res) ? res : (res?.settings || []);
+        if (settingsArr.length > 0) {
+            const flatEnabledSetting = settingsArr.find(s => s.key === 'flatShippingEnabled');
+            const flatPriceSetting = settingsArr.find(s => s.key === 'flatShippingPrice');
+
+            if (flatEnabledSetting && flatEnabledSetting.value === 'true') {
+                toggle.checked = true;
+                statusLabel.textContent = 'Enabled';
+                statusLabel.style.color = 'var(--primary)';
+                priceInput.disabled = false;
+            } else {
+                toggle.checked = false;
+                statusLabel.textContent = 'Disabled';
+                statusLabel.style.color = 'var(--text-muted)';
+                priceInput.disabled = true;
+            }
+
+            if (flatPriceSetting && flatPriceSetting.value) {
+                priceInput.value = flatPriceSetting.value;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load global shipping settings:', error);
+    } finally {
+        loader.style.display = 'none';
+        saveBtn.style.display = 'none'; // reset after load
+    }
+
+    // Save button click
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.style.display = 'none';
+        loader.style.display = 'block';
+        priceInput.disabled = true;
+        toggle.disabled = true;
+
+        try {
+            await window.api.put('/api/admin/settings', {
+                settings: {
+                    flatShippingEnabled: toggle.checked ? 'true' : 'false',
+                    flatShippingPrice: priceInput.value.toString()
+                }
+            });
+            window.app.showToast('Global flat shipping settings saved successfully', 'success');
+        } catch (error) {
+            window.app.showToast('Failed to save flat shipping settings', 'error');
+            console.error(error);
+            saveBtn.style.display = 'block'; // bring back on error
+        } finally {
+            loader.style.display = 'none';
+            toggle.disabled = false;
+            priceInput.disabled = !toggle.checked;
+        }
+    });
+}

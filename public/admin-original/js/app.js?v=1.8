@@ -1,0 +1,228 @@
+/**
+ * Main Application Orchestrator
+ */
+
+class App {
+    constructor() {
+        this.currentView = null;
+        this.init();
+    }
+
+    init() {
+        // Check Auth on load
+        this.checkAuth();
+
+        // Setup global event listeners
+        this.setupEventListeners();
+    }
+
+    checkAuth() {
+        const token = localStorage.getItem('admin_token');
+        if (token) {
+            // Setup user
+            const userStr = localStorage.getItem('admin_user');
+            if (userStr) {
+                const user = JSON.parse(userStr);
+                const displayNameEl = document.getElementById('user-display-name');
+                if (displayNameEl) displayNameEl.textContent = user.name || 'Admin';
+            }
+
+            // Fetch company info for sidebar logo
+            if (window.api) {
+                window.api.get('/api/admin/company-info')
+                    .then(company => {
+                        if (company && company.logo_url) {
+                            const logoEl = document.querySelector('.sidebar-logo');
+                            if (logoEl) logoEl.src = company.logo_url;
+                        }
+                    })
+                    .catch(err => console.error('Failed to load company info for logo', err));
+            }
+
+            this.switchView('dashboard-view');
+            // Load initial view component (e.g. overview)
+            // this.loadComponent('overview');
+        } else {
+            this.switchView('login-view');
+        }
+    }
+
+    switchView(viewId) {
+        // Hide all views
+        document.querySelectorAll('.view').forEach(view => {
+            view.classList.remove('active-view');
+            // Hack to force display none after animation
+            if (view.id !== viewId) {
+                setTimeout(() => {
+                    if (!view.classList.contains('active-view')) view.style.display = 'none';
+                }, 400);
+            }
+        });
+
+        // Show target view
+        const target = document.getElementById(viewId);
+        if (target) {
+            target.style.display = viewId === 'login-view' ? 'flex' : 'flex';
+            setTimeout(() => {
+                target.classList.add('active-view');
+            }, 10);
+            this.currentView = viewId;
+        }
+    }
+
+    showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        let iconClass = 'fa-info-circle';
+        if (type === 'success') iconClass = 'fa-check-circle';
+        if (type === 'error') iconClass = 'fa-exclamation-circle';
+        if (type === 'warning') iconClass = 'fa-exclamation-triangle';
+
+        toast.innerHTML = `<i class="fa-solid ${iconClass}"></i><span>${message}</span>`;
+
+        container.appendChild(toast);
+
+        // Remove after 3.5s
+        setTimeout(() => {
+            toast.style.animation = 'fadeOutRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 300);
+        }, 3500);
+    }
+
+    setupEventListeners() {
+        // Logout handler
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('admin_token');
+                localStorage.removeItem('admin_user');
+                this.switchView('login-view');
+                this.showToast('Logged out successfully');
+            });
+        }
+
+        // Navigation Routing Setup
+        const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                const viewName = item.getAttribute('data-view');
+
+                // Update active state
+                navItems.forEach(n => n.classList.remove('active'));
+                item.classList.add('active');
+
+                // Update page title
+                const pageTitle = document.getElementById('page-title');
+                if (pageTitle) pageTitle.textContent = item.querySelector('span').textContent;
+
+                this.loadComponent(viewName);
+            });
+        });
+
+        // Initialize with Dashboard if authenticated
+        if (localStorage.getItem('admin_token')) {
+            this.loadComponent('overview');
+        }
+
+        // Language Switcher Setup
+        const langToggle = document.getElementById('lang-toggle');
+        if (langToggle) {
+            // Set initial button text based on current language
+            langToggle.textContent = window.i18n.currentLang === 'en' ? 'عربي' : 'English';
+            
+            langToggle.addEventListener('click', async () => {
+                const newLang = window.i18n.currentLang === 'en' ? 'ar' : 'en';
+                await window.i18n.setLanguage(newLang);
+                langToggle.textContent = newLang === 'en' ? 'عربي' : 'English';
+                // Re-translate the current dynamic view as well
+                const container = document.getElementById('content-container');
+                if (container) {
+                    window.i18n.translateDOM(container);
+                }
+            });
+            
+            // Re-translate document when i18n changes
+            window.i18n.subscribe(() => {
+                window.i18n.translateDOM(document.body);
+            });
+        }
+    }
+
+    async loadComponent(viewName) {
+        const container = document.getElementById('content-container');
+        if (!container) return;
+
+        // Show loading state
+        container.innerHTML = '<div class="loading-spinner" style="display:flex; justify-content:center; align-items:center; height:100%; font-size: 2rem; color: var(--primary);"><i class="fa-solid fa-circle-notch fa-spin"></i></div>';
+
+        try {
+            // Here we dynamically execute the init function if the script is loaded
+            // We assume scripts are included in index.html (like js/pages/pages.js)
+            const initFuncMap = {
+                'overview': window.initOverview,
+                'content': window.initContent,
+                'homeSections': window.initHomeSections,
+                'imageGallery': window.initImageGallery,
+                'pages': window.initPages,
+                'categories': window.initCategories,
+                'brands': window.initBrands,
+                'products': window.initProducts,
+                'settings': window.initSettings,
+                'colors': window.initColors,
+                'options': window.initOptions,
+                'labels': window.initLabels,
+                'orders': window.initOrders,
+                'users': window.initUsers,
+                'locations': window.initLocations
+            };
+
+            if (initFuncMap[viewName]) {
+                const htmlContent = await initFuncMap[viewName]();
+                container.innerHTML = htmlContent;
+
+                // Translate dynamic content automatically
+                if (window.i18n) {
+                    if (!window.i18n.initialized && typeof window.i18n.init === 'function') {
+                        await window.i18n.init();
+                    }
+                    window.i18n.translateDOM(container);
+                }
+
+                // Optional: after render hook setup events
+                const setupFn = window[`setup${viewName.charAt(0).toUpperCase() + viewName.slice(1)}Events`];
+                if (setupFn) {
+                    await setupFn();
+                    // Re-translate again after setup events run (because populateSelects etc. may inject new DOM)
+                    if (window.i18n) window.i18n.translateDOM(container);
+                }
+
+            } else {
+                container.innerHTML = `<div class="empty-state">
+                    <i class="fa-solid fa-person-digging" style="font-size:3rem; color:var(--text-muted); margin-bottom:1rem;"></i>
+                    <h2>Under Construction</h2>
+                    <p>The ${viewName} page is currently being built.</p>
+                </div>`;
+            }
+
+        } catch (error) {
+            console.error('Failed to load component:', error);
+            container.innerHTML = `<div class="empty-state">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size:3rem; color:var(--danger); margin-bottom:1rem;"></i>
+                <h2>Error Loading Page</h2>
+                <p>Could not load the component. Check console for details.</p>
+            </div>`;
+        }
+    }
+}
+
+// Initialize application on DOM content loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new App();
+});
