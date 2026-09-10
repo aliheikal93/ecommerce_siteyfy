@@ -20,7 +20,7 @@ Runtime data, uploaded media, integration credentials, and the SQLite database a
 
 ## Project Context
 
-Read [PROJECT_MEMORY.md](PROJECT_MEMORY.md) for architecture, business rules, integration relationships, deployment details, and current provider state. AI coding agents must also follow [AGENTS.md](AGENTS.md).
+Read [PROJECT_MEMORY.md](PROJECT_MEMORY.md) for architecture and business rules, and [HANDOFF.md](HANDOFF.md) for the SSH, memory, Git, verification, deployment, and shift-transfer workflow. AI coding agents must also follow [AGENTS.md](AGENTS.md).
 
 The project has a local CodeGraph index on the VPS. Start code investigations with:
 

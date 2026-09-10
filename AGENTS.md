@@ -2,7 +2,7 @@
 
 ## Start Here
 
-1. Read `PROJECT_MEMORY.md` before changing code or data.
+1. Read `PROJECT_MEMORY.md` and `HANDOFF.md` before changing code or data.
 2. Run `codegraph status` from this directory.
 3. Use `codegraph explore "<question>"` before `rg`, `find`, or broad file reads when locating behavior or tracing relationships.
 4. For a known symbol, use `codegraph node <symbol>` or `codegraph callers <symbol>`.
