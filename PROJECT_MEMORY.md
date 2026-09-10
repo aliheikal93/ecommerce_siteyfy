@@ -184,3 +184,14 @@ The `.codegraph/` directory and this file live with the project, so they survive
 ## Known Risk
 
 CodeGraph currently reports that the major checkout, shipping, payment, and financial reconciliation functions have no covering test files. Treat changes to these paths as high risk and verify them with API-level tests plus Playwright flows on desktop and mobile.
+
+## Responsive storefront repair — 2026-09-10
+
+- Restored missing homepage artwork using the reference site's three desktop and three genuinely separate mobile images; added the reference mobile promotional image. Files live in `public/uploads/redaa/home/reference-*-v1.webp` on the persistent uploads mount.
+- Hero and promotional images retain their natural proportions. Do not reinstate a fixed mobile crop or reuse the first hero as an automatic promotional banner.
+- Banner sections in Home Builder now own `desktop_image_url`, `mobile_image_url`, and `link_url`; both upload fields are labeled by device. Empty mobile artwork falls back to desktop. The repair script `scripts/repair-redaa-banners.cjs` is a targeted, explicit `--apply` maintenance operation; copy it into `/app/` in the container to run. It backs up SQLite and uses a compare-and-swap update on `homeBuilder`.
+- Pre-change database backup: `/root/hst_backups/siteyfy-ui-20260910/before.sqlite`. No catalog/order/provider settings were imported or rewritten.
+- Product normalization now preserves `color_id` and a validated `hex_code`; public variants resolve current color catalog values by ID or Arabic/English name. Cost and stock remain excluded. Product color choices display the color name, actual swatch, and selected state; gallery photos use `contain`.
+- The compact navigation layout also covers tablet widths up to 1100px. Mobile product prices retain their detail-page sizing.
+- Static asset version strings in storefront/admin HTML must be bumped after frontend changes so existing browsers receive updated JS/CSS.
+- Verified responsive homepage artwork on 375, 390, 768, 844 landscape, and 1440px; variant selection and add-to-cart preserve selected color, ID, quantity and price on mobile/desktop. Test cart cleared without placing an order.

@@ -106,7 +106,7 @@ function productImages(product) {
 function uniqueColors(product) {
   const map = new Map();
   activeVariants(product).filter((variant) => variant.color).forEach((variant) => {
-    if (!map.has(variant.color)) map.set(variant.color, { name:variant.color, hex:variant.hex_code || variant.hex || "#777" });
+    if (!map.has(variant.color)) map.set(variant.color, { name:variant.color, hex:variant.hex_code || variant.hex || "transparent" });
   });
   return [...map.values()];
 }
@@ -371,42 +371,59 @@ function renderHome() {
   const categoryOrder=["شراشف صلاة","سجاد صلاة","اطقم سجاد وشراشف","الأكثر مبيعأ"];
   const categoryRows=[...state.categories].sort((a,b)=>categoryOrder.indexOf(a.name_ar)-categoryOrder.indexOf(b.name_ar));
   const eidProducts=state.products.slice(0,8);
-  const promo=slides[0]?.desktop_image_url;
   const fixed = {
     offers:`<section class="section home-offers"><div class="container"><div class="section-head"><h2>أفضل عروض رداء الحشمة</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${homeRail(saleProducts.length?saleProducts:state.products.slice(0,8),"offersRail")}</div></section>`,
     categories:`<section class="section home-categories"><div class="container"><div class="section-head center"><h2>تسوق التصنيفات</h2></div>${homeRail(categoryRows,"categoriesRail",homeCategory)}</div></section>`,
-    banner:promo?`<section class="promo-band"><a href="/products"><img src="${esc(promo)}" alt="حشمة تليق بك" loading="lazy" /></a></section>`:"",
     latest:`<section class="section home-latest"><div class="container"><div class="section-head"><h2>عروض العيد</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${eidShowcase(eidProducts)}</div></section>`
   };
   const used = new Set();
   const builderSections = (state.builder?.sections || []).filter((section) => section.is_active !== false).sort((a,b) => Number(a.order || 0) - Number(b.order || 0));
   const orderedSections = builderSections.map((section,index) => {
+    if (section.type === "banner") return renderPromoBanner(section);
     if (isCollectionSection(section)) return collectionSectionHtml(collectionById(section.collection_id ?? section.collectionId), section, index);
     const source = String(section.source || "").toLowerCase();
     const type = String(section.type || "").toLowerCase();
     let key = "";
     if (type === "categories" || source === "categories") key = "categories";
-    else if (type === "banner") key = "banner";
     else if (source === "sale" || String(section.id).includes("offer")) key = "offers";
     else if (source === "latest" || String(section.id).includes("latest")) key = "latest";
     if (!key || used.has(key)) return "";
     used.add(key);
     return fixed[key];
   }).join("");
-  const remaining = ["offers","categories","banner","latest"].filter((key) => !used.has(key)).map((key) => fixed[key]).join("");
-  shell(`<div class="home-content">${slides.length?`<section class="hero"><div class="hero-stage">${slides.map((slide,index)=>`<article class="hero-slide ${index===0?"active":""}" data-slide="${index}"><a href="${esc(slide.link_url||"/products")}"><picture><source media="(max-width:760px)" srcset="${esc(slide.mobile_image_url||slide.desktop_image_url)}" /><img src="${esc(slide.desktop_image_url||slide.mobile_image_url)}" alt="${esc(slide.title_ar||companyName())}" loading="eager" decoding="async" ${index===0?'fetchpriority="high"':''} /></picture></a></article>`).join("")}<div class="hero-dots">${slides.map((_,index)=>`<button class="hero-dot ${index===0?"active":""}" data-hero-dot="${index}"></button>`).join("")}</div></div></section>`:""}${orderedSections}${remaining}</div>`);
+  const remaining = ["offers","categories","latest"].filter((key) => !used.has(key)).map((key) => fixed[key]).join("");
+  shell(`<div class="home-content">${slides.length?`<section class="hero"><div class="hero-stage">${slides.map((slide,index)=>`<article class="hero-slide ${index===0?"active":""}" data-slide="${index}"><a href="${esc(slide.link_url||"/products")}">${responsiveBanner(slide, index === 0)}${slide.cta_ar?`<span class="hero-cta">${esc(slide.cta_ar)}</span>`:""}</a></article>`).join("")}<div class="hero-dots">${slides.map((_,index)=>`<button class="hero-dot ${index===0?"active":""}" data-hero-dot="${index}" aria-label="عرض البانر ${index+1}" aria-pressed="${index===0}"></button>`).join("")}</div></div></section>`:""}${orderedSections}${remaining}</div>`);
   bindHero(slides.length);
   bindHomeRails();
 }
 
 function companyName(){return state.appearance?.company?.site_name_ar||"رداء الحشمة";}
 
+function responsiveBanner(banner, priority = false) {
+  const desktop = banner.desktop_image_url || banner.mobile_image_url || "";
+  const mobile = banner.mobile_image_url || desktop;
+  return `<picture><source media="(max-width:760px)" srcset="${esc(mobile)}" /><img src="${esc(desktop)}" alt="${esc(banner.title_ar || companyName())}" loading="${priority ? "eager" : "lazy"}" decoding="async" ${priority ? 'fetchpriority="high"' : ""} /></picture>`;
+}
+
+function renderPromoBanner(section) {
+  if (!section.desktop_image_url && !section.mobile_image_url) return "";
+  return `<section class="promo-band"><a href="${esc(section.link_url || "/products")}">${responsiveBanner(section)}</a></section>`;
+}
+
 function bindHero(count) {
   if(count<2)return;
   let current=0;
-  const show=index=>{current=index;document.querySelectorAll("[data-slide]").forEach(el=>el.classList.toggle("active",Number(el.dataset.slide)===current));document.querySelectorAll("[data-hero-dot]").forEach(el=>el.classList.toggle("active",Number(el.dataset.heroDot)===current));};
+  const show=index=>{current=index;document.querySelectorAll("[data-slide]").forEach(el=>{const active=Number(el.dataset.slide)===current;el.classList.toggle("active",active);el.inert=!active;});document.querySelectorAll("[data-hero-dot]").forEach(el=>{const active=Number(el.dataset.heroDot)===current;el.classList.toggle("active",active);el.setAttribute("aria-pressed",String(active));});};
+  show(0);
   document.querySelectorAll("[data-hero-dot]").forEach(button=>button.onclick=()=>show(Number(button.dataset.heroDot)));
-  setInterval(()=>show((current+1)%count),5500);
+  const hero=document.querySelector(".hero");
+  let paused=false;
+  hero.addEventListener("pointerenter",()=>paused=true);
+  hero.addEventListener("pointerleave",()=>paused=false);
+  const timer=setInterval(()=>{
+    if(!hero.isConnected){clearInterval(timer);return;}
+    if(!paused&&!document.hidden&&!hero.contains(document.activeElement)&&!matchMedia("(prefers-reduced-motion: reduce)").matches)show((current+1)%count);
+  },5500);
 }
 
 function filteredProducts() {
@@ -582,19 +599,19 @@ function renderProduct(product) {
   let quantity=1;
   const images=productImages(product);
   const initialImage=selectedVariant?.image_url || images[0] || product.main_photo_url;
-  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${images.map((src)=>`<button class="gallery-thumb ${src===initialImage?"active":""}" data-gallery-src="${esc(src)}"><img src="${esc(src)}" alt="" /></button>`).join("")}</div><div class="gallery-main"><img id="mainProductImage" src="${esc(initialImage)}" alt="${esc(product.name_ar)}" /><button class="zoom-hint" id="zoomProduct" aria-label="تكبير">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1><div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="short-description">${esc(product.short_description_ar||product.description_ar||"")}</p><div id="variantControls"></div><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus">+</button><strong id="qtyValue">1</strong><button id="qtyMinus">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-sales-proof" id="productSalesProof" hidden></div><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div><section class="detail-description"><h2>وصف المنتج</h2><p>${esc(product.description_ar||product.short_description_ar||"")}</p></section><section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
+  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${images.map((src)=>`<button class="gallery-thumb ${src===initialImage?"active":""}" data-gallery-src="${esc(src)}"><img src="${esc(src)}" alt="" /></button>`).join("")}</div><div class="gallery-main"><img id="mainProductImage" src="${esc(initialImage)}" alt="${esc(product.name_ar)}" /><button class="zoom-hint" id="zoomProduct" aria-label="تكبير">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1><div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="short-description">${esc(product.short_description_ar||product.description_ar||"")}</p><div id="variantControls"></div><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-sales-proof" id="productSalesProof" hidden></div><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div><section class="detail-description"><h2>وصف المنتج</h2><p>${esc(product.description_ar||product.short_description_ar||"")}</p></section><section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
   const currentVariant=()=>selectedVariant || variants.find(variant=>(!selectedColor||variant.color===selectedColor)&&(!selectedValue||variant.value===selectedValue)) || variants.find(variant=>!selectedColor||variant.color===selectedColor) || variants[0] || null;
   const update=()=>{
     const colorRows=uniqueColors(product);
     const values=[...new Set(variants.filter(variant=>!selectedColor||variant.color===selectedColor).map(variant=>variant.value).filter(Boolean))];
     if(values.length&&!values.includes(selectedValue))selectedValue=values[0];
     const variant=currentVariant();
-    document.getElementById("variantControls").innerHTML=`${colorRows.length?`<div class="variant-group"><div class="variant-group-title"><span>اللون</span><small>${esc(selectedColor)}</small></div><div class="variant-options">${colorRows.map(color=>`<button class="color-option ${color.name===selectedColor?"selected":""}" style="--color:${esc(color.hex)}" title="${esc(color.name)}" data-select-color="${esc(color.name)}"></button>`).join("")}</div></div>`:""}${values.length?`<div class="variant-group"><div class="variant-group-title"><span>${esc(variant?.option||"الاختيار")}</span><small>${esc(selectedValue)}</small></div><div class="variant-options">${values.map(value=>`<button class="text-option ${value===selectedValue?"selected":""}" data-select-value="${esc(value)}">${esc(value)}</button>`).join("")}</div></div>`:""}`;
+    document.getElementById("variantControls").innerHTML=`${colorRows.length?`<div class="variant-group"><div class="variant-group-title"><span>اللون</span><small>${esc(selectedColor)}</small></div><div class="variant-options">${colorRows.map(color=>`<button class="color-option ${color.name===selectedColor?"selected":""}" style="--color:${esc(color.hex)}" title="${esc(color.name)}" aria-label="${esc(color.name)}" aria-pressed="${color.name===selectedColor}" data-select-color="${esc(color.name)}"><span class="color-chip" aria-hidden="true"></span><span>${esc(color.name)}</span></button>`).join("")}</div></div>`:""}${values.length?`<div class="variant-group"><div class="variant-group-title"><span>${esc(variant?.option||"الاختيار")}</span><small>${esc(selectedValue)}</small></div><div class="variant-options">${values.map(value=>`<button class="text-option ${value===selectedValue?"selected":""}" aria-pressed="${value===selectedValue}" data-select-value="${esc(value)}">${esc(value)}</button>`).join("")}</div></div>`:""}`;
     const price=variantPrice(product,variant);const compare=variant?.compare_at_price!==null&&variant?.compare_at_price!==undefined?Number(variant.compare_at_price):comparePrice(product);document.getElementById("detailPrice").innerHTML=`${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong>`;
     if(variant?.image_url){document.getElementById("mainProductImage").src=variant.image_url;document.querySelectorAll(".gallery-thumb").forEach(btn=>btn.classList.toggle("active",btn.dataset.gallerySrc===variant.image_url));}
     updateVariantUrl(variant);
-    document.querySelectorAll("[data-select-color]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedColor=button.dataset.selectColor;update();});
-    document.querySelectorAll("[data-select-value]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedValue=button.dataset.selectValue;update();});
+    document.querySelectorAll("[data-select-color]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedColor=button.dataset.selectColor;update();[...document.querySelectorAll("[data-select-color]")].find(el=>el.dataset.selectColor===selectedColor)?.focus({preventScroll:true});});
+    document.querySelectorAll("[data-select-value]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedValue=button.dataset.selectValue;update();[...document.querySelectorAll("[data-select-value]")].find(el=>el.dataset.selectValue===selectedValue)?.focus({preventScroll:true});});
   };
   update();
   document.querySelectorAll("[data-gallery-src]").forEach(button=>button.onclick=()=>{document.getElementById("mainProductImage").src=button.dataset.gallerySrc;document.querySelectorAll(".gallery-thumb").forEach(item=>item.classList.toggle("active",item===button));});

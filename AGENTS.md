@@ -22,7 +22,7 @@ The `.codegraph/` index is part of the VPS workspace and is the primary structur
 - Persistent database in the container: `/app/data/slyrah.sqlite`
 - Uploaded media is mounted from `public/uploads/`
 
-This directory is not currently a Git repository. Never treat generated reference bundles in `mirror-*` or `public/_next` as the source of the active storefront.
+This directory is a Git repository on `main`, tracking `origin/main`. Never treat generated reference bundles in `mirror-*` or `public/_next` as the source of the active storefront.
 
 ## Change Discipline
 

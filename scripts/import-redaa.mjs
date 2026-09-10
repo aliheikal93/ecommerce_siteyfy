@@ -25,6 +25,12 @@ const identitySources = {
   paymentMethods: "https://cdn29114-fc.redaa-alhishma.com/genimage/29114-shahos/2026/03/24124221/payment-2.png"
 };
 
+const mobileHeroSources = [
+  "https://cdn29114-fc.redaa-alhishma.com/genimage/29114-shahos/2026/05/25132759/ChatGPT-Image-May-25-2026-02_57_41-PM.webp",
+  "https://cdn29114-fc.redaa-alhishma.com/genimage/29114-shahos/2026/07/01161719/ChatGPT-Image-Jul-1-2026-07_03_32-PM.png",
+  "https://cdn29114-fc.redaa-alhishma.com/genimage/29114-shahos/2026/07/01161736/ChatGPT-Image-Jul-1-2026-06_31_58-PM.png"
+];
+
 const colorHex = new Map(Object.entries({
   "أبيض":"#FFFFFF", "أحمر":"#F50000", "أخضر":"#488E2C", "أزرق":"#1E73BE", "أسود":"#000000",
   "أصفر":"#EEEE22", "ازرق سماوي":"#76C8DE", "بنفسجي":"#8224E3", "بني":"#87291B", "بيج":"#AF853C",
@@ -161,6 +167,7 @@ async function main() {
   const businessCenterLogoUrl = queueImage(identitySources.businessCenter, "brand", "saudi-business-center", "png");
   const paymentMethodsImageUrl = queueImage(identitySources.paymentMethods, "brand", "payment-methods", "png");
   const heroUrls = heroSources.map((url, index) => queueImage(url, "home", `hero-${index + 1}`));
+  const mobileHeroUrls = mobileHeroSources.map((url, index) => queueImage(url, "home", `hero-mobile-${index + 1}`));
   categories.forEach((category) => queueImage(category.image?.src, "categories", category.name));
   products.forEach((product) => product.images.forEach((image, index) => queueImage(image.src, `products/${product.id}`, `gallery-${index + 1}`)));
   variantDetails.filter(Boolean).forEach((variant) => variant.images?.forEach((image, index) => queueImage(image.src, "variants", `${variant.id}-${index + 1}`)));
@@ -336,7 +343,7 @@ async function main() {
     footer:{ show_description:true, show_business_info:true, show_contact:true, show_social:true, show_policies:true, copyright_ar:"جميع الحقوق محفوظة © رداء الحشمة", copyright_en:"All rights reserved © Redaa Alhishma" }
   }});
   await targetApi("/api/admin/home-builder", { token, method:"PUT", body:{
-    slides:heroUrls.map((url, index) => ({ id:`redaa-hero-${index + 1}`, title_ar:"", title_en:"", subtitle_ar:"", subtitle_en:"", cta_ar:"", cta_en:"", link_url:"/products", desktop_image_url:url, mobile_image_url:url, is_active:true })),
+    slides:heroUrls.map((url, index) => ({ id:`redaa-hero-${index + 1}`, title_ar:"", title_en:"", subtitle_ar:"", subtitle_en:"", cta_ar:"", cta_en:"", link_url:"/products", desktop_image_url:url, mobile_image_url:mobileHeroUrls[index], is_active:true })),
     sections:[
       { id:"best-offers", type:"products", title_ar:"أفضل عروض رداء الحشمة", title_en:"Best offers", source:"sale", order:1, is_active:true },
       { id:"shop-categories", type:"categories", title_ar:"تسوق التصنيفات", title_en:"Shop categories", source:"categories", order:2, is_active:true },

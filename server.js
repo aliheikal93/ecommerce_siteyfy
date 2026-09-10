@@ -4206,6 +4206,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
     id: variant.id || stableFallbackId,
     type,
     color,
+    color_id: variant.color_id || null,
+    hex_code: validSwatchHex(variant.hex_code || variant.color_hex || variant.hex),
     option,
     value,
     sku: String(variant.sku || "").trim().toUpperCase(),
@@ -4860,14 +4862,23 @@ function checkoutLineItems(items = []) {
   });
 }
 
-function publicVariant(variant = {}) {
+function validSwatchHex(value) {
+  const hex = String(value || "").trim();
+  return /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex) ? hex : "";
+}
+
+function publicVariant(variant = {}, colors = entityRows("colors")) {
   const { cost, stock, ...rest } = variant;
-  return rest;
+  const name = String(variant.color || "").trim().normalize("NFC").toLowerCase();
+  const match = colors.find(row => (variant.color_id && String(row.id) === String(variant.color_id)) ||
+    [row.name_ar, row.name_en, row.nameAr, row.nameEn, row.slug].some(value => value && String(value).trim().normalize("NFC").toLowerCase() === name));
+  return { ...rest, hex_code: validSwatchHex(match?.color || match?.hex_code || match?.hex) || validSwatchHex(variant.hex_code || variant.color_hex || variant.hex) };
 }
 
 function productForStore(product = {}) {
   const normalized = normalizeProductPayload(product);
-  const activeVariants = normalized.variants.filter((variant) => variant.is_active !== false).map(publicVariant);
+  const colors = entityRows("colors");
+  const activeVariants = normalized.variants.filter((variant) => variant.is_active !== false).map(variant => publicVariant(variant, colors));
   const { cost, stock, ...publicProduct } = normalized;
   return {
     ...publicProduct,
