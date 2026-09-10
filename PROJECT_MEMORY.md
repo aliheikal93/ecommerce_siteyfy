@@ -195,3 +195,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - The compact navigation layout also covers tablet widths up to 1100px. Mobile product prices retain their detail-page sizing.
 - Static asset version strings in storefront/admin HTML must be bumped after frontend changes so existing browsers receive updated JS/CSS.
 - Verified responsive homepage artwork on 375, 390, 768, 844 landscape, and 1440px; variant selection and add-to-cart preserve selected color, ID, quantity and price on mobile/desktop. Test cart cleared without placing an order.
+
+## Footer repair — 2026-09-10
+
+- The shared storefront footer now uses four desktop columns, two tablet columns, and a stacked mobile layout with compact business registration details and a separate white-backed payment image. Phone display is explicitly LTR; social icons are inline SVGs independent of the limited Lucide bundle.
+- All five footer visibility settings are honored, including description/social/business groups. Empty contact fields and business identifiers are omitted; links opened in new tabs use `noopener noreferrer`.
+- Footer policy URLs are configurable in the existing Storefront Layout editor: `store_policy_url`, `shipping_policy_url`, `privacy_policy_url`. Only configured valid HTTP(S) or local destinations render; removed misleading policy links to `/products`. No policy text or local policy pages were invented.
+- Changed only `brandIdentity.footer_color` from the old brown preset to the saved `primary_dark_color`, matching the purple reference identity while keeping the footer color editable in admin. Database backup before this change: `/root/hst_backups/siteyfy-ui-20260910/before-footer.sqlite`.
+- Verified footer at 375/390/768/1440px, image loading, three social SVGs, phone direction, payment contrast, visibility flags, and safe policy destinations. Storefront/admin asset versions bumped.

@@ -250,15 +250,45 @@ function categoryStripHtml() {
   return `<div class="category-strip"><div class="container category-strip-inner">${state.categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
 }
 
+function footerLinkUrl(value = "") {
+  const url=String(value).trim();
+  if (/^#[a-zA-Z][\w-]*$/.test(url) || /^\/(?![\/\\])[^\\]*$/.test(url)) return url;
+  try { const parsed=new URL(url); return ["https:","http:"].includes(parsed.protocol) ? parsed.href : ""; } catch { return ""; }
+}
+
 function footerHtml() {
   const company = state.appearance?.company || {};
   const footer = state.appearance?.layout?.footer || {};
-  const whatsapp = String(company.whatsapp || company.phone || "").replace(/\D/g, "");
+  const english=document.documentElement.lang==="en";
+  const label=(ar,en)=>english?en:ar;
+  const name=(english?company.site_name_en:company.site_name_ar)||company.site_name_ar||company.site_name_en||"";
+  const description=(english?company.description_en:company.description_ar)||company.description_ar||company.description_en||"";
+  const address=(english?company.address_en:company.address_ar)||company.address_ar||company.address_en||"";
+  const phone=String(company.phone||"").trim();
+  const phoneHref=phone.replace(/[^+\d]/g,"");
+  const whatsapp=String(company.whatsapp||company.phone||"").replace(/\D/g,"");
+  const email=String(company.email||"").trim();
+  const policies=[
+    [footer.store_policy_url,label("سياسة المتجر","Store policy")],
+    [footer.shipping_policy_url,label("الشحن والتوصيل","Shipping & delivery")],
+    [footer.privacy_policy_url,label("سياسة الخصوصية","Privacy policy")]
+  ].map(([url,title])=>({url:footerLinkUrl(url),title})).filter(item=>item.url);
+  const social=[
+    [company.facebook_url,"Facebook",'<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M14 22v-9h3l.5-4H14V7c0-1.2.4-2 2-2h2V1.4c-.4-.1-1.6-.2-3-.2-3 0-5 1.8-5 5.2V9H7v4h3v9Z"/></svg>'],
+    [company.instagram_url,"Instagram",'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>'],
+    [company.tiktok_url,"TikTok",'<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M16 2h-3v13.5a3.5 3.5 0 1 1-3-3.46V9a6.5 6.5 0 1 0 6 6.5V8a8.4 8.4 0 0 0 5 1.6V6.5A5.2 5.2 0 0 1 16 2Z"/></svg>']
+  ].map(([url,title,mark])=>({url:footerLinkUrl(url),title,mark})).filter(item=>item.url);
+  const hasBusiness=footer.show_business_info!==false&&(company.business_document||company.commercial_registration);
   return `<footer class="store-footer" id="footer"><div class="container footer-main">
-    <section class="footer-brand" id="about"><img src="${esc(company.logo_light_url || company.logo_url)}" alt="${esc(company.site_name_ar || "")}" /><p>${esc(company.description_ar || "")}</p><div class="socials">${company.facebook_url?`<a class="social-link" href="${esc(company.facebook_url)}" target="_blank" aria-label="Facebook"><strong>f</strong></a>`:""}${company.instagram_url?`<a class="social-link" href="${esc(company.instagram_url)}" target="_blank" aria-label="Instagram">${icon("instagram",15)}</a>`:""}${company.tiktok_url?`<a class="social-link" href="${esc(company.tiktok_url)}" target="_blank" aria-label="TikTok"><strong>T</strong></a>`:""}</div></section>
-    <section class="footer-column footer-business">${company.business_center_logo_url?`<img class="business-logo" src="${esc(company.business_center_logo_url)}" alt="المركز السعودي للأعمال" />`:""}<h3>موثق لدى منصة الأعمال</h3><div>${footer.show_business_info!==false?`<span>رقم التوثيق: ${esc(company.business_document || "")}</span><span>رقم السجل التجاري: ${esc(company.commercial_registration || "")}</span>`:""}</div>${company.payment_methods_image_url?`<img class="payment-methods" src="${esc(company.payment_methods_image_url)}" alt="وسائل الدفع" />`:""}</section>
-    <section class="footer-column"><h3>تواصل معنا</h3><div>${footer.show_contact!==false?`<span class="footer-contact-row">${icon("map-pin",17)}${esc(company.address_ar || "")}</span><a class="footer-contact-row" href="tel:${esc(company.phone)}">${icon("phone",17)}${esc(company.phone || "")}</a>`:""}<h3 style="margin-top:18px">روابط هامة</h3><nav>${footer.show_policies!==false?`<a href="#about">من نحن</a><a href="/products">سياسة المتجر</a><a href="/products">سياسة الشحن والتوصيل</a>`:""}</nav></div></section>
-  </div><div class="footer-bottom">${esc(footer.copyright_ar || "جميع الحقوق محفوظة © رداء الحشمة")}</div></footer>${whatsapp?`<a class="whatsapp-float" href="https://wa.me/${whatsapp}" target="_blank" aria-label="واتساب">${icon("message-circle",25)}</a>`:""}`;
+    <section class="footer-brand" id="about" aria-label="${esc(name)}">
+      <a class="footer-logo-link" href="/" aria-label="${esc(label("الرئيسية","Home"))}">${company.logo_light_url||company.logo_url?`<img src="${esc(company.logo_light_url||company.logo_url)}" alt="${esc(name)}" loading="lazy" />`:`<strong>${esc(name)}</strong>`}</a>
+      ${footer.show_description!==false&&description?`<p>${esc(description)}</p>`:""}
+      ${footer.show_social!==false&&social.length?`<nav class="socials" aria-label="${label("تابعينا","Follow us")}">${social.map(item=>`<a class="social-link" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="${item.title}">${item.mark}</a>`).join("")}</nav>`:""}
+    </section>
+    <section class="footer-column footer-navigation"><h3>${label("روابط تهمك","Explore")}</h3><nav aria-label="${label("روابط الفوتر","Footer navigation")}"><a href="/products">${label("تسوقي المنتجات","Shop all")}</a><a href="/cart">${label("سلة التسوق","Shopping bag")}</a>${footer.show_description!==false&&description?`<a href="#about">${label("من نحن","About us")}</a>`:""}${footer.show_policies!==false?policies.map(item=>`<a href="${esc(item.url)}">${esc(item.title)}</a>`).join(""):""}</nav></section>
+    ${footer.show_contact!==false&&(address||phoneHref||email)?`<section class="footer-column footer-contact"><h3>${label("تواصل معنا","Get in touch")}</h3><div>${address?`<span class="footer-contact-row">${icon("map-pin",18)}<span>${esc(address)}</span></span>`:""}${phoneHref?`<a class="footer-contact-row" href="tel:${esc(phoneHref)}">${icon("phone",18)}<bdi dir="ltr">${esc(phone)}</bdi></a>`:""}${email?`<a class="footer-contact-row" href="mailto:${esc(email)}">${icon("mail",18)}<bdi dir="ltr">${esc(email)}</bdi></a>`:""}${whatsapp?`<a class="footer-contact-row" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer">${icon("message-circle",18)}<span>${label("تواصلي عبر واتساب","Chat on WhatsApp")}</span></a>`:""}</div></section>`:""}
+    ${hasBusiness?`<section class="footer-column footer-business" aria-label="${label("بيانات المنشأة","Business details")}"><div class="footer-business-heading">${company.business_center_logo_url?`<img class="business-logo" src="${esc(company.business_center_logo_url)}" alt="${label("المركز السعودي للأعمال","Saudi Business Center")}" loading="lazy" />`:icon("badge-check",30)}<h3>${label("موثق لدى منصة الأعمال","Business registration")}</h3></div><dl>${company.business_document?`<div><dt>${label("رقم التوثيق","Document number")}</dt><dd><bdi>${esc(company.business_document)}</bdi></dd></div>`:""}${company.commercial_registration?`<div><dt>${label("السجل التجاري","Commercial registration")}</dt><dd><bdi>${esc(company.commercial_registration)}</bdi></dd></div>`:""}</dl></section>`:""}
+  </div><div class="footer-bottom"><div class="container footer-bottom-inner"><p>${esc((english?footer.copyright_en:footer.copyright_ar)||label(`جميع الحقوق محفوظة © ${new Date().getFullYear()} ${name}`,`© ${new Date().getFullYear()} ${name}. All rights reserved.`))}</p>${company.payment_methods_image_url?`<div class="footer-payments"><span>${icon("lock-keyhole",16)}${label("وسائل الدفع","Payment methods")}</span><img class="payment-methods" src="${esc(company.payment_methods_image_url)}" alt="${label("وسائل الدفع","Payment methods")}" loading="lazy" /></div>`:""}</div></div></footer>${whatsapp?`<a class="whatsapp-float" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="${label("واتساب","WhatsApp")}">${icon("message-circle",25)}</a>`:""}`;
 }
 
 function shell(content) {
