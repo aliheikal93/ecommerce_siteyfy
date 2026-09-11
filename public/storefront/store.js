@@ -80,7 +80,8 @@ function money(value) {
   const currency = baseCurrency();
   const digits = Number(currency.decimal_digits || 0);
   const amount = new Intl.NumberFormat(currency.locale || "ar-SA", { minimumFractionDigits:digits, maximumFractionDigits:digits }).format(Number(value || 0));
-  const symbol = currency.code || currency.symbol_en || currency.symbol_ar;
+  if (currency.code === "SAR") return `<span class="sar-price"><bdi>${amount}</bdi><span class="sar-symbol" role="img" aria-label="ريال سعودي"></span></span>`;
+  const symbol = currency.symbol_ar || currency.symbol_en || currency.code;
   return currency.symbol_position === "before" ? `${symbol} ${amount}` : `${amount} ${symbol}`;
 }
 
@@ -563,7 +564,7 @@ function filterHtml(maxCatalog) {
 function bindFilters() {
   document.querySelectorAll("[data-category]").forEach(button=>button.onclick=()=>{state.category=button.dataset.category;state.page=1;const url=state.category?`/products?category=${encodeURIComponent(state.category)}`:"/products";history.replaceState(null,"",url);renderProducts();});
   const range=document.getElementById("maxPrice");
-  range.oninput=()=>document.getElementById("maxPriceCopy").textContent=money(range.value);
+  range.oninput=()=>document.getElementById("maxPriceCopy").innerHTML=money(range.value);
   document.getElementById("applyPrice").onclick=()=>{state.maxPrice=Number(range.value);state.page=1;renderProducts();};
   const sidebar=document.getElementById("filterSidebar");
   document.getElementById("mobileFilter")?.addEventListener("click",()=>{sidebar.classList.add("mobile-open");document.body.classList.add("is-locked");});
@@ -697,7 +698,7 @@ async function renderTamaraProductWidget(root,tamara,amount,context) {
     lang:context.language,
     country:context.country,
     publicKey:tamara.public_key,
-    css:":host { --font-primary: inherit !important; --font-secondary: inherit !important; } .tamara-summary-widget__amount.SAR svg { display:none !important; } .tamara-summary-widget__amount.SAR::after { content:' SAR'; font-family:inherit; }",
+    css:":host { --font-primary: inherit !important; --font-secondary: inherit !important; }",
     style:{fontSize:"14px",badgeRatio:1.2}
   };
   const box=document.createElement("div");
@@ -983,13 +984,13 @@ function renderCheckoutShippingChoices(quotes=[]){
   const fieldset=document.getElementById("checkoutShippingMethods"),box=document.getElementById("checkoutShippingChoices");if(!fieldset||!box)return;
   fieldset.hidden=quotes.length<2;
   box.innerHTML=quotes.map(quote=>`<label class="checkout-shipping-choice"><input type="radio" name="shipping_quote_choice" value="${esc(quote.id)}" ${quote.id===state.checkoutQuote?.id?"checked":""}/><span class="checkout-shipping-indicator"></span><span class="checkout-shipping-logo">${quote.logo_url?`<img src="${esc(quote.logo_url)}" alt="" loading="lazy" />`:icon("truck",20)}</span><span><strong>${esc(quote.carrier_name_ar||quote.carrier_name_en||"التوصيل")}</strong><small>${quote.eta_min_days?`خلال ${quote.eta_min_days}${quote.eta_max_days&&quote.eta_max_days!==quote.eta_min_days?`–${quote.eta_max_days}`:""} أيام`:quote.eta_label?esc(String(quote.eta_label).replace(/to/g," - ").replace(/WorkingDays/i," أيام عمل")):quote.provider==="oto"?"عبر منصة OTO":""}</small></span><b>${Number(quote.customer_amount||0)===0?"مجاني":money(quote.customer_amount)}</b></label>`).join("");
-  box.querySelectorAll('[name="shipping_quote_choice"]').forEach(input=>input.onchange=()=>{state.checkoutQuote=quotes.find(quote=>quote.id===input.value)||state.checkoutQuote;const totals=cartTotals();document.getElementById("checkoutShippingAmount").textContent=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);document.getElementById("checkoutTotalAmount").textContent=money(totals.total);});
+  box.querySelectorAll('[name="shipping_quote_choice"]').forEach(input=>input.onchange=()=>{state.checkoutQuote=quotes.find(quote=>quote.id===input.value)||state.checkoutQuote;const totals=cartTotals();document.getElementById("checkoutShippingAmount").innerHTML=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);document.getElementById("checkoutTotalAmount").innerHTML=money(totals.total);});
 }
 
 async function refreshCheckoutQuote(){
   const form=document.getElementById("checkoutForm");if(!form)return;const required=[...form.querySelectorAll("[required]")];if(required.some(input=>!input.value.trim()))return;
   const values=Object.fromEntries(new FormData(form));const payment_method=values.payment_method||"cod";delete values.payment_method;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
-  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.textContent=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);const total=document.getElementById("checkoutTotalAmount");if(total)total.textContent=money(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
+  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
 }
 
 function changeCartQuantity(index,delta,checkout) {
