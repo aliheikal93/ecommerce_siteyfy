@@ -80,7 +80,7 @@ function money(value) {
   const currency = baseCurrency();
   const digits = Number(currency.decimal_digits || 0);
   const amount = new Intl.NumberFormat(currency.locale || "ar-SA", { minimumFractionDigits:digits, maximumFractionDigits:digits }).format(Number(value || 0));
-  const symbol = currency.symbol_ar || currency.symbol_en || currency.code;
+  const symbol = currency.code || currency.symbol_en || currency.symbol_ar;
   return currency.symbol_position === "before" ? `${symbol} ${amount}` : `${amount} ${symbol}`;
 }
 
@@ -697,7 +697,7 @@ async function renderTamaraProductWidget(root,tamara,amount,context) {
     lang:context.language,
     country:context.country,
     publicKey:tamara.public_key,
-    css:":host { --font-primary: inherit !important; --font-secondary: inherit !important; }",
+    css:":host { --font-primary: inherit !important; --font-secondary: inherit !important; } .tamara-summary-widget__amount.SAR svg { display:none !important; } .tamara-summary-widget__amount.SAR::after { content:' SAR'; font-family:inherit; }",
     style:{fontSize:"14px",badgeRatio:1.2}
   };
   const box=document.createElement("div");
