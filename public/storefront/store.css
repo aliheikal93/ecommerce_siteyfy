@@ -871,10 +871,11 @@ img { max-width: 100%; display: block; }
 .hero-dot::after { content:""; width:8px; height:8px; border-radius:50%; border:1px solid white; box-shadow:0 1px 5px #0006; background:#0003; }
 .hero-dot.active { background:transparent; }
 .hero-dot.active::after { background:white; }
-.color-option { width:auto; height:auto; min-height:46px; display:inline-flex; align-items:center; gap:8px; padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:var(--surface); box-shadow:none; color:var(--text); transition:border-color .2s,background .2s; }
-.color-chip { width:26px; height:26px; flex:0 0 26px; border-radius:50%; background:var(--color); border:1px solid #0002; }
-.color-option.selected { border-color:var(--primary); background:var(--soft); box-shadow:0 0 0 1px var(--primary); }
-.color-option.selected .color-chip::after { content:"✓"; display:grid; place-items:center; width:14px; height:14px; border-radius:50%; background:var(--primary); color:white; font:11px Arial; }
+.color-option { width:auto; height:auto; min-height:48px; display:inline-flex; align-items:center; gap:10px; padding:7px 14px; border:1px solid #ded9e2; border-radius:999px; background:var(--surface); box-shadow:none; color:var(--text); font-weight:600; transition:border-color .18s ease,background-color .18s ease,box-shadow .18s ease,transform .18s ease; }
+.color-chip { width:28px; height:28px; flex:0 0 28px; border-radius:50%; background:var(--color); border:2px solid #fff; box-shadow:0 0 0 1px rgba(33,25,38,.18); transition:transform .18s ease,box-shadow .18s ease; }
+.color-option:hover { border-color:#a995b9; background:#fbf9fc; }
+.color-option.selected { border-color:var(--primary); background:#f8f5fa; box-shadow:0 0 0 2px rgba(95,58,126,.16); color:var(--primary-dark); }
+.color-option.selected .color-chip { transform:scale(1.08); box-shadow:0 0 0 2px #fff,0 0 0 3px var(--primary); }
 .text-option { min-height:44px; }
 .product-summary .detail-price { gap:10px; align-items:baseline; }
 .product-summary .detail-price strong { font-size:26px; }
