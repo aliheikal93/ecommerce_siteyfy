@@ -331,8 +331,8 @@ const defaultBrandIdentity = {
   header_color: "#FCFCFC",
   text_color: "#222222",
   muted_color: "#777777",
-  font_ar: "Jannah LT, Noto Kufi Arabic, sans-serif",
-  font_en: "Inter, sans-serif",
+  font_ar: "'jannah Lt', Jannah, sans-serif",
+  font_en: "'jannah Lt', Jannah, sans-serif",
   heading_weight: 700,
   body_weight: 400,
   card_radius: 20,
@@ -3348,6 +3348,12 @@ function normalizeHexColor(value, fallback) {
 
 function normalizeBrandIdentity(payload = {}) {
   const current = { ...defaultBrandIdentity, ...(getSetting("brandIdentity") || {}), ...payload };
+  if (!current.updated_at && current.font_ar === "Jannah LT, Noto Kufi Arabic, sans-serif") {
+    current.font_ar = defaultBrandIdentity.font_ar;
+  }
+  if (!current.updated_at && current.font_en === "Inter, sans-serif") {
+    current.font_en = defaultBrandIdentity.font_en;
+  }
   return {
     ...current,
     primary_color: normalizeHexColor(current.primary_color, defaultBrandIdentity.primary_color),

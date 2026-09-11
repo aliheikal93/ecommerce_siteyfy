@@ -16,8 +16,8 @@
   --line: #e9e5eb;
   --soft: #f7f5f8;
   --shadow: 0 5px 16px rgba(65, 37, 83, .13);
-  --font-ar: "Baloo Bhaijaan 2", "Noto Sans Arabic", Arial, sans-serif;
-  --font-en: Inter, Arial, sans-serif;
+  --font-ar: "jannah Lt", Jannah, sans-serif;
+  --font-en: "jannah Lt", Jannah, sans-serif;
   --container: 1170px;
 }
 
@@ -31,6 +31,7 @@ body {
   font-size: 14px;
   letter-spacing: 0;
 }
+html[dir="ltr"] body { font-family: var(--font-en); }
 body.is-locked { overflow: hidden; }
 button, input, select, textarea { font: inherit; letter-spacing: 0; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -250,7 +251,9 @@ img { max-width: 100%; display: block; }
 .product-title { display: block; min-height: 48px; color: #2e2931; font-size: 15px; line-height: 1.65; font-weight: 700; }
 .price { display: flex; align-items: center; gap: 8px; color: var(--primary); margin-top: 5px; }
 .price strong { font: 700 15px var(--font-ar); }
-.price del { color: #9c989d; font-size: 12px; }
+.price del { color: #9c989d; font-size: 12px; text-decoration: line-through; text-decoration-thickness: 1px; }
+.price del .sar-price { position: relative; text-decoration: none; }
+.price del .sar-price::after { content: ""; position: absolute; z-index: 1; inset-inline: -.08em; top: 50%; height: 1px; background: currentColor; pointer-events: none; transform: translateY(-50%); }
 .card-add { width: 100%; min-height: 36px; margin-top: 9px; border: 0; border-radius: 999px; background: var(--primary); color: #fff; font-weight: 700; opacity: 0; transform: translateY(4px); transition: opacity .18s, transform .18s; }
 .product-card:hover .card-add { opacity: 1; transform: none; }
 .bundle-badge { position:absolute; z-index:3; top:12px; inset-inline-start:12px; padding:6px 10px; border-radius:999px; background:var(--primary); color:#fff; font-size:10px; font-weight:800; }

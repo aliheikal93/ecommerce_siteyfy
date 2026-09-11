@@ -66,6 +66,8 @@ function applyTheme() {
   const root = document.documentElement.style;
   const vars = { primary:"primary_color", "primary-dark":"primary_dark_color", sale:"sale_color", footer:"footer_color", surface:"surface_color", text:"text_color", muted:"muted_color" };
   Object.entries(vars).forEach(([variable,key]) => brand[key] && root.setProperty(`--${variable}`, brand[key]));
+  if (brand.font_ar) root.setProperty("--font-ar", brand.font_ar);
+  if (brand.font_en) root.setProperty("--font-en", brand.font_en);
   document.title = company.site_name_ar || "رداء الحشمة";
   const description = document.querySelector('meta[name="description"]');
   if (description && company.description_ar) description.content = company.description_ar;
