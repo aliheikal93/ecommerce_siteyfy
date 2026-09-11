@@ -251,7 +251,7 @@ function headerHtml() {
 }
 
 function categoryStripHtml() {
-  return `<div class="category-strip"><div class="container category-strip-inner">${state.categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
+  return `<div class="category-strip"><div class="container category-strip-inner" data-drag-scroll>${state.categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
 }
 
 function footerLinkUrl(value = "") {
@@ -292,7 +292,7 @@ function footerHtml() {
     <section class="footer-column footer-navigation"><h3>${label("روابط تهمك","Explore")}</h3><nav aria-label="${label("روابط الفوتر","Footer navigation")}"><a href="/products">${label("تسوقي المنتجات","Shop all")}</a><a href="/cart">${label("سلة التسوق","Shopping bag")}</a>${footer.show_description!==false&&description?`<a href="#about">${label("من نحن","About us")}</a>`:""}${footer.show_policies!==false?policies.map(item=>`<a href="${esc(item.url)}">${esc(item.title)}</a>`).join(""):""}</nav></section>
     ${footer.show_contact!==false&&(address||phoneHref||email)?`<section class="footer-column footer-contact"><h3>${label("تواصل معنا","Get in touch")}</h3><div>${address?`<span class="footer-contact-row">${icon("map-pin",18)}<span>${esc(address)}</span></span>`:""}${phoneHref?`<a class="footer-contact-row" href="tel:${esc(phoneHref)}">${icon("phone",18)}<bdi dir="ltr">${esc(phone)}</bdi></a>`:""}${email?`<a class="footer-contact-row" href="mailto:${esc(email)}">${icon("mail",18)}<bdi dir="ltr">${esc(email)}</bdi></a>`:""}${whatsapp?`<a class="footer-contact-row" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer">${whatsappIcon(18)}<span>${label("تواصلي عبر واتساب","Chat on WhatsApp")}</span></a>`:""}</div></section>`:""}
     ${hasBusiness?`<section class="footer-column footer-business" aria-label="${label("بيانات المنشأة","Business details")}"><div class="footer-business-heading">${company.business_center_logo_url?`<img class="business-logo" src="${esc(company.business_center_logo_url)}" alt="${label("المركز السعودي للأعمال","Saudi Business Center")}" loading="lazy" />`:icon("badge-check",30)}<h3>${label("موثق لدى منصة الأعمال","Business registration")}</h3></div><dl>${company.business_document?`<div><dt>${label("رقم التوثيق","Document number")}</dt><dd><bdi>${esc(company.business_document)}</bdi></dd></div>`:""}${company.commercial_registration?`<div><dt>${label("السجل التجاري","Commercial registration")}</dt><dd><bdi>${esc(company.commercial_registration)}</bdi></dd></div>`:""}</dl></section>`:""}
-  </div><div class="footer-bottom"><div class="container footer-bottom-inner"><p>${esc((english?footer.copyright_en:footer.copyright_ar)||label(`جميع الحقوق محفوظة © ${new Date().getFullYear()} ${name}`,`© ${new Date().getFullYear()} ${name}. All rights reserved.`))}</p>${company.payment_methods_image_url?`<div class="footer-payments"><span>${icon("lock-keyhole",16)}${label("وسائل الدفع","Payment methods")}</span><img class="payment-methods" src="${esc(company.payment_methods_image_url)}" alt="${label("وسائل الدفع","Payment methods")}" loading="lazy" /></div>`:""}</div></div></footer>${whatsapp?`<a class="whatsapp-float" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="${label("فتح محادثة واتساب","Open WhatsApp chat")}">${whatsappIcon(28)}</a>`:""}`;
+  </div><div class="footer-bottom"><div class="container footer-bottom-inner"><p>${esc((english?footer.copyright_en:footer.copyright_ar)||label(`جميع الحقوق محفوظة © ${new Date().getFullYear()} ${name}`,`© ${new Date().getFullYear()} ${name}. All rights reserved.`))}</p>${company.payment_methods_image_url?`<div class="footer-payments"><span>${icon("lock-keyhole",16)}${label("وسائل الدفع","Payment methods")}</span><img class="payment-methods" src="${esc(company.payment_methods_image_url)}" alt="${label("وسائل الدفع","Payment methods")}" loading="lazy" /></div>`:""}</div></div></footer>${whatsapp?`<a class="whatsapp-float" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="${label("فتح محادثة واتساب","Open WhatsApp chat")}">${whatsappIcon(28)}</a>`:""}<button class="scroll-top" type="button" aria-label="${label("العودة إلى أعلى الصفحة","Back to top")}" title="${label("العودة إلى الأعلى","Back to top")}" tabindex="-1">${icon("arrow-up",22)}</button>`;
 }
 
 function shell(content) {
@@ -342,7 +342,58 @@ function bindGlobal() {
   document.querySelectorAll("[data-menu-open]").forEach(button=>button.onclick=openMenu);
   document.querySelectorAll("[data-search-open]").forEach(button=>button.onclick=openSearch);
   document.querySelectorAll("[data-quick-product]").forEach(button=>button.onclick=()=>{const product=state.products.find(item=>String(item.id)===button.dataset.quickProduct);if(!product)return;if(activeVariants(product).length) location.href=`/product/${product.id}`;else addToCart(product,null,1);});
+  bindDragScroll();
+  bindScrollTop();
   hydrateIcons();
+}
+
+function bindDragScroll() {
+  document.querySelectorAll("[data-drag-scroll]").forEach(rail=>{
+    if(rail.dataset.dragBound==="true")return;
+    rail.dataset.dragBound="true";
+    requestAnimationFrame(()=>rail.classList.toggle("can-drag",rail.scrollWidth>rail.clientWidth+1));
+    let active=false,moved=false,startX=0,startScrollLeft=0,pointerId=null,suppressClickUntil=0;
+    rail.addEventListener("dragstart",event=>event.preventDefault());
+    rail.addEventListener("pointerdown",event=>{
+      if(event.pointerType!=="mouse"||event.button!==0||rail.scrollWidth<=rail.clientWidth+1||event.target.closest("button,input,select,textarea"))return;
+      active=true;moved=false;startX=event.clientX;startScrollLeft=rail.scrollLeft;pointerId=event.pointerId;
+      rail.classList.add("is-drag-ready");
+      rail.setPointerCapture?.(pointerId);
+    });
+    rail.addEventListener("pointermove",event=>{
+      if(!active||event.pointerId!==pointerId)return;
+      const delta=event.clientX-startX;
+      if(!moved&&Math.abs(delta)<6)return;
+      moved=true;rail.classList.add("is-dragging");event.preventDefault();
+      rail.scrollLeft=startScrollLeft+(getComputedStyle(rail).direction==="rtl"?delta:-delta);
+    });
+    const finish=event=>{
+      if(!active||event.pointerId!==pointerId)return;
+      if(moved)suppressClickUntil=Date.now()+220;
+      active=false;pointerId=null;
+      rail.classList.remove("is-drag-ready","is-dragging");
+    };
+    rail.addEventListener("pointerup",finish);
+    rail.addEventListener("pointercancel",finish);
+    rail.addEventListener("lostpointercapture",()=>{active=false;pointerId=null;rail.classList.remove("is-drag-ready","is-dragging");});
+    rail.addEventListener("click",event=>{if(Date.now()<suppressClickUntil){event.preventDefault();event.stopPropagation();}},true);
+  });
+}
+
+let scrollTopHandler=null;
+function bindScrollTop() {
+  const button=document.querySelector(".scroll-top");
+  if(scrollTopHandler)window.removeEventListener("scroll",scrollTopHandler);
+  if(!button)return;
+  scrollTopHandler=()=>{
+    const visible=window.scrollY>420;
+    button.classList.toggle("is-visible",visible);
+    button.tabIndex=visible?0:-1;
+    button.setAttribute("aria-hidden",String(!visible));
+  };
+  window.addEventListener("scroll",scrollTopHandler,{passive:true});
+  button.onclick=()=>window.scrollTo({top:0,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+  scrollTopHandler();
 }
 
 function breadcrumbs(current) {
@@ -350,7 +401,7 @@ function breadcrumbs(current) {
 }
 
 function homeRail(rows, id, renderer = product => productCard(product, true)) {
-  return `<div class="home-rail-shell"><button class="rail-arrow rail-prev" type="button" data-rail-target="${id}" data-rail-direction="1" aria-label="السابق">${icon("chevron-right",24)}</button><div class="home-rail" id="${id}">${rows.map(renderer).join("")}</div><button class="rail-arrow rail-next" type="button" data-rail-target="${id}" data-rail-direction="-1" aria-label="التالي">${icon("chevron-left",24)}</button></div>`;
+  return `<div class="home-rail-shell"><button class="rail-arrow rail-prev" type="button" data-rail-target="${id}" data-rail-direction="1" aria-label="السابق">${icon("chevron-right",24)}</button><div class="home-rail" id="${id}" data-drag-scroll>${rows.map(renderer).join("")}</div><button class="rail-arrow rail-next" type="button" data-rail-target="${id}" data-rail-direction="-1" aria-label="التالي">${icon("chevron-left",24)}</button></div>`;
 }
 
 function homeCategory(category) {
