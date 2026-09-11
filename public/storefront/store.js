@@ -502,6 +502,24 @@ function bindHero(count) {
   show(0);
   document.querySelectorAll("[data-hero-dot]").forEach(button=>button.onclick=()=>show(Number(button.dataset.heroDot)));
   const hero=document.querySelector(".hero");
+  let touchStart=null;
+  hero.addEventListener("touchstart",event=>{
+    if(event.touches.length!==1){touchStart=null;return;}
+    const touch=event.touches[0];
+    touchStart={x:touch.clientX,y:touch.clientY,time:Date.now()};
+  },{passive:true});
+  hero.addEventListener("touchend",event=>{
+    if(!touchStart||event.changedTouches.length!==1){touchStart=null;return;}
+    const touch=event.changedTouches[0];
+    const deltaX=touch.clientX-touchStart.x;
+    const deltaY=touch.clientY-touchStart.y;
+    const elapsed=Date.now()-touchStart.time;
+    touchStart=null;
+    if(elapsed>900||Math.abs(deltaX)<42||Math.abs(deltaX)<=Math.abs(deltaY)*1.15)return;
+    event.preventDefault();
+    show((current+(deltaX<0?1:-1)+count)%count);
+  },{passive:false});
+  hero.addEventListener("touchcancel",()=>{touchStart=null;},{passive:true});
   let paused=false;
   hero.addEventListener("pointerenter",()=>paused=true);
   hero.addEventListener("pointerleave",()=>paused=false);

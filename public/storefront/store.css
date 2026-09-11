@@ -150,7 +150,7 @@ img { max-width: 100%; display: block; }
 .breadcrumbs { padding: 24px 0; color: var(--primary); font-size: 14px; }
 .breadcrumbs span { color: var(--sale); }
 
-.hero { position: relative; overflow: hidden; margin: 26px 8px 0; background: #2f1b47; }
+.hero { position:relative; overflow:hidden; margin:26px 8px 0; background:#2f1b47; touch-action:pan-y pinch-zoom; }
 .hero-stage { position: relative; display: grid; }
 .hero-slide { position: relative; grid-area: 1 / 1; align-self: start; opacity: 0; visibility: hidden; transition: opacity .55s ease; }
 .hero-slide.active { opacity: 1; visibility: visible; }
