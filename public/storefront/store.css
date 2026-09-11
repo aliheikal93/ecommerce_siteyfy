@@ -924,4 +924,4 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
  .footer-payments { flex-direction:column; gap:10px; }
  .payment-methods { max-width:100%; width:264px; height:54px; }
 }
-.product-payment-widgets{display:grid;gap:8px;margin:12px 0 4px}.installment-widget{min-height:34px;border-radius:8px;overflow:hidden}
+.product-payment-widgets{display:grid;gap:8px;margin:12px 0 4px}.product-payment-widgets[hidden]{display:none}.installment-widget{min-height:34px;border-radius:8px;overflow:hidden}.tamara-installment-widget{width:100%;min-height:42px}.tamara-installment-widget tamara-widget{display:block;width:100%}

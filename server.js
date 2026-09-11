@@ -1263,7 +1263,18 @@ function publicPaymentGateways({ storefront = false } = {}) {
       supported_countries: tabby.supported_countries, supported_currencies: tabby.supported_currencies,
       minimum_amount: tabby.minimum_amount, maximum_amount: tabby.maximum_amount, public_key: tabbyPublicKey, sort_order: 25
     });
-    return { active_provider: settings.active_provider, redirect_policy: settings.redirect_policy, methods: methods.sort((a, b) => a.sort_order - b.sort_order) };
+    const widgets = {};
+    if (tamara.is_enabled && tamara.show_product_widget && publicKey) widgets.tamara = {
+      id: "tamara",
+      type: "tamara-summary",
+      environment: tamara.environment,
+      public_key: publicKey,
+      supported_countries: tamara.supported_countries,
+      supported_currencies: tamara.supported_currencies,
+      minimum_amount: tamara.minimum_amount,
+      maximum_amount: tamara.maximum_amount
+    };
+    return { active_provider: settings.active_provider, redirect_policy: settings.redirect_policy, methods: methods.sort((a, b) => a.sort_order - b.sort_order), widgets };
   }
   return {
     ...settings,

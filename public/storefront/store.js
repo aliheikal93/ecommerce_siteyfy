@@ -675,7 +675,60 @@ function bindReviewInteractions(product) {
 }
 
 function loadExternalScript(src,key){if(document.querySelector(`script[data-payment-widget="${key}"]`))return Promise.resolve();return new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.async=true;script.dataset.paymentWidget=key;script.onload=resolve;script.onerror=reject;document.head.appendChild(script);});}
-async function renderInstallmentWidgets(product,price){const root=document.getElementById("productPaymentWidgets");if(!root)return;const methods=state.paymentMethods?.methods||[];const tabby=methods.find(item=>item.id==="tabby"&&item.public_key);const tamara=methods.find(item=>item.id==="tamara"&&item.public_key);root.innerHTML="";const amount=Number(price||0).toFixed(2);if(tabby){const box=document.createElement("div");box.id="tabbyPromoWidget";box.className="installment-widget";root.appendChild(box);try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");window.TabbyPromo?.({selector:"#tabbyPromoWidget",currency:"SAR",price:amount,lang:"ar",publicKey:tabby.public_key,merchantCode:tabby.merchant_code||"SA"});}catch{}}if(tamara){const box=document.createElement("div");box.id="tamaraWidget";box.className="installment-widget";root.appendChild(box);try{await loadExternalScript("https://cdn.tamara.co/widget-v2/tamara-widget.js","tamara");window.tamaraWidgetConfig={lang:"ar",country:"SA",currency:"SAR",publicKey:tamara.public_key,amount};window.TamaraWidget?.render?.(box);}catch{}}if(!root.children.length)root.remove();}
+
+function paymentWidgetContext() {
+  return {
+    language:document.documentElement.lang==="en"?"en":"ar",
+    country:String(state.market?.settings?.default_country_code||state.market?.countries?.find(item=>item.is_active)?.code||"SA").toUpperCase(),
+    currency:String(state.currencies?.base_currency||state.market?.currency?.base_currency||"SAR").toUpperCase()
+  };
+}
+
+function paymentAmountAllowed(config,amount,context) {
+  if(!config||!config.public_key||!Number.isFinite(amount)||amount<=0)return false;
+  if(config.supported_countries?.length&&!config.supported_countries.includes(context.country))return false;
+  if(config.supported_currencies?.length&&!config.supported_currencies.includes(context.currency))return false;
+  if(amount<Number(config.minimum_amount||0))return false;
+  return config.maximum_amount===null||config.maximum_amount===undefined||config.maximum_amount===""||amount<=Number(config.maximum_amount);
+}
+
+async function renderTamaraProductWidget(root,tamara,amount,context) {
+  window.tamaraWidgetConfig={
+    lang:context.language,
+    country:context.country,
+    publicKey:tamara.public_key,
+    css:":host { --font-primary: inherit !important; --font-secondary: inherit !important; }",
+    style:{fontSize:"14px",badgeRatio:1.2}
+  };
+  const box=document.createElement("div");
+  box.className="installment-widget tamara-installment-widget";
+  const widget=document.createElement("tamara-widget");
+  widget.id="tamaraProductWidget";
+  widget.setAttribute("type","tamara-summary");
+  widget.setAttribute("amount",amount.toFixed(2));
+  widget.setAttribute("currency",context.currency);
+  widget.setAttribute("inline-type","2");
+  widget.setAttribute("config",JSON.stringify({badgePosition:context.language==="ar"?"right":"left",showExtraContent:""}));
+  box.appendChild(widget);
+  root.appendChild(box);
+  try{await loadExternalScript("https://cdn.tamara.co/widget-v2/tamara-widget.js","tamara");}catch{box.remove();}
+}
+
+async function renderInstallmentWidgets(product,price){
+  const root=document.getElementById("productPaymentWidgets");if(!root)return;
+  const methods=state.paymentMethods?.methods||[];
+  const widgets=state.paymentMethods?.widgets;
+  const tabby=methods.find(item=>item.id==="tabby"&&item.public_key);
+  const tamara=widgets?widgets.tamara:methods.find(item=>item.id==="tamara"&&item.public_key);
+  const amount=Number(price||0),context=paymentWidgetContext();
+  root.innerHTML="";root.hidden=false;
+  if(tabby&&paymentAmountAllowed(tabby,amount,context)){
+    const box=document.createElement("div");box.id="tabbyPromoWidget";box.className="installment-widget";root.appendChild(box);
+    try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");window.TabbyPromo?.({selector:"#tabbyPromoWidget",currency:context.currency,price:amount.toFixed(2),lang:context.language,publicKey:tabby.public_key,merchantCode:tabby.merchant_code||context.country});}catch{box.remove();}
+  }
+  if(paymentAmountAllowed(tamara,amount,context))await renderTamaraProductWidget(root,tamara,amount,context);
+  root.hidden=!root.children.length;
+}
 async function loadProductReviews(product) {
   const root=document.getElementById("productReviewsRoot");if(!root)return;
   try{
