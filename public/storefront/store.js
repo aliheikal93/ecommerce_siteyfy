@@ -739,6 +739,20 @@ async function renderCheckoutPaymentWidgets(amount){
   if(tamaraRoot){tamaraRoot.innerHTML="";if(paymentAmountAllowed(tamara,total,context))await renderTamaraProductWidget(tamaraRoot,tamara,total,context);}
   const tabby=methods.find(item=>item.id==="tabby"&&item.public_key),tabbyRoot=document.getElementById("checkout-tabby-widget");
   if(tabbyRoot){tabbyRoot.innerHTML="";if(paymentAmountAllowed(tabby,total,context)){try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");window.TabbyPromo?.({selector:"#checkout-tabby-widget",currency:context.currency,price:total.toFixed(2),lang:context.language,publicKey:tabby.public_key,merchantCode:tabby.merchant_code||context.country});}catch{tabbyRoot.innerHTML="";}}}
+  observeCheckoutPaymentWidgetHeights();
+}
+
+let checkoutPaymentHeightObserver;
+function syncCheckoutPaymentWidgetHeights(){
+  const group=document.querySelector(".checkout-payment-methods");if(!group)return;
+  const heights=[...group.querySelectorAll("#checkout-tamara-widget,#checkout-tabby-widget")].map(root=>Math.max(root.scrollHeight,root.getBoundingClientRect().height));
+  group.style.setProperty("--checkout-payment-height",`${Math.ceil(Math.max(96,...heights))}px`);
+}
+function observeCheckoutPaymentWidgetHeights(){
+  checkoutPaymentHeightObserver?.disconnect();
+  const roots=[...document.querySelectorAll("#checkout-tamara-widget,#checkout-tabby-widget")];
+  if("ResizeObserver" in window){checkoutPaymentHeightObserver=new ResizeObserver(syncCheckoutPaymentWidgetHeights);roots.forEach(root=>checkoutPaymentHeightObserver.observe(root));}
+  [0,250,900].forEach(delay=>setTimeout(syncCheckoutPaymentWidgetHeights,delay));
 }
 async function loadProductReviews(product) {
   const root=document.getElementById("productReviewsRoot");if(!root)return;
@@ -952,16 +966,16 @@ function checkoutFormMarkup(countries, defaultCountry) {
   const defaults=checkoutCustomerDefaults(defaultCountry);
   const methods=state.paymentMethods?.methods||[];
   const cardBrands=[
-    ["mada.png","مدى"],
-    ["visa.svg","Visa"],
-    ["mastercard.svg","Mastercard"],
-    ["amex.svg","American Express"]
-  ].map(([file,name])=>`<span><img src="/storefront/assets/payments/${file}" alt="${name}" /></span>`).join("");
+    ["mada.webp","مدى","mada"],
+    ["visa.svg","Visa","visa"],
+    ["mastercard.svg","Mastercard","mastercard"],
+    ["apple-pay.svg","Apple Pay","apple-pay"]
+  ].map(([file,name,className])=>`<img class="is-${className}" src="/storefront/assets/payments/${file}" alt="${name}" />`).join("");
   const paymentChoices=methods.map((method,index)=>{
     let content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong><small>${esc(method.description_ar||"")}</small></span>`;
-    if(method.id==="cod")content=`<span class="checkout-cod-icon" aria-hidden="true">${icon("truck",25)}</span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||"الدفع عند الاستلام")}</strong><small>ادفعي عند استلام طلبك</small></span>`;
+    if(method.id==="cod")content=`<img class="checkout-cod-image" src="/storefront/assets/payments/cash-on-delivery.png" alt="" /><span class="checkout-payment-copy"><strong>${esc(method.title_ar||"الدفع عند الاستلام")}</strong><small>ادفعي عند استلام طلبك</small></span>`;
     if(method.id==="tamara"||method.id==="tabby")content=`<span class="checkout-installment-widget" id="checkout-${method.id}-widget"></span>`;
-    if(method.id==="edfapay")content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||"ادفع باي")}</strong><small>ادفعي عن طريق البطاقة البنكية أو الائتمانية</small></span><span class="checkout-card-brands" aria-label="مدى وفيزا وماستركارد وأمريكان إكسبريس">${cardBrands}</span>`;
+    if(method.id==="edfapay")content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||"ادفع باي")}</strong><small>ادفعي عن طريق البطاقة البنكية أو الائتمانية</small></span><span class="checkout-card-brands" aria-label="مدى وفيزا وماستركارد وApple Pay">${cardBrands}</span>`;
     return `<label class="checkout-payment-choice is-${esc(method.id)}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-frame">${content}</span></label>`;
   }).join("");
   return `<form class="checkout-form" id="checkoutForm">
