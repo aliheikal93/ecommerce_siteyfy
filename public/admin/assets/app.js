@@ -1964,7 +1964,7 @@
       <input type="hidden" name="variants" value="${escapeHtml(JSON.stringify(variants))}" data-variants-value />
       <div class="variant-builder">
         <div class="variant-list" id="variantList">
-          ${(variants.length ? variants : [{ type: "color_option", color: row.color || "", option: row.options || "", value: "", price_adjustment: 0, stock: "", is_active: true }]).map(variantRow).join("")}
+          ${(variants.length ? variants : [{ type: "color_option", color: row.color || "", option: row.options || "", value: "", price_adjustment: 0, stock: "", is_active: true, is_in_stock: true }]).map(variantRow).join("")}
         </div>
         <div class="toolbar">
           <button class="btn" type="button" data-add-variant-type="color">${t("addColorVariant")}</button>
@@ -1980,10 +1980,12 @@
     const options = state.rows.options || [];
     const type = variant.type || (variant.color && variant.option ? "color_option" : variant.color ? "color" : "option");
     const active = variant.is_active !== false && variant.isActive !== false && variant.active !== false;
+    const inStock = variant.is_in_stock !== false && variant.in_stock !== false && variant.stock_status !== "out_of_stock";
     return `
       <div class="variant-row">
         <input type="hidden" data-variant-field="type" value="${escapeHtml(type)}" />
         <input type="hidden" data-variant-field="is_active" value="${active ? "true" : "false"}" />
+        <input type="hidden" data-variant-field="is_in_stock" value="${inStock ? "true" : "false"}" />
         <input type="hidden" data-variant-field="image_url" value="${escapeHtml(variant.image_url || "")}" />
         <div class="variant-kind">
           <span>${t("variantType")}</span>
@@ -2022,6 +2024,10 @@
         <div class="variant-switch">
           ${switchButton({ field: "variant_is_active", value: active, id: "", label: true })}
         </div>
+        <div class="variant-switch variant-stock-switch">
+          <span>${ui("Available for sale", "متاح للبيع")}</span>
+          ${switchButton({ field: "variant_in_stock", value: inStock, id: "", label: false })}
+        </div>
         <button class="btn icon-btn danger" type="button" data-remove-variant>${i("trash")}</button>
       </div>
     `;
@@ -2035,7 +2041,7 @@
         const item = {};
         row.querySelectorAll("[data-variant-field]").forEach(input => {
           const key = input.dataset.variantField;
-          if (key === "is_active") item[key] = input.value !== "false";
+          if (key === "is_active" || key === "is_in_stock") item[key] = input.value !== "false";
           else if (input.type === "number" && input.value === "") item[key] = "";
           else item[key] = input.type === "number" ? Number(input.value || 0) : input.value;
         });
@@ -2050,6 +2056,14 @@
         btn.onclick = () => {
           updateFormSwitch(btn);
           const hidden = btn.closest(".variant-row")?.querySelector("[data-variant-field='is_active']");
+          if (hidden) hidden.value = btn.dataset.switchValue;
+          sync();
+        };
+      });
+      list.querySelectorAll("[data-form-switch='variant_in_stock']").forEach(btn => {
+        btn.onclick = () => {
+          updateFormSwitch(btn);
+          const hidden = btn.closest(".variant-row")?.querySelector("[data-variant-field='is_in_stock']");
           if (hidden) hidden.value = btn.dataset.switchValue;
           sync();
         };
@@ -2086,7 +2100,7 @@
     };
     document.querySelectorAll("[data-add-variant-type]").forEach(btn => {
       btn.onclick = () => {
-        list.insertAdjacentHTML("beforeend", variantRow({ type: btn.dataset.addVariantType, is_active: true }));
+        list.insertAdjacentHTML("beforeend", variantRow({ type: btn.dataset.addVariantType, is_active: true, is_in_stock: true }));
         rebind();
         sync();
       };

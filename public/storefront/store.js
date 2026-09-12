@@ -105,6 +105,31 @@ function activeVariants(product) {
   return Array.isArray(product.variants) ? product.variants.filter((variant) => variant.is_active !== false && variant.active !== false && variant.status !== "inactive") : [];
 }
 
+function variantInStock(variant) {
+  return variant?.in_stock !== false && variant?.is_in_stock !== false && variant?.stock_status !== "out_of_stock";
+}
+
+function productCardPurchase(product) {
+  const variants=activeVariants(product),available=variants.filter(variantInStock);
+  if(!variants.length)return { mode:"direct",variant:null };
+  if(!available.length)return { mode:"sold_out",variant:null };
+  if(available.length===1)return { mode:"direct",variant:available[0] };
+  return { mode:"select",variant:null };
+}
+
+function productCardActions(product, pinnedVariant = null, productLink = "") {
+  const purchase=pinnedVariant
+    ? { mode:variantInStock(pinnedVariant)?"direct":"sold_out",variant:pinnedVariant }
+    : productCardPurchase(product);
+  const soldOut=purchase.mode==="sold_out",needsSelection=purchase.mode==="select";
+  const variantAttribute=pinnedVariant?` data-card-variant="${esc(pinnedVariant.id)}"`:"";
+  const linkAttribute=productLink?` data-card-link="${esc(productLink)}"`:"";
+  return `<div class="product-card-actions">
+    <button class="card-action card-cart" type="button" data-card-product="${product.id}" data-card-action="add"${variantAttribute}${linkAttribute} ${soldOut?"disabled":""}>${icon("shopping-cart",15)}<span>${soldOut?"نفدت الكمية":needsSelection?"تحديد الخيارات":"أضف للسلة"}</span></button>
+    <button class="card-action card-buy" type="button" data-card-product="${product.id}" data-card-action="buy"${variantAttribute}${linkAttribute} ${soldOut?"disabled":""}>${icon("shopping-bag",15)}<span>${soldOut?"غير متاح":"اشتري الآن"}</span></button>
+  </div>`;
+}
+
 function productImages(product) {
   const values = [product.main_photo_url || product.image_url, ...(product.side_photos || []), ...(product.gallery || []), ...activeVariants(product).map((variant) => variant.image_url)].filter(Boolean);
   return [...new Set(values)];
@@ -137,7 +162,7 @@ function productCard(product, home = false) {
       <div class="product-meta">${esc(productCategoryName(product))}</div>
       <a class="product-title" href="/product/${product.id}">${esc(product.name_ar || product.name_en)}</a>
       <div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>
-      <button class="card-add" type="button" data-quick-product="${product.id}">${home ? "اشتري الآن" : activeVariants(product).length ? "تحديد أحد الخيارات" : "إضافة إلى السلة"}</button>
+      ${productCardActions(product)}
     </div>
   </article>`;
 }
@@ -184,7 +209,7 @@ function collectionItemData(item, collection) {
 function collectionItemCard(item, collection, home = false) {
   const data = collectionItemData(item, collection);
   if (!data) return "";
-  const { product, link, price, compare, image, color, hex, option, value } = data;
+  const { product, variant, link, price, compare, image, color, hex, option, value } = data;
   const labels = [option && value ? `${option}: ${value}` : value].filter(Boolean);
   return `<article class="product-card collection-product-card" data-product-card="${product.id}">
     <div class="product-media">
@@ -196,7 +221,7 @@ function collectionItemCard(item, collection, home = false) {
       <div class="product-meta">${esc(productCategoryName(product))}</div>
       <a class="product-title" href="${esc(link)}">${esc(product.name_ar || product.name_en)}</a>
       <div class="price">${compare ? `<del>${money(compare)}</del>` : ""}<strong>${money(price)}</strong></div>
-      <a class="card-add collection-card-link" href="${esc(link)}">${home ? "تسوقي الاختيار" : "عرض المنتج"}</a>
+      ${productCardActions(product,variant,link)}
     </div>
   </article>`;
 }
@@ -344,7 +369,7 @@ function bindGlobal() {
   bindAnnouncement();
   document.querySelectorAll("[data-menu-open]").forEach(button=>button.onclick=openMenu);
   document.querySelectorAll("[data-search-open]").forEach(button=>button.onclick=openSearch);
-  document.querySelectorAll("[data-quick-product]").forEach(button=>button.onclick=()=>{const product=state.products.find(item=>String(item.id)===button.dataset.quickProduct);if(!product)return;if(activeVariants(product).length) location.href=`/product/${product.id}`;else addToCart(product,null,1);});
+  document.querySelectorAll("[data-card-product]").forEach(button=>button.onclick=()=>{const product=state.products.find(item=>String(item.id)===button.dataset.cardProduct);if(!product)return;const pinnedVariant=button.dataset.cardVariant?activeVariants(product).find(item=>String(item.id)===button.dataset.cardVariant):null;const purchase=pinnedVariant?{mode:variantInStock(pinnedVariant)?"direct":"sold_out",variant:pinnedVariant}:productCardPurchase(product);if(purchase.mode==="sold_out"){toast("نفدت كمية هذا المنتج");return;}if(purchase.mode==="select"){location.href=button.dataset.cardLink||`/product/${product.id}`;return;}addToCart(product,purchase.variant,1,button.dataset.cardAction!=="buy");if(button.dataset.cardAction==="buy")location.href="/cart";});
   bindDragScroll();
   bindScrollTop();
   hydrateIcons();
@@ -413,7 +438,7 @@ function homeCategory(category) {
 
 function featuredProductCard(product) {
   const compare=comparePrice(product);
-  return `<article class="featured-product-card"><a class="featured-product-image" href="/product/${product.id}"><img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div><a class="featured-buy" href="/product/${product.id}">اشتري الآن</a></div></article>`;
+  return `<article class="featured-product-card"><a class="featured-product-image" href="/product/${product.id}"><img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>${productCardActions(product)}</div></article>`;
 }
 
 function eidShowcase(products) {
@@ -776,33 +801,38 @@ async function loadProductReviews(product) {
 function renderProduct(product) {
   const variants=activeVariants(product);
   const requestedVariantId=new URLSearchParams(location.search).get("variant");
-  let selectedVariant=variants.find((variant)=>String(variant.id)===String(requestedVariantId)) || variants[0] || null;
+  let selectedVariant=variants.find((variant)=>String(variant.id)===String(requestedVariantId)) || variants.find(variantInStock) || variants[0] || null;
   let selectedColor=selectedVariant?.color || "";
   let selectedValue=selectedVariant?.value || "";
   let quantity=1;
   const images=productImages(product);
   const initialImage=selectedVariant?.image_url || images[0] || product.main_photo_url;
-  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${images.map((src)=>`<button class="gallery-thumb ${src===initialImage?"active":""}" data-gallery-src="${esc(src)}"><img src="${esc(src)}" alt="" /></button>`).join("")}</div><div class="gallery-main"><img id="mainProductImage" src="${esc(initialImage)}" alt="${esc(product.name_ar)}" /><button class="zoom-hint" id="zoomProduct" aria-label="تكبير">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1><div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><div id="productPaymentWidgets" class="product-payment-widgets"></div><p class="short-description">${esc(product.short_description_ar||product.description_ar||"")}</p><div id="variantControls"></div><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-sales-proof" id="productSalesProof" hidden></div><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div><section class="detail-description"><h2>وصف المنتج</h2><p>${esc(product.description_ar||product.short_description_ar||"")}</p></section><section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
+  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${images.map((src)=>`<button class="gallery-thumb ${src===initialImage?"active":""}" data-gallery-src="${esc(src)}"><img src="${esc(src)}" alt="" /></button>`).join("")}</div><div class="gallery-main"><img id="mainProductImage" src="${esc(initialImage)}" alt="${esc(product.name_ar)}" /><button class="zoom-hint" id="zoomProduct" aria-label="تكبير">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1><div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><div id="productPaymentWidgets" class="product-payment-widgets"></div><p class="short-description">${esc(product.short_description_ar||product.description_ar||"")}</p><div id="variantControls"></div><p class="variant-stock-state" id="variantStockState" role="status" hidden>${icon("circle-alert",17)}نفدت كمية هذا الاختيار</p><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-sales-proof" id="productSalesProof" hidden></div><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div><section class="detail-description"><h2>وصف المنتج</h2><p>${esc(product.description_ar||product.short_description_ar||"")}</p></section><section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
   const currentVariant=()=>selectedVariant || variants.find(variant=>(!selectedColor||variant.color===selectedColor)&&(!selectedValue||variant.value===selectedValue)) || variants.find(variant=>!selectedColor||variant.color===selectedColor) || variants[0] || null;
   const update=()=>{
     const colorRows=uniqueColors(product);
-    const values=[...new Set(variants.filter(variant=>!selectedColor||variant.color===selectedColor).map(variant=>variant.value).filter(Boolean))];
-    if(values.length&&!values.includes(selectedValue))selectedValue=values[0];
+    const valueRows=variants.filter(variant=>!selectedColor||variant.color===selectedColor);
+    const values=[...new Set(valueRows.map(variant=>variant.value).filter(Boolean))];
+    if(values.length&&!values.includes(selectedValue))selectedValue=valueRows.find(variantInStock)?.value||values[0];
+    if(!values.length)selectedValue="";
     const variant=currentVariant();
-    document.getElementById("variantControls").innerHTML=`${colorRows.length?`<div class="variant-group"><div class="variant-group-title"><span>اللون</span><small>${esc(selectedColor)}</small></div><div class="variant-options">${colorRows.map(color=>`<button class="color-option ${color.name===selectedColor?"selected":""}" style="--color:${esc(color.hex)}" title="${esc(color.name)}" aria-label="${esc(color.name)}" aria-pressed="${color.name===selectedColor}" data-select-color="${esc(color.name)}"><span class="color-chip" aria-hidden="true"></span><span>${esc(color.name)}</span></button>`).join("")}</div></div>`:""}${values.length?`<div class="variant-group"><div class="variant-group-title"><span>${esc(variant?.option||"الاختيار")}</span><small>${esc(selectedValue)}</small></div><div class="variant-options">${values.map(value=>`<button class="text-option ${value===selectedValue?"selected":""}" aria-pressed="${value===selectedValue}" data-select-value="${esc(value)}">${esc(value)}</button>`).join("")}</div></div>`:""}`;
+    document.getElementById("variantControls").innerHTML=`${colorRows.length?`<div class="variant-group"><div class="variant-group-title"><span>اللون</span><small>${esc(selectedColor)}</small></div><div class="variant-options">${colorRows.map(color=>{const unavailable=!variants.some(row=>row.color===color.name&&variantInStock(row));return `<button class="color-option ${color.name===selectedColor?"selected":""} ${unavailable?"is-out-of-stock":""}" style="--color:${esc(color.hex)}" title="${esc(color.name)}${unavailable?" - نفدت الكمية":""}" aria-label="${esc(color.name)}${unavailable?" - نفدت الكمية":""}" aria-pressed="${color.name===selectedColor}" data-select-color="${esc(color.name)}"><span class="color-chip" aria-hidden="true"></span><span>${esc(color.name)}</span>${unavailable?`<small>نفد</small>`:""}</button>`;}).join("")}</div></div>`:""}${values.length?`<div class="variant-group"><div class="variant-group-title"><span>${esc(variant?.option||"الاختيار")}</span><small>${esc(selectedValue)}</small></div><div class="variant-options">${values.map(value=>{const unavailable=!valueRows.some(row=>row.value===value&&variantInStock(row));return `<button class="text-option ${value===selectedValue?"selected":""} ${unavailable?"is-out-of-stock":""}" aria-label="${esc(value)}${unavailable?" - نفدت الكمية":""}" aria-pressed="${value===selectedValue}" data-select-value="${esc(value)}"><span>${esc(value)}</span>${unavailable?`<small>نفد</small>`:""}</button>`;}).join("")}</div></div>`:""}`;
     const price=variantPrice(product,variant);const compare=variant?.compare_at_price!==null&&variant?.compare_at_price!==undefined?Number(variant.compare_at_price):comparePrice(product);document.getElementById("detailPrice").innerHTML=`${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong>`;renderInstallmentWidgets(product,price);
+    const unavailable=Boolean(variant&&!variantInStock(variant)),stockState=document.getElementById("variantStockState"),addButton=document.getElementById("addProduct"),buyButton=document.getElementById("buyNow");
+    stockState.hidden=!unavailable;addButton.disabled=unavailable;buyButton.disabled=unavailable;addButton.innerHTML=unavailable?`${icon("circle-x",18)}نفدت الكمية`:`${icon("shopping-cart")}إضافة إلى السلة`;buyButton.textContent=unavailable?"هذا الاختيار غير متاح":"اشتري الآن";
     if(variant?.image_url){document.getElementById("mainProductImage").src=variant.image_url;document.querySelectorAll(".gallery-thumb").forEach(btn=>btn.classList.toggle("active",btn.dataset.gallerySrc===variant.image_url));}
     updateVariantUrl(variant);
     document.querySelectorAll("[data-select-color]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedColor=button.dataset.selectColor;update();[...document.querySelectorAll("[data-select-color]")].find(el=>el.dataset.selectColor===selectedColor)?.focus({preventScroll:true});});
     document.querySelectorAll("[data-select-value]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedValue=button.dataset.selectValue;update();[...document.querySelectorAll("[data-select-value]")].find(el=>el.dataset.selectValue===selectedValue)?.focus({preventScroll:true});});
+    hydrateIcons();
   };
   update();
   document.querySelectorAll("[data-gallery-src]").forEach(button=>button.onclick=()=>{document.getElementById("mainProductImage").src=button.dataset.gallerySrc;document.querySelectorAll(".gallery-thumb").forEach(item=>item.classList.toggle("active",item===button));});
   document.getElementById("zoomProduct").onclick=()=>openOverlay(`<div class="lightbox"><button class="close-button" data-overlay-close>${icon("x")}</button><img src="${esc(document.getElementById("mainProductImage").src)}" alt="" /></div>`);
   document.getElementById("qtyPlus").onclick=()=>{quantity+=1;document.getElementById("qtyValue").textContent=quantity;};
   document.getElementById("qtyMinus").onclick=()=>{quantity=Math.max(1,quantity-1);document.getElementById("qtyValue").textContent=quantity;};
-  document.getElementById("addProduct").onclick=()=>addToCart(product,currentVariant(),quantity);
-  document.getElementById("buyNow").onclick=()=>{addToCart(product,currentVariant(),quantity,false);location.href="/cart";};
+  document.getElementById("addProduct").onclick=()=>{const variant=currentVariant();if(variant&&!variantInStock(variant)){toast("نفدت كمية هذا الاختيار");return;}addToCart(product,variant,quantity);};
+  document.getElementById("buyNow").onclick=()=>{const variant=currentVariant();if(variant&&!variantInStock(variant)){toast("نفدت كمية هذا الاختيار");return;}addToCart(product,variant,quantity,false);location.href="/cart";};
   hydrateIcons();
   loadProductReviews(product);
 }
@@ -850,6 +880,7 @@ function addBundleToCart(bundle, quantity=1, notify=true) {
 }
 
 async function addToCart(product, variant, quantity = 1, notify = true) {
+  if(variant&&!variantInStock(variant)){toast("نفدت كمية هذا الاختيار");return false;}
   const price=variantPrice(product,variant);
   const key=[product.id,variant?.id||"default"].join(":");
   const item={ key, product_id:product.id, variant_id:variant?.id||null, name_ar:product.name_ar, name_en:product.name_en, image_url:variant?.image_url||product.main_photo_url, category_slug:product.category_slug, variant_label:variant?variantLabel(variant):"", colorName:variant?.color||"", optionName:variant?.value||"", price, quantity:Number(quantity||1) };
@@ -858,6 +889,7 @@ async function addToCart(product, variant, quantity = 1, notify = true) {
   saveLocalCart();
   api("/api/cart",{method:"POST",body:JSON.stringify(item)}).catch(()=>{});
   if(notify)toast("تمت إضافة المنتج إلى السلة");
+  return true;
 }
 
 function cartTotals() {

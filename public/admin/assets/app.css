@@ -1271,6 +1271,7 @@ h3 { font-size: 15px; margin-bottom: 8px; }
   display: grid;
   gap: 6px;
 }
+.variant-stock-switch > span { color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase; }
 .variant-kind {
   min-height: 38px;
   align-content: end;

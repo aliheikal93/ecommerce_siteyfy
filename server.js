@@ -650,8 +650,11 @@ function publicCartItem(body = {}) {
     };
   }
   const product = findProduct(body.product_id || body.productId || body.id || body.product?.id);
+  if (!product) fail("Product was not found", 404);
   const variantId = body.variant_id || body.variantId || null;
   const variant = variantId ? (product?.variants || []).find((item) => String(item.id) === String(variantId)) : null;
+  if (variantId && !variant) fail("Product option was not found or is inactive", 404);
+  if (variant && variant.in_stock === false) fail("Product option is out of stock", 409);
   const price = Number(body.price || variant?.price || product?.sale_price || product?.price || 0);
   return {
     key: String(body.key || `${product?.id || body.product_id || body.id || Date.now()}:${variantId || "base"}`),
@@ -4256,6 +4259,7 @@ function normalizedProductVariant(variant = {}, index = 0) {
   const option = String(variant.option || variant.option_name || "").trim();
   const value = String(variant.value || variant.option_value || "").trim();
   const type = variant.type || (color && option ? "color_option" : color ? "color" : "option");
+  const isInStock = variant.is_in_stock !== false && variant.in_stock !== false && variant.stock_status !== "out_of_stock";
   const stableFallbackId = `variant-${crypto.createHash("sha256").update(JSON.stringify([color, option, value, variant.sku || "", variant.barcode || "", index])).digest("hex").slice(0, 12)}`;
   return {
     id: variant.id || stableFallbackId,
@@ -4274,6 +4278,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
     price_adjustment: Number(variant.price_adjustment || variant.price_delta || 0),
     weight: variant.weight === "" || variant.weight === null || variant.weight === undefined ? null : Math.max(0, Number(variant.weight || 0)),
     stock: variant.stock === "" || variant.stock === null || variant.stock === undefined || Number(variant.stock || 0) === 0 ? null : Number(variant.stock || 0),
+    is_in_stock: isInStock,
+    stock_status: isInStock ? "in_stock" : "out_of_stock",
     is_active: variant.is_active !== false && variant.isActive !== false && variant.active !== false,
     sort_order: Number(variant.sort_order || index)
   };
@@ -4911,8 +4917,11 @@ function checkoutLineItems(items = []) {
     if (!product) fail(`Product ${productId || "unknown"} was not found`, 404);
     const variantId = item.variant_id || item.variantId || item.optionId || null;
     const variant = normalizeProductPayload(product).variants.find((entry) => String(entry.id) === String(variantId));
+    if (variantId && (!variant || variant.is_active === false)) fail("Product option was not found or is inactive", 404);
+    if (variant?.is_in_stock === false) fail("Product option is out of stock", 409);
     const unitPrice = effectiveVariantPrice(product, variant);
     const quantity = Math.max(1, Number(item.quantity || 1));
+    if (variant?.stock !== null && variant?.stock !== undefined && quantity > Number(variant.stock)) fail("Requested product option quantity is out of stock", 409);
     const shipping = productShippingSnapshot(product, variant);
     return {
       key: String(item.key || [productId, item.colorId || "", variantId || "", index].join(":")),
@@ -4942,7 +4951,7 @@ function publicVariant(variant = {}, colors = entityRows("colors")) {
   const name = String(variant.color || "").trim().normalize("NFC").toLowerCase();
   const match = colors.find(row => (variant.color_id && String(row.id) === String(variant.color_id)) ||
     [row.name_ar, row.name_en, row.nameAr, row.nameEn, row.slug].some(value => value && String(value).trim().normalize("NFC").toLowerCase() === name));
-  return { ...rest, hex_code: validSwatchHex(match?.color || match?.hex_code || match?.hex) || validSwatchHex(variant.hex_code || variant.color_hex || variant.hex) };
+  return { ...rest, in_stock: variant.is_in_stock !== false, stock_status: variant.is_in_stock === false ? "out_of_stock" : "in_stock", hex_code: validSwatchHex(match?.color || match?.hex_code || match?.hex) || validSwatchHex(variant.hex_code || variant.color_hex || variant.hex) };
 }
 
 function productForStore(product = {}) {
