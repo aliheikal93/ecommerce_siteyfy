@@ -554,10 +554,10 @@ img { max-width: 100%; display: block; }
 .summary-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .summary-row.discount { color: #14845d; }
 .summary-row.shipping strong { color: #14845d;white-space:nowrap; }
-.summary-row.shipping span { display: grid; gap: 3px; }
+.summary-row.shipping > span { display:grid;gap:3px; }
 .summary-row.shipping small { color: var(--muted); font-size: 10px; font-weight: 500; }
-.shipping-price-discount { display: inline-flex !important; align-items: center; gap: 7px !important; }
-.shipping-price-discount del { color: var(--muted); font-size: 12px; font-weight: 500; }
+.shipping-price-discount { display:inline-flex!important;align-items:center;flex-wrap:nowrap;gap:7px!important;white-space:nowrap; }
+.shipping-price-discount del { display:inline-flex;align-items:center;color:var(--muted);font-size:12px;font-weight:500;white-space:nowrap; }
 .shipping-price-discount b { color: #14845d; }
 .summary-total { display: flex; justify-content: space-between; gap: 12px; padding: 20px 0; font-size: 20px; color: var(--primary-dark); }
 .coupon-box { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -606,7 +606,7 @@ img { max-width: 100%; display: block; }
 .checkout-payment-choice.is-tabby .checkout-payment-frame,
 .checkout-payment-choice.is-tabby:hover .checkout-payment-frame,
 .checkout-payment-choice.is-tabby:has(input:checked) .checkout-payment-frame { padding:0;border-color:transparent;box-shadow:none;background:transparent; }
-.checkout-cod-image { width:56px;height:56px;flex:0 0 56px;object-fit:contain;opacity:.9; }
+.checkout-cod-image { width:44px;height:44px;flex:0 0 44px;object-fit:contain;opacity:.88; }
 .checkout-payment-copy { min-width:0;display:grid;gap:4px; }
 .checkout-payment-copy strong { font-size:15px;color:var(--text); }
 .checkout-payment-copy small { font-size:12px;line-height:1.6;color:var(--muted); }
