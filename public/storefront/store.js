@@ -951,8 +951,19 @@ function checkoutFormMarkup(countries, defaultCountry) {
   const splEnabled = state.addressConfig?.enabled === true;
   const defaults=checkoutCustomerDefaults(defaultCountry);
   const methods=state.paymentMethods?.methods||[];
-  const paymentImage=state.appearance?.company?.payment_methods_image_url||"/uploads/redaa/brand/payment-methods.png";
-  const paymentChoices=methods.map((method,index)=>`<label class="checkout-payment-choice ${method.id==="tamara"?"is-tamara":method.id==="edfapay"?"is-edfapay":method.id==="tabby"?"is-tabby":""}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong>${["tamara","tabby"].includes(method.id)?`<span class="checkout-installment-widget" id="checkout-${method.id}-widget"></span>`:`<small>${method.id==="edfapay"?"ادفعي عن طريق البطاقة البنكية أو الائتمانية":esc(method.description_ar||"")}</small>`}</span>${method.id==="tamara"?`<b class="checkout-tamara-mark">tamara</b>`:method.id==="edfapay"?`<img class="checkout-card-brands" src="${esc(paymentImage)}" alt="مدى وفيزا وماستركارد" />`:method.id==="tabby"?`<b class="checkout-tabby-mark">tabby</b>`:""}</label>`).join("");
+  const cardBrands=[
+    ["mada.png","مدى"],
+    ["visa.svg","Visa"],
+    ["mastercard.svg","Mastercard"],
+    ["amex.svg","American Express"]
+  ].map(([file,name])=>`<span><img src="/storefront/assets/payments/${file}" alt="${name}" /></span>`).join("");
+  const paymentChoices=methods.map((method,index)=>{
+    let content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong><small>${esc(method.description_ar||"")}</small></span>`;
+    if(method.id==="cod")content=`<span class="checkout-cod-icon" aria-hidden="true">${icon("truck",25)}</span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||"الدفع عند الاستلام")}</strong><small>ادفعي عند استلام طلبك</small></span>`;
+    if(method.id==="tamara"||method.id==="tabby")content=`<span class="checkout-installment-widget" id="checkout-${method.id}-widget"></span>`;
+    if(method.id==="edfapay")content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||"ادفع باي")}</strong><small>ادفعي عن طريق البطاقة البنكية أو الائتمانية</small></span><span class="checkout-card-brands" aria-label="مدى وفيزا وماستركارد وأمريكان إكسبريس">${cardBrands}</span>`;
+    return `<label class="checkout-payment-choice is-${esc(method.id)}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-frame">${content}</span></label>`;
+  }).join("");
   return `<form class="checkout-form" id="checkoutForm">
     <label><span class="checkout-label-text">الاسم الأول<i>*</i></span><input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
     <label><span class="checkout-label-text">اسم العائلة<i>*</i></span><input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
