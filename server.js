@@ -151,7 +151,7 @@ const defaultShippingIntegrationSettings = {
     refresh_token_encrypted: "",
     quote_mode: "oto_rates",
     max_checkout_options: 4,
-    auto_create_orders: false,
+    auto_create_orders: true,
     auto_create_shipments: false,
     pickup_location_code: "",
     order_prefix: "SFY-",
@@ -6610,11 +6610,16 @@ function adminOrderView(order = {}, context = {}) {
     address_status: customer.address_verification?.status || "manual",
     shipment: shipment ? {
       id: shipment.id,
+      provider: shipment.provider || order.shipping_provider || null,
       waybill_no: shipment.waybill_no || null,
+      external_order_no: shipment.external_order_no || null,
+      oto_id: shipment.oto_id || null,
       status_group: shipment.status_group || shipment.status_code || null,
       status_label: shipment.status_label || shipment.status_code || null,
       sync_state: shipment.sync_state || null,
-      integration_error: shipment.integration_error || null
+      integration_error: shipment.integration_error || null,
+      last_attempted_at: shipment.last_attempted_at || null,
+      created_with_api_at: shipment.created_with_api_at || null
     } : null
   };
 }
@@ -6623,18 +6628,32 @@ function addOrderEvent(orderId, type, data = {}, actor = "admin") {
   return createRecord("order_events", { order_id: Number(orderId), type, actor, data, occurred_at: new Date().toISOString() });
 }
 
-async function dispatchOrderToImile(order) {
+function orderFulfillmentProvider(order, integration = normalizeShippingIntegrations()) {
+  const selected = String(order.shipping_selection?.provider || order.shipping_provider || "").toLowerCase();
+  if (["imile", "oto"].includes(selected) && integration[selected]?.is_enabled) return selected;
+  const preferred = String(integration.default_provider || integration.active_provider || "").toLowerCase();
+  if (["imile", "oto"].includes(preferred) && integration[preferred]?.is_enabled) return preferred;
+  return selected;
+}
+
+async function dispatchOrderToShippingProvider(order, requestedProvider = "") {
   if (order.is_historical || order.suppress_side_effects) fail("HISTORICAL_ORDER_CANNOT_BE_DISPATCHED", 409);
   const integration = normalizeShippingIntegrations();
-  if (integration.active_provider !== "imile" || !integration.imile.is_enabled) fail("IMILE_PROVIDER_NOT_ACTIVE", 409);
+  const provider = String(requestedProvider || orderFulfillmentProvider(order, integration)).toLowerCase();
+  if (!["imile", "oto"].includes(provider)) fail("SHIPPING_PROVIDER_NOT_SELECTED", 409);
+  if (!integration[provider]?.is_enabled) fail(`${provider.toUpperCase()}_PROVIDER_NOT_ACTIVE`, 409);
   if (!order.shipping_package?.requires_shipping) fail("ORDER_DOES_NOT_REQUIRE_SHIPPING", 409);
   let shipment = orderShipment(order);
-  if (shipment?.waybill_no) return shipment;
+  if (shipment && shipment.provider && shipment.provider !== provider && !["creation_failed", "manual_dispatch", "creation_pending"].includes(shipment.sync_state)) {
+    fail("ORDER_ALREADY_ASSIGNED_TO_ANOTHER_PROVIDER", 409);
+  }
+  if (shipment?.waybill_no || ["order_created", "created", "webhook_synced"].includes(shipment?.sync_state) || (provider === "oto" && (shipment?.external_order_no || shipment?.oto_id))) return shipment;
   if (!shipment) {
     const customer = order.shipping_address || order.customer || {};
     shipment = upsertShippingShipment({
       store_order_id: order.id,
-      client_order_no: `SITEYFY-${order.id}`,
+      provider,
+      client_order_no: provider === "oto" ? `${integration.oto.order_prefix || "SFY-"}${order.id}` : `SITEYFY-${order.id}`,
       status_code: "awaiting_api_creation",
       customer_name: customer.full_name,
       customer_phone: customer.phone,
@@ -6655,11 +6674,12 @@ async function dispatchOrderToImile(order) {
     });
   }
   try {
-    const created = await createImileShipment(order, shipment);
-    updateRecord("orders", order.id, { shipping_shipment_id: created.id, shipping_provider: "imile", status: order.status === "pending" ? "ready_to_ship" : order.status });
+    shipment = upsertShippingShipment({ ...shipment, provider, sync_state: "creation_pending", integration_error: null, last_attempted_at: new Date().toISOString() });
+    const created = provider === "oto" ? await createOtoShipment(order, shipment) : await createImileShipment(order, shipment);
+    updateRecord("orders", order.id, { shipping_shipment_id: created.id, shipping_provider: provider, status: order.status === "pending" ? "ready_to_ship" : order.status });
     return created;
   } catch (error) {
-    upsertShippingShipment({ ...shipment, sync_state: "creation_failed", integration_error: String(error.message || "IMILE_CREATE_FAILED"), last_attempted_at: new Date().toISOString() });
+    upsertShippingShipment({ ...shipment, provider, sync_state: "creation_failed", integration_error: String(error.message || `${provider.toUpperCase()}_CREATE_FAILED`), last_attempted_at: new Date().toISOString() });
     throw error;
   }
 }
@@ -6695,7 +6715,7 @@ function releaseOrderPromotionReservations(order, reason = "payment_cancelled") 
 
 async function initializeOrderShipping(order) {
   const integration = normalizeShippingIntegrations();
-  const provider = order.shipping_selection?.provider || order.shipping_provider || integration.default_provider;
+  const provider = orderFulfillmentProvider(order, integration);
   if (!order.shipping_package?.requires_shipping || !["imile", "oto"].includes(provider)) return null;
   const providerSettings = integration[provider];
   if (!providerSettings?.is_enabled) return null;
@@ -6731,9 +6751,11 @@ async function initializeOrderShipping(order) {
   }
   if (autoCreate && !shipment.waybill_no) {
     try {
-      shipment = provider === "oto" ? await createOtoShipment(order, shipment) : await createImileShipment(order, shipment);
+      shipment = await dispatchOrderToShippingProvider(order, provider);
+      addOrderEvent(order.id, "shipment_auto_created", { provider, shipment_id: shipment.id, external_order_no: shipment.external_order_no || null, waybill_no: shipment.waybill_no || null }, "system");
     } catch (error) {
       shipment = upsertShippingShipment({ ...shipment, provider, sync_state: "creation_failed", integration_error: String(error.message || `${provider.toUpperCase()}_CREATE_FAILED`), last_attempted_at: new Date().toISOString() });
+      addOrderEvent(order.id, "shipment_auto_failed", { provider, reason: shipment.integration_error }, "system");
     }
   }
   updateRecord("orders", order.id, { shipping_shipment_id: shipment.id, shipping_provider: provider });
@@ -7354,9 +7376,15 @@ app.post("/api/admin/order-management/:id/dispatch", async (req, res, next) => {
     if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
     const order = getRecord("orders", req.params.id);
     if (!order) fail("ORDER_NOT_FOUND", 404);
-    const shipment = await dispatchOrderToImile(order);
-    addOrderEvent(order.id, "shipment_dispatched", { shipment_id: shipment.id, waybill_no: shipment.waybill_no || null }, req.user.email || "admin");
-    res.json(ok({ order: adminOrderView(getRecord("orders", order.id)), shipment }));
+    const provider = String(req.body?.provider || "").toLowerCase();
+    try {
+      const shipment = await dispatchOrderToShippingProvider(order, provider);
+      addOrderEvent(order.id, "shipment_dispatched", { provider: shipment.provider, shipment_id: shipment.id, external_order_no: shipment.external_order_no || null, waybill_no: shipment.waybill_no || null }, req.user.email || "admin");
+      res.json(ok({ order: adminOrderView(getRecord("orders", order.id)), shipment }));
+    } catch (error) {
+      addOrderEvent(order.id, "shipment_dispatch_failed", { provider: provider || orderFulfillmentProvider(order), reason: String(error.message || "SHIPPING_DISPATCH_FAILED") }, req.user.email || "admin");
+      throw error;
+    }
   } catch (error) {
     next(error);
   }

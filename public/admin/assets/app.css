@@ -2563,6 +2563,13 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .order-facts div { padding:10px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line); }
 .order-facts dt { color:var(--muted);font-size:11px; }
 .order-facts dd { margin:0;text-align:end;font-size:12px;font-weight:800; }
+.order-fulfillment-card .studio-card-head { align-items:flex-start; }
+.order-fulfillment-error { margin:12px 0;padding:12px;border:1px solid #f4b9bd;border-inline-start:3px solid var(--danger);border-radius:6px;background:#fff5f5;display:grid;gap:7px;color:#8f1d28; }
+.order-fulfillment-error strong { font-size:12px; }
+.order-fulfillment-error code { overflow-wrap:anywhere;white-space:normal;font:600 11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;color:#6f2028; }
+.order-fulfillment-error small { color:#9c4b53;line-height:1.55; }
+.order-fulfillment-note { margin:12px 0;padding:10px 12px;border-radius:6px;background:#eef5ff;color:#2457a6;display:flex;align-items:flex-start;gap:8px;font-size:11px;line-height:1.6; }
+.order-fulfillment-note svg { width:16px;height:16px;flex:0 0 16px;margin-top:1px; }
 .full-button { width:100%;justify-content:center; }
 .empty-inline { margin:14px 0;padding:14px;background:var(--panel-soft);border-radius:6px;color:var(--muted);font-size:12px; }
 .order-lines-panel { grid-column:1; }
