@@ -842,8 +842,16 @@ function cartTotals() {
   const subtotal=state.cart.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0);
   let discount=null;try{discount=JSON.parse(localStorage.getItem("slyrah_discount")||"null");}catch{}
   const discountAmount=Number(discount?.discount_amount||0);
-  const shipping=state.checkoutQuote ? { active:true, amount:Number(state.checkoutQuote.customer_amount||0), rule:state.checkoutQuote.rule||null, source:state.checkoutQuote.source } : storefrontShippingQuote(subtotal,discount);
+  const quoted=state.checkoutQuote ? { active:true, amount:Number(state.checkoutQuote.customer_amount||0), base_amount:Number(state.checkoutQuote.base_customer_amount??state.checkoutQuote.customer_amount??0), rule:state.checkoutQuote.rule||null, source:state.checkoutQuote.source } : storefrontShippingQuote(subtotal,discount);
+  const promotionFree=Boolean(discount?.free_shipping||discount?.discount?.type==="free_shipping");
+  const shipping=promotionFree?{...quoted,amount:0,base_amount:Number(quoted.base_amount??quoted.amount??0),promotion_free:true}:quoted;
   return {subtotal,discount,discountAmount,shipping,total:Math.max(0,subtotal-discountAmount)+shipping.amount};
+}
+
+function checkoutShippingPrice(shipping){
+  if(Number(shipping?.amount||0)>0)return money(shipping.amount);
+  const base=Number(shipping?.base_amount||0);
+  return base>0?`<span class="shipping-price-discount"><del>${money(base)}</del><b>مجاني</b></span>`:"مجاني";
 }
 
 function appliedPromotionCodes(discount) {
@@ -852,6 +860,8 @@ function appliedPromotionCodes(discount) {
 }
 
 function promotionErrorMessage(message="") {
+  if(message.includes("INVALID_SAUDI_PHONE"))return "أدخلي رقم جوال سعودي صحيح: 9 أرقام بعد +966 ويبدأ بالرقم 5";
+  if(message.includes("Missing checkout fields"))return "راجعي بيانات الاسم والعنوان المطلوبة قبل تأكيد الطلب";
   if(message.includes("PAYMENT_ATTEMPT_EXPIRED"))return "انتهت محاولة الدفع السابقة. اضغطي تأكيد الطلب لبدء محاولة جديدة";
   if(message.includes("PAYMENT_ATTEMPT_CLOSED"))return "محاولة الدفع السابقة مغلقة. راجعي حالة الطلب أو ابدئي محاولة جديدة";
   if(message.includes("PAYMENT_REDIRECT"))return "تم إيقاف التحويل لحمايتك من حلقة إعادة توجيه. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
@@ -902,7 +912,7 @@ function storefrontShippingQuote(subtotal,discount) {
   else if(rule?.action_type==="shipping_discount_percentage")amount=Math.max(0,base*(1-Math.min(100,Number(rule.action_value||0))/100));
   else if(rule?.action_type==="shipping_discount_fixed")amount=Math.max(0,base-Number(rule.action_value||0));
   if(legacyFree)amount=0;
-  return {active:true,amount:Math.round(amount*100)/100,rule};
+  return {active:true,amount:Math.round(amount*100)/100,base_amount:base,rule};
 }
 
 function cartBundleMedia(item) {
@@ -922,14 +932,23 @@ function cartItemHtml(item,index) {
   return `<article class="cart-item ${isBundle?"is-bundle":""}"><div class="cart-item-media">${media}</div><div class="cart-item-copy"><h3>${esc(item.name_ar||item.name_en)}</h3><div class="cart-variant">${esc(item.variant_label||"")}</div><div class="price"><strong>${money(item.price)}</strong></div>${components}</div><div class="cart-item-actions"><div class="quantity-control" style="width:105px"><button data-cart-plus="${index}">+</button><strong>${item.quantity}</strong><button data-cart-minus="${index}">−</button></div><button class="remove-link" data-cart-remove="${index}" aria-label="حذف">${icon("trash-2",18)}</button></div></article>`;
 }
 
+function checkoutCustomerDefaults(defaultCountry) {
+  const customer=state.customer||{};const parts=String(customer.full_name||customer.name||"").trim().split(/\s+/).filter(Boolean);
+  const first_name=customer.first_name||parts.shift()||"",last_name=customer.last_name||parts.join(" ")||"";
+  let phone=String(customer.phone||"").replace(/\D/g,"");if((customer.country_code||defaultCountry)==="SA")phone=phone.replace(/^966/,"").replace(/^0(?=5\d{8}$)/,"");
+  return {...customer,first_name,last_name,phone};
+}
+
 function checkoutFormMarkup(countries, defaultCountry) {
   const splEnabled = state.addressConfig?.enabled === true;
+  const defaults=checkoutCustomerDefaults(defaultCountry);
   const methods=state.paymentMethods?.methods||[];
   const paymentChoices=methods.map((method,index)=>`<label class="checkout-payment-choice ${method.id==="tamara"?"is-tamara":method.id==="edfapay"?"is-edfapay":method.id==="tabby"?"is-tabby":""}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong><small>${esc(method.description_ar||"")}</small></span>${method.id==="tamara"?`<b class="checkout-tamara-mark">tamara</b>`:method.id==="edfapay"?`<b class="checkout-edfapay-mark"><span>Edfa</span>Pay</b>`:method.id==="tabby"?`<b class="checkout-tabby-mark">tabby</b>`:""}</label>`).join("");
   return `<form class="checkout-form" id="checkoutForm">
-    <label>الاسم الكامل<input name="full_name" autocomplete="name" required /></label>
-    <label>رقم الجوال<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05xxxxxxxx" required /></label>
-    <label>البريد الإلكتروني<input name="email" type="email" autocomplete="email" /></label>
+    <label>الاسم الأول<input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
+    <label>اسم العائلة<input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
+    <label>رقم الجوال<div class="checkout-phone-control" id="checkoutPhoneControl"><span id="checkoutPhonePrefix">+966</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="5XXXXXXXX" value="${esc(defaults.phone||"")}" required /></div><small class="checkout-field-hint" id="checkoutPhoneHint">9 أرقام بعد +966</small></label>
+    <label>البريد الإلكتروني<input name="email" type="email" autocomplete="email" value="${esc(defaults.email||"")}" /></label>
     <label>الدولة<select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===defaultCountry?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     ${splEnabled?`<section class="national-address-card full" id="saudiAddressPanel">
       <div class="national-address-head"><div><span>العنوان الوطني السعودي</span><strong>اكتبي الرمز المختصر لملء العنوان تلقائيًا</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للتحقق</span></div>
@@ -945,7 +964,7 @@ function checkoutFormMarkup(countries, defaultCountry) {
     <label>الشارع<input name="street" autocomplete="street-address" required data-address-field /></label>
     <label>رقم المبنى<input name="building_number" inputmode="numeric" required data-address-field /></label>
     <label>الرمز البريدي<input name="postal_code" inputmode="numeric" autocomplete="postal-code" required data-address-field /></label>
-    <label>الرقم الإضافي<input name="additional_number" inputmode="numeric" data-address-field /></label>
+    <label>الرقم الإضافي للعنوان<input name="additional_number" inputmode="numeric" data-address-field /></label>
     <fieldset class="checkout-shipping-methods full" id="checkoutShippingMethods" hidden><legend>شركة الشحن</legend><div id="checkoutShippingChoices"></div></fieldset>
     <fieldset class="checkout-payment-methods full"><legend>طريقة الدفع</legend>${paymentChoices||`<p>لا توجد طريقة دفع متاحة حاليًا.</p>`}</fieldset>
     <label class="full">ملاحظات العنوان أو الطلب<textarea name="address_notes"></textarea></label>
@@ -959,14 +978,27 @@ function renderCart(checkout=false) {
   const promoCodes=appliedPromotionCodes(totals.discount);
   const countries=state.market?.countries||[];
   const defaultCountry=state.market?.settings?.default_country_code||"SA";
-  shell(`${breadcrumbs(checkout?"إتمام الطلب":"سلة التسوق")}<section class="container cart-page">${checkout?`<h1>إتمام الطلب</h1>${checkoutFormMarkup(countries,defaultCountry)}`:"<h1>سلة التسوق</h1>"}<div class="cart-layout"><div class="cart-items">${state.cart.map(cartItemHtml).join("")}</div><aside class="cart-summary"><h2>ملخص الطلب</h2><div class="summary-row"><span>المجموع الفرعي</span><strong>${money(totals.subtotal)}</strong></div>${totals.discountAmount?`<div class="summary-row discount"><span>الخصم</span><strong>− ${money(totals.discountAmount)}</strong></div>`:""}${totals.shipping.active?`<div class="summary-row shipping" id="checkoutShippingRow"><span>الشحن${totals.shipping.rule?`<small>${esc(totals.shipping.rule.name_ar||"")}</small>`:""}</span><strong id="checkoutShippingAmount">${totals.shipping.amount===0?"مجاني":money(totals.shipping.amount)}</strong></div>`:""}<div class="coupon-box"><label for="couponCode">هل لديك كود خصم؟</label>${promoCodes.length?`<div class="applied-promo-list">${promoCodes.map(code=>`<button type="button" data-remove-promo="${esc(code)}"><span>${esc(code)}</span>${icon("x",13)}</button>`).join("")}</div>`:""}<div class="coupon-row"><input id="couponCode" value="" placeholder="أدخلي كودًا آخر" /><button id="applyCoupon" type="button">تطبيق</button></div><div class="coupon-message ${totals.discount?"success":""}" id="couponMessage">${totals.discount?`تم تطبيق ${promoCodes.length} كود خصم`:""}</div></div><div class="summary-total"><span>الإجمالي</span><strong id="checkoutTotalAmount">${money(totals.total)}</strong></div>${checkout?`<small class="muted" id="shippingQuoteState"></small><button class="primary-button" style="width:100%" id="placeOrder">تأكيد الطلب</button>`:`<a class="primary-button" style="width:100%" href="/checkout">إتمام الطلب</a>`}</aside></div></section>`);
+  shell(`${breadcrumbs(checkout?"إتمام الطلب":"سلة التسوق")}<section class="container cart-page">${checkout?`<h1>إتمام الطلب</h1>${checkoutFormMarkup(countries,defaultCountry)}`:"<h1>سلة التسوق</h1>"}<div class="cart-layout"><div class="cart-items">${state.cart.map(cartItemHtml).join("")}</div><aside class="cart-summary"><h2>ملخص الطلب</h2><div class="summary-row"><span>المجموع الفرعي</span><strong>${money(totals.subtotal)}</strong></div>${totals.discountAmount?`<div class="summary-row discount"><span>الخصم</span><strong>− ${money(totals.discountAmount)}</strong></div>`:""}${totals.shipping.active?`<div class="summary-row shipping" id="checkoutShippingRow"><span>الشحن${totals.shipping.rule?`<small>${esc(totals.shipping.rule.name_ar||"")}</small>`:""}</span><strong id="checkoutShippingAmount">${checkoutShippingPrice(totals.shipping)}</strong></div>`:""}<div class="coupon-box"><label for="couponCode">هل لديك كود خصم؟</label>${promoCodes.length?`<div class="applied-promo-list">${promoCodes.map(code=>`<button type="button" data-remove-promo="${esc(code)}"><span>${esc(code)}</span>${icon("x",13)}</button>`).join("")}</div>`:""}<div class="coupon-row"><input id="couponCode" value="" placeholder="أدخلي كودًا آخر" /><button id="applyCoupon" type="button">تطبيق</button></div><div class="coupon-message ${totals.discount?"success":""}" id="couponMessage">${totals.discount?`تم تطبيق ${promoCodes.length} كود خصم`:""}</div></div><div class="summary-total"><span>الإجمالي</span><strong id="checkoutTotalAmount">${money(totals.total)}</strong></div>${checkout?`<small class="muted" id="shippingQuoteState"></small><button class="primary-button" style="width:100%" id="placeOrder">تأكيد الطلب</button>`:`<a class="primary-button" style="width:100%" href="/checkout">إتمام الطلب</a>`}</aside></div></section>`);
   document.querySelectorAll("[data-cart-plus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartPlus),1,checkout));
   document.querySelectorAll("[data-cart-minus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartMinus),-1,checkout));
   document.querySelectorAll("[data-cart-remove]").forEach(button=>button.onclick=()=>removeCartItem(Number(button.dataset.cartRemove),checkout));
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
+}
+
+function bindCheckoutPhoneInput(){
+  const form=document.getElementById("checkoutForm");if(!form)return;const country=form.elements.country_code,phone=form.elements.phone,prefix=document.getElementById("checkoutPhonePrefix"),hint=document.getElementById("checkoutPhoneHint"),control=document.getElementById("checkoutPhoneControl");
+  const normalizeSaudi=()=>{let value=phone.value.replace(/\D/g,"").replace(/^966/,"");if(value.length===10&&value.startsWith("0"))value=value.slice(1);phone.value=value.slice(0,9);phone.setCustomValidity(value&&/^5\d{8}$/.test(phone.value)?"":"أدخلي 9 أرقام تبدأ بالرقم 5");};
+  const update=()=>{const saudi=country.value==="SA";control.classList.toggle("is-saudi",saudi);prefix.hidden=!saudi;hint.textContent=saudi?"9 أرقام بعد +966":"أدخلي رقم الهاتف مع مفتاح الدولة";phone.maxLength=saudi?10:18;phone.inputMode=saudi?"numeric":"tel";phone.placeholder=saudi?"5XXXXXXXX":"+971...";phone.setCustomValidity("");if(saudi)normalizeSaudi();};
+  phone.addEventListener("input",()=>{if(country.value==="SA")normalizeSaudi();else phone.setCustomValidity("");});country.addEventListener("change",update);update();
+}
+
+function checkoutCustomerValues(form){
+  const values=Object.fromEntries(new FormData(form));
+  if(values.country_code==="SA"){let local=String(values.phone||"").replace(/\D/g,"").replace(/^966/,"");if(local.length===10&&local.startsWith("0"))local=local.slice(1);values.phone=`+966${local}`;}
+  return values;
 }
 
 function bindSaudiAddressVerification(){
@@ -986,13 +1018,13 @@ function renderCheckoutShippingChoices(quotes=[]){
   const fieldset=document.getElementById("checkoutShippingMethods"),box=document.getElementById("checkoutShippingChoices");if(!fieldset||!box)return;
   fieldset.hidden=quotes.length<2;
   box.innerHTML=quotes.map(quote=>`<label class="checkout-shipping-choice"><input type="radio" name="shipping_quote_choice" value="${esc(quote.id)}" ${quote.id===state.checkoutQuote?.id?"checked":""}/><span class="checkout-shipping-indicator"></span><span class="checkout-shipping-logo">${quote.logo_url?`<img src="${esc(quote.logo_url)}" alt="" loading="lazy" />`:icon("truck",20)}</span><span><strong>${esc(quote.carrier_name_ar||quote.carrier_name_en||"التوصيل")}</strong><small>${quote.eta_min_days?`خلال ${quote.eta_min_days}${quote.eta_max_days&&quote.eta_max_days!==quote.eta_min_days?`–${quote.eta_max_days}`:""} أيام`:quote.eta_label?esc(String(quote.eta_label).replace(/to/g," - ").replace(/WorkingDays/i," أيام عمل")):quote.provider==="oto"?"عبر منصة OTO":""}</small></span><b>${Number(quote.customer_amount||0)===0?"مجاني":money(quote.customer_amount)}</b></label>`).join("");
-  box.querySelectorAll('[name="shipping_quote_choice"]').forEach(input=>input.onchange=()=>{state.checkoutQuote=quotes.find(quote=>quote.id===input.value)||state.checkoutQuote;const totals=cartTotals();document.getElementById("checkoutShippingAmount").innerHTML=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);document.getElementById("checkoutTotalAmount").innerHTML=money(totals.total);});
+  box.querySelectorAll('[name="shipping_quote_choice"]').forEach(input=>input.onchange=()=>{state.checkoutQuote=quotes.find(quote=>quote.id===input.value)||state.checkoutQuote;const totals=cartTotals();document.getElementById("checkoutShippingAmount").innerHTML=checkoutShippingPrice(totals.shipping);document.getElementById("checkoutTotalAmount").innerHTML=money(totals.total);});
 }
 
 async function refreshCheckoutQuote(){
   const form=document.getElementById("checkoutForm");if(!form)return;const required=[...form.querySelectorAll("[required]")];if(required.some(input=>!input.value.trim()))return;
-  const values=Object.fromEntries(new FormData(form));const payment_method=values.payment_method||"cod";delete values.payment_method;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
-  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=totals.shipping.amount===0?"مجاني":money(totals.shipping.amount);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
+  const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
+  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
 }
 
 function changeCartQuantity(index,delta,checkout) {
@@ -1058,7 +1090,7 @@ function continueGatewayPayment(result,attempt,button){
 }
 
 async function placeOrder() {
-  const form=document.getElementById("checkoutForm");if(!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values;const discount=cartTotals().discount;const button=document.getElementById("placeOrder");button.disabled=true;button.textContent="جاري تأكيد الطلب...";
+  const form=document.getElementById("checkoutForm");if(!form.reportValidity())return;const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values;const discount=cartTotals().discount;const button=document.getElementById("placeOrder");button.disabled=true;button.textContent="جاري تأكيد الطلب...";
   const attempt=payment_method==="cod"?null:paymentAttempt(payment_method);
   try{const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}clearPaymentAttempt(result.order?.id);state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);}catch(error){if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";}
 }

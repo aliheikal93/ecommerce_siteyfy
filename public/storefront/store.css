@@ -556,6 +556,9 @@ img { max-width: 100%; display: block; }
 .summary-row.shipping strong { color: #14845d; }
 .summary-row.shipping span { display: grid; gap: 3px; }
 .summary-row.shipping small { color: var(--muted); font-size: 10px; font-weight: 500; }
+.shipping-price-discount { display: inline-flex !important; align-items: center; gap: 7px !important; }
+.shipping-price-discount del { color: var(--muted); font-size: 12px; font-weight: 500; }
+.shipping-price-discount b { color: #14845d; }
 .summary-total { display: flex; justify-content: space-between; gap: 12px; padding: 20px 0; font-size: 20px; color: var(--primary-dark); }
 .coupon-box { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 .coupon-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
@@ -571,6 +574,11 @@ img { max-width: 100%; display: block; }
 .empty-cart .icon { width: 58px; height: 58px; color: var(--primary); margin: 0 auto 15px; }
 .checkout-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-bottom: 25px; }
 .checkout-form label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.checkout-phone-control { display: flex; align-items: stretch; direction: ltr; }
+.checkout-phone-control > span { display: none; align-items: center; border: 1px solid #ddd7e1; border-inline-end: 0; border-radius: 4px 0 0 4px; padding: 0 12px; background: #f7f5f8; color: var(--text); font-weight: 700; }
+.checkout-phone-control.is-saudi > span { display: flex; }
+.checkout-phone-control.is-saudi input { border-radius: 0 4px 4px 0; text-align: left; }
+.checkout-field-hint { color: var(--muted); font-size: 10px; }
 .checkout-form label.full { grid-column: 1 / -1; }
 .checkout-form textarea { min-height: 90px; padding: 10px; resize: vertical; }
 .checkout-payment-methods { margin:0;padding:0;border:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }

@@ -188,8 +188,8 @@ const defaultShippingIntegrationSettings = {
     sync_interval_minutes: 15
   },
   customer_pricing: {
-    strategy: "internal_rules",
-    fixed_amount: 0,
+    strategy: "fixed",
+    fixed_amount: 20,
     markup_fixed: 0,
     markup_percent: 0,
     subsidy_fixed: 0,
@@ -441,8 +441,8 @@ const defaults = {
   },
   settings: {
     website_domain: defaultPublicDomain,
-    shipping_active: false,
-    default_shipping_cost: 0,
+    shipping_active: true,
+    default_shipping_cost: 20,
     free_shipping_threshold: 0
   },
   brandIdentity: defaultBrandIdentity,
@@ -2481,10 +2481,14 @@ async function customerShippingQuote({ items = [], subtotal = 0, customer = {}, 
   const pricing = integration.customer_pricing;
   const currency = normalizeCurrencies().base_currency;
   const configuredEstimate = configuredCarrierEstimate({ settings: integration, countryCode: customer.country_code, currency, paymentMethod, subtotal });
-  const base = { customer_amount: internal.amount, carrier_estimated_cost: configuredEstimate.amount, currency: configuredEstimate.profile?.currency || currency, strategy: pricing.strategy, source: "internal_rules", estimate_source: configuredEstimate.amount === null ? null : "configured_profile", estimate_profile_id: configuredEstimate.profile?.id || null, estimated_fee_details: configuredEstimate.breakdown, payment_method: configuredEstimate.payment_method || normalizePaymentMethod(paymentMethod), fallback_used: false, fee_details: [], rule: internal.rule, quoted_at: new Date().toISOString() };
-  if (!shippingSettings().is_active || internal.amount === 0 && internal.rule) return { ...base, customer_amount: internal.amount };
+  const shipping = shippingSettings();
+  const rule = shipping.is_active ? matchingFreeShippingRule(items, subtotal, shipping) : null;
+  const fixedBase = Number(pricing.fixed_amount || 0);
+  const fixedCustomerAmount = shipping.is_active ? applyShippingRuleAction(rule, fixedBase) : fixedBase;
+  const base = { customer_amount: internal.amount, base_customer_amount: internal.amount, carrier_estimated_cost: configuredEstimate.amount, currency: configuredEstimate.profile?.currency || currency, strategy: pricing.strategy, source: "internal_rules", estimate_source: configuredEstimate.amount === null ? null : "configured_profile", estimate_profile_id: configuredEstimate.profile?.id || null, estimated_fee_details: configuredEstimate.breakdown, payment_method: configuredEstimate.payment_method || normalizePaymentMethod(paymentMethod), fallback_used: false, fee_details: [], rule: internal.rule, quoted_at: new Date().toISOString() };
   if (pricing.strategy === "free") return { ...base, customer_amount: 0, source: "configured" };
-  if (pricing.strategy === "fixed") return { ...base, customer_amount: pricing.fixed_amount, source: "configured" };
+  if (pricing.strategy === "fixed") return { ...base, customer_amount: Number(fixedCustomerAmount.toFixed(2)), base_customer_amount: fixedBase, carrier_estimated_cost: fixedBase, estimate_source: "flat_rate", source: "flat_rate", rule };
+  if (!shipping.is_active || internal.amount === 0 && internal.rule) return { ...base, customer_amount: internal.amount };
   if (pricing.strategy === "internal_rules" || !integration.imile.is_enabled) return base;
   try {
     const totals = shippingPackageTotals(items);
@@ -2585,7 +2589,10 @@ async function customerShippingQuotes(context) {
     const quote = await customerShippingQuote(context);
     quotes.push({ ...quote, id: "imile:direct", provider: "imile", carrier_code: "imile", carrier_name_en: integration.imile.checkout_label_en, carrier_name_ar: integration.imile.checkout_label_ar });
   }
-  try { quotes.push(...await otoShippingQuotes({ ...context, integration, currency })); } catch (error) {
+  if (integration.oto.is_enabled && integration.oto.show_at_checkout && integration.customer_pricing.strategy === "fixed") {
+    const flatQuote = await customerShippingQuote(context);
+    quotes.push({ ...flatQuote, id: "oto:flat-rate", provider: "oto", carrier_code: "oto", carrier_name_en: integration.oto.checkout_label_en, carrier_name_ar: integration.oto.checkout_label_ar });
+  } else try { quotes.push(...await otoShippingQuotes({ ...context, integration, currency })); } catch (error) {
     if (!quotes.length && integration.oto.fallback_amount > 0) quotes.push({ id: "oto:fallback", provider: "oto", carrier_code: "oto", carrier_name_en: integration.oto.checkout_label_en, carrier_name_ar: integration.oto.checkout_label_ar, customer_amount: integration.oto.fallback_amount, carrier_estimated_cost: null, currency, source: "fallback", fallback_used: true, error_code: String(error.message || "OTO_QUOTE_FAILED").split(":")[0] });
   }
   const filtered = quotes.filter((quote, index, all) => {
@@ -2664,14 +2671,14 @@ async function createImileShipment(order, shipment) {
   return upsertShippingShipment({ ...shipment, waybill_no: data.expressNo || data.waybillNo || data.billNo, external_order_no: data.orderNo || shipment.external_order_no, status_code: "UPLOADED", sync_state: "created", created_with_api_at: new Date().toISOString() });
 }
 
-async function createOtoShipment(order, shipment) {
-  const settings = normalizeShippingIntegrations();
-  if (!settings.oto.is_enabled) fail("OTO_PROVIDER_NOT_ACTIVE", 409);
+function otoOrderPayload(order, settings = normalizeShippingIntegrations()) {
   const customer = order.shipping_address || order.customer || {};
   const packageTotals = shippingPackageTotals(order.items || []);
   const orderId = `${settings.oto.order_prefix || "SFY-"}${order.id}`;
   const prepaid = normalizePaymentMethod(order.payment?.method) === "prepaid";
-  const payload = {
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ") || customer.full_name || customer.name || "Customer";
+  const address = [customer.building_number, customer.street, customer.additional_number, customer.district, customer.postal_code, customer.city, customer.province, customer.country_code].filter(Boolean).join(", ");
+  return {
     orderId,
     ref1: String(order.id),
     pickupLocationCode: settings.oto.pickup_location_code || undefined,
@@ -2690,17 +2697,22 @@ async function createOtoShipment(order, shipment) {
     orderDate: new Date(order.created_at || Date.now()).toISOString(),
     senderName: "SITEYFY",
     customer: {
-      name: customer.full_name || customer.name || "Customer",
+      name: fullName,
       email: customer.email || undefined,
       mobile: customer.phone,
-      address: [customer.street, customer.building_number, customer.district, customer.province].filter(Boolean).join(", "),
+      address,
+      buildingNo: customer.building_number || undefined,
+      street: customer.street || undefined,
+      secondaryAddressNumber: customer.additional_number || undefined,
+      shortAddressCode: customer.short_address || undefined,
       district: customer.district || "",
       city: customer.city,
+      state: customer.province || undefined,
       country: customer.country_code || "SA",
       postcode: customer.postal_code || "",
-      shortAddress: customer.short_address || undefined,
       lat: customer.latitude || undefined,
-      lon: customer.longitude || undefined
+      lon: customer.longitude || undefined,
+      refID: String(order.customer_identity?.user_id || order.id)
     },
     items: (order.items || []).map((item) => ({
       productId: String(item.product_id || item.sku || ""),
@@ -2709,9 +2721,17 @@ async function createOtoShipment(order, shipment) {
       rowTotal: Number(item.subtotal || 0),
       quantity: Math.max(1, Number(item.quantity || 1)),
       sku: String(item.sku || item.product_id || ""),
-      image: item.image_url || item.main_photo_url || undefined
+      image: item.image_url || item.main_photo_url || undefined,
+      hsCode: item.shipping?.hs_code || undefined
     }))
   };
+}
+
+async function createOtoShipment(order, shipment) {
+  const settings = normalizeShippingIntegrations();
+  if (!settings.oto.is_enabled) fail("OTO_PROVIDER_NOT_ACTIVE", 409);
+  const payload = otoOrderPayload(order, settings);
+  const orderId = payload.orderId;
   const created = await otoRequest("/rest/v2/createOrder", { body: payload });
   if (settings.oto.auto_create_shipments && order.shipping_selection?.delivery_option_id) {
     await otoRequest("/rest/v2/createShipment", { body: { orderId, deliveryOptionId: order.shipping_selection.delivery_option_id } });
@@ -2726,6 +2746,24 @@ async function createOtoShipment(order, shipment) {
     status_code: settings.oto.auto_create_shipments ? "shipmentProcessing" : "orderCreated",
     sync_state: settings.oto.auto_create_shipments ? "created" : "order_created",
     created_with_api_at: new Date().toISOString()
+  });
+}
+
+async function updateOtoOrder(order, shipment) {
+  const settings = normalizeShippingIntegrations();
+  if (!settings.oto.is_enabled) fail("OTO_PROVIDER_NOT_ACTIVE", 409);
+  if (!shipment?.external_order_no && !shipment?.oto_id) fail("OTO_ORDER_NOT_CREATED", 409);
+  if (shipment.waybill_no) fail("OTO_UPDATE_REQUIRES_SHIPMENT_CANCELLATION", 409);
+  const payload = otoOrderPayload(order, settings);
+  await otoRequest("/rest/v2/updateOrder", { body: payload });
+  return upsertShippingShipment({
+    ...shipment,
+    provider: "oto",
+    external_order_no: payload.orderId,
+    integration_error: null,
+    last_attempted_at: new Date().toISOString(),
+    last_order_update_at: new Date().toISOString(),
+    sync_state: "order_created"
   });
 }
 
@@ -4731,12 +4769,26 @@ function normalizeCheckoutCustomer(customer = {}) {
   const countryCode = String(customer.country_code || market.default_country_code || "SA").toUpperCase();
   const country = normalizeCountries().find((row) => row.code === countryCode);
   if (!country || !market.enabled_country_codes.includes(countryCode)) fail("Shipping country is not available");
-  const fullName = String(customer.full_name || customer.name || "").trim();
+  const suppliedFullName = String(customer.full_name || customer.name || "").trim();
+  const suppliedParts = suppliedFullName.split(/\s+/).filter(Boolean);
+  const firstName = String(customer.first_name || suppliedParts.shift() || "").trim();
+  const lastName = String(customer.last_name || suppliedParts.join(" ") || "").trim();
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
   const phoneRaw = String(customer.phone || "").trim().replace(/[\s()-]/g, "");
-  const phone = phoneRaw.startsWith("+") ? phoneRaw : phoneRaw.startsWith("00") ? `+${phoneRaw.slice(2)}` : `${country.calling_code}${phoneRaw.replace(/^0+/, "")}`;
+  let phone;
+  if (countryCode === "SA") {
+    let localPhone = phoneRaw.replace(/^\+?966/, "").replace(/^00966/, "").replace(/\D/g, "");
+    if (localPhone.length === 10 && localPhone.startsWith("0")) localPhone = localPhone.slice(1);
+    if (!/^5\d{8}$/.test(localPhone)) fail("INVALID_SAUDI_PHONE");
+    phone = `+966${localPhone}`;
+  } else {
+    phone = phoneRaw.startsWith("+") ? phoneRaw : phoneRaw.startsWith("00") ? `+${phoneRaw.slice(2)}` : `${country.calling_code}${phoneRaw.replace(/^0+/, "")}`;
+  }
   const verifiedAddress = countryCode === "SA" ? verifiedAddressFromToken(customer.address_verification_token, customer.short_address) : null;
   const addressSource = verifiedAddress ? { ...customer, ...verifiedAddress } : customer;
   const normalized = {
+    first_name: firstName,
+    last_name: lastName,
     full_name: fullName,
     phone,
     alternate_phone: String(customer.alternate_phone || "").trim(),
@@ -4756,7 +4808,7 @@ function normalizeCheckoutCustomer(customer = {}) {
     address_verification: verifiedAddress ? { provider: "spl", status: "verified", verified_at: new Date().toISOString(), provider_reference: verifiedAddress.provider_reference || null } : { provider: null, status: "manual", verified_at: null }
   };
   if (countryCode === "SA" && normalized.short_address && !validSaudiShortAddress(normalized.short_address)) fail("INVALID_SAUDI_SHORT_ADDRESS");
-  const required = ["full_name", "phone", "province", "city", "district", "street", "building_number", "postal_code"];
+  const required = ["first_name", "last_name", "phone", "province", "city", "district", "street", "building_number", "postal_code"];
   const missing = required.filter((key) => !normalized[key]);
   if (missing.length) fail(`Missing checkout fields: ${missing.join(", ")}`);
   return normalized;
@@ -7360,13 +7412,35 @@ app.put("/api/admin/order-management/:id/address", async (req, res, next) => {
     const current = order.shipping_address || order.customer || {};
     const address = await normalizeVerifiedCheckoutCustomer({ ...current, ...(req.body || {}) }, `admin_order_${order.id}`);
     const shipment = orderShipment(order);
+    const remoteOrderExists = Boolean(shipment?.external_order_no || shipment?.oto_id || shipment?.waybill_no);
     const updated = updateRecord("orders", order.id, {
       customer: { ...(order.customer || {}), ...address },
       shipping_address: address,
-      shipment_address_out_of_sync: Boolean(shipment?.waybill_no)
+      shipment_address_out_of_sync: remoteOrderExists
     });
-    addOrderEvent(order.id, "address_updated", { verification_status: address.address_verification?.status || "manual", shipment_address_out_of_sync: Boolean(shipment?.waybill_no) }, req.user.email || "admin");
+    addOrderEvent(order.id, "address_updated", { verification_status: address.address_verification?.status || "manual", shipment_address_out_of_sync: remoteOrderExists }, req.user.email || "admin");
     res.json(ok({ order: adminOrderView(updated) }));
+  } catch (error) {
+    next(error);
+  }
+});
+app.post("/api/admin/order-management/:id/shipping-update", async (req, res, next) => {
+  try {
+    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    const order = getRecord("orders", req.params.id);
+    if (!order) fail("ORDER_NOT_FOUND", 404);
+    const shipment = orderShipment(order);
+    if (shipment?.provider !== "oto") fail("OTO_ORDER_NOT_CREATED", 409);
+    try {
+      const updatedShipment = await updateOtoOrder(order, shipment);
+      const updatedOrder = updateRecord("orders", order.id, { shipment_address_out_of_sync: false });
+      addOrderEvent(order.id, "oto_order_updated", { shipment_id: updatedShipment.id, external_order_no: updatedShipment.external_order_no }, req.user.email || "admin");
+      res.json(ok({ order: adminOrderView(updatedOrder), shipment: updatedShipment }));
+    } catch (error) {
+      upsertShippingShipment({ ...shipment, integration_error: String(error.message || "OTO_UPDATE_FAILED"), last_attempted_at: new Date().toISOString() });
+      addOrderEvent(order.id, "oto_order_update_failed", { reason: String(error.message || "OTO_UPDATE_FAILED") }, req.user.email || "admin");
+      throw error;
+    }
   } catch (error) {
     next(error);
   }
@@ -9030,8 +9104,10 @@ app.post("/api/orders", async (req, res, next) => {
     rejected_promotions: applied?.rejected_promotions || [],
     discount_amount: discountAmount,
     shipping_amount: Number(shippingAmount || 0),
+    shipping_base_amount: Number(quote.base_customer_amount ?? quote.customer_amount ?? 0),
+    expected_shipping_cost: Number(quote.carrier_estimated_cost ?? quote.base_customer_amount ?? quote.customer_amount ?? 0),
     free_shipping_rule_id: applied?.free_shipping ? null : quote.rule?.id || null,
-    shipping_quote: { ...quote, quote_token: undefined, fp: undefined, iat: undefined, exp: undefined, aud: undefined, customer_amount: Number(shippingAmount || 0), carrier_customer_amount: Number(quote.customer_amount || 0), free_shipping_applied: Boolean(applied?.free_shipping) },
+    shipping_quote: { ...quote, quote_token: undefined, fp: undefined, iat: undefined, exp: undefined, aud: undefined, customer_amount: Number(shippingAmount || 0), carrier_customer_amount: Number(quote.base_customer_amount ?? quote.customer_amount ?? 0), free_shipping_applied: Boolean(applied?.free_shipping) },
     shipping_provider: quote.provider || "internal",
     shipping_selection: { provider: quote.provider || "internal", carrier_code: quote.carrier_code || quote.provider || "internal", carrier_name_en: quote.carrier_name_en || "", carrier_name_ar: quote.carrier_name_ar || "", delivery_option_id: quote.delivery_option_id || null, quote_id: quote.id || null },
     total,
