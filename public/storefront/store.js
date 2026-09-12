@@ -945,11 +945,11 @@ function checkoutFormMarkup(countries, defaultCountry) {
   const methods=state.paymentMethods?.methods||[];
   const paymentChoices=methods.map((method,index)=>`<label class="checkout-payment-choice ${method.id==="tamara"?"is-tamara":method.id==="edfapay"?"is-edfapay":method.id==="tabby"?"is-tabby":""}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong><small>${esc(method.description_ar||"")}</small></span>${method.id==="tamara"?`<b class="checkout-tamara-mark">tamara</b>`:method.id==="edfapay"?`<b class="checkout-edfapay-mark"><span>Edfa</span>Pay</b>`:method.id==="tabby"?`<b class="checkout-tabby-mark">tabby</b>`:""}</label>`).join("");
   return `<form class="checkout-form" id="checkoutForm">
-    <label>الاسم الأول<input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
-    <label>اسم العائلة<input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
-    <label>رقم الجوال<div class="checkout-phone-control" id="checkoutPhoneControl"><span id="checkoutPhonePrefix">+966</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="5XXXXXXXX" value="${esc(defaults.phone||"")}" required /></div><small class="checkout-field-hint" id="checkoutPhoneHint">9 أرقام بعد +966</small></label>
+    <label><span class="checkout-label-text">الاسم الأول<i>*</i></span><input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
+    <label><span class="checkout-label-text">اسم العائلة<i>*</i></span><input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
+    <label><span class="checkout-label-text">رقم الجوال<i>*</i></span><div class="checkout-phone-control" id="checkoutPhoneControl"><span id="checkoutPhonePrefix">+966</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="5XXXXXXXX" value="${esc(defaults.phone||"")}" required /></div><small class="checkout-field-hint" id="checkoutPhoneHint">9 أرقام بعد +966</small></label>
     <label>البريد الإلكتروني<input name="email" type="email" autocomplete="email" value="${esc(defaults.email||"")}" /></label>
-    <label>الدولة<select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===defaultCountry?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
+    <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===defaultCountry?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     ${splEnabled?`<section class="national-address-card full" id="saudiAddressPanel">
       <div class="national-address-head"><div><span>العنوان الوطني السعودي</span><strong>اكتبي الرمز المختصر لملء العنوان تلقائيًا</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للتحقق</span></div>
       <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="AAAA 0000" aria-label="العنوان الوطني المختصر" /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
@@ -958,12 +958,12 @@ function checkoutFormMarkup(countries, defaultCountry) {
       <input name="latitude" type="hidden" />
       <input name="longitude" type="hidden" />
     </section>`:`<label>الرمز الوطني المختصر<input name="short_address" maxlength="9" autocomplete="off" placeholder="AAAA 0000" style="direction:ltr;text-transform:uppercase" /></label>`}
-    <label>المنطقة<input name="province" autocomplete="address-level1" required data-address-field /></label>
-    <label>المدينة<input name="city" autocomplete="address-level2" required data-address-field /></label>
-    <label>الحي<input name="district" autocomplete="address-level3" required data-address-field /></label>
-    <label>الشارع<input name="street" autocomplete="street-address" required data-address-field /></label>
-    <label>رقم المبنى<input name="building_number" inputmode="numeric" required data-address-field /></label>
-    <label>الرمز البريدي<input name="postal_code" inputmode="numeric" autocomplete="postal-code" required data-address-field /></label>
+    <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" required data-address-field /></label>
+    <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" required data-address-field /></label>
+    <label><span class="checkout-label-text">الحي<i>*</i></span><input name="district" autocomplete="address-level3" required data-address-field /></label>
+    <label><span class="checkout-label-text">الشارع<i>*</i></span><input name="street" autocomplete="street-address" required data-address-field /></label>
+    <label><span class="checkout-label-text">رقم المبنى<i>*</i></span><input name="building_number" inputmode="numeric" required data-address-field /></label>
+    <label><span class="checkout-label-text">الرمز البريدي<i>*</i></span><input name="postal_code" inputmode="numeric" autocomplete="postal-code" required data-address-field /></label>
     <label>الرقم الإضافي للعنوان<input name="additional_number" inputmode="numeric" data-address-field /></label>
     <fieldset class="checkout-shipping-methods full" id="checkoutShippingMethods" hidden><legend>شركة الشحن</legend><div id="checkoutShippingChoices"></div></fieldset>
     <fieldset class="checkout-payment-methods full"><legend>طريقة الدفع</legend>${paymentChoices||`<p>لا توجد طريقة دفع متاحة حاليًا.</p>`}</fieldset>
