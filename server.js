@@ -4809,6 +4809,7 @@ function normalizeCheckoutCustomer(customer = {}) {
   };
   if (countryCode === "SA" && normalized.short_address && !validSaudiShortAddress(normalized.short_address)) fail("INVALID_SAUDI_SHORT_ADDRESS");
   const required = ["first_name", "last_name", "phone", "province", "city", "district", "street", "building_number", "postal_code"];
+  if (countryCode === "SA") required.push("short_address");
   const missing = required.filter((key) => !normalized[key]);
   if (missing.length) fail(`Missing checkout fields: ${missing.join(", ")}`);
   return normalized;

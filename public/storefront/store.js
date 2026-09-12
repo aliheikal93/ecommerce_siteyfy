@@ -732,6 +732,14 @@ async function renderInstallmentWidgets(product,price){
   if(paymentAmountAllowed(tamara,amount,context))await renderTamaraProductWidget(root,tamara,amount,context);
   root.hidden=!root.children.length;
 }
+
+async function renderCheckoutPaymentWidgets(amount){
+  const methods=state.paymentMethods?.methods||[],widgets=state.paymentMethods?.widgets||{},context=paymentWidgetContext(),total=Number(amount||0);
+  const tamara=widgets.tamara||methods.find(item=>item.id==="tamara"&&item.public_key),tamaraRoot=document.getElementById("checkout-tamara-widget");
+  if(tamaraRoot){tamaraRoot.innerHTML="";if(paymentAmountAllowed(tamara,total,context))await renderTamaraProductWidget(tamaraRoot,tamara,total,context);}
+  const tabby=methods.find(item=>item.id==="tabby"&&item.public_key),tabbyRoot=document.getElementById("checkout-tabby-widget");
+  if(tabbyRoot){tabbyRoot.innerHTML="";if(paymentAmountAllowed(tabby,total,context)){try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");window.TabbyPromo?.({selector:"#checkout-tabby-widget",currency:context.currency,price:total.toFixed(2),lang:context.language,publicKey:tabby.public_key,merchantCode:tabby.merchant_code||context.country});}catch{tabbyRoot.innerHTML="";}}}
+}
 async function loadProductReviews(product) {
   const root=document.getElementById("productReviewsRoot");if(!root)return;
   try{
@@ -943,7 +951,8 @@ function checkoutFormMarkup(countries, defaultCountry) {
   const splEnabled = state.addressConfig?.enabled === true;
   const defaults=checkoutCustomerDefaults(defaultCountry);
   const methods=state.paymentMethods?.methods||[];
-  const paymentChoices=methods.map((method,index)=>`<label class="checkout-payment-choice ${method.id==="tamara"?"is-tamara":method.id==="edfapay"?"is-edfapay":method.id==="tabby"?"is-tabby":""}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong><small>${esc(method.description_ar||"")}</small></span>${method.id==="tamara"?`<b class="checkout-tamara-mark">tamara</b>`:method.id==="edfapay"?`<b class="checkout-edfapay-mark"><span>Edfa</span>Pay</b>`:method.id==="tabby"?`<b class="checkout-tabby-mark">tabby</b>`:""}</label>`).join("");
+  const paymentImage=state.appearance?.company?.payment_methods_image_url||"/uploads/redaa/brand/payment-methods.png";
+  const paymentChoices=methods.map((method,index)=>`<label class="checkout-payment-choice ${method.id==="tamara"?"is-tamara":method.id==="edfapay"?"is-edfapay":method.id==="tabby"?"is-tabby":""}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-copy"><strong>${esc(method.title_ar||method.title_en)}</strong>${["tamara","tabby"].includes(method.id)?`<span class="checkout-installment-widget" id="checkout-${method.id}-widget"></span>`:`<small>${method.id==="edfapay"?"ادفعي عن طريق البطاقة البنكية أو الائتمانية":esc(method.description_ar||"")}</small>`}</span>${method.id==="tamara"?`<b class="checkout-tamara-mark">tamara</b>`:method.id==="edfapay"?`<img class="checkout-card-brands" src="${esc(paymentImage)}" alt="مدى وفيزا وماستركارد" />`:method.id==="tabby"?`<b class="checkout-tabby-mark">tabby</b>`:""}</label>`).join("");
   return `<form class="checkout-form" id="checkoutForm">
     <label><span class="checkout-label-text">الاسم الأول<i>*</i></span><input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
     <label><span class="checkout-label-text">اسم العائلة<i>*</i></span><input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
@@ -951,13 +960,13 @@ function checkoutFormMarkup(countries, defaultCountry) {
     <label>البريد الإلكتروني<input name="email" type="email" autocomplete="email" value="${esc(defaults.email||"")}" /></label>
     <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===defaultCountry?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     ${splEnabled?`<section class="national-address-card full" id="saudiAddressPanel">
-      <div class="national-address-head"><div><span>العنوان الوطني السعودي</span><strong>اكتبي الرمز المختصر لملء العنوان تلقائيًا</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للتحقق</span></div>
-      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="AAAA 0000" aria-label="العنوان الوطني المختصر" /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
+      <div class="national-address-head"><div><span>العنوان الوطني السعودي <i class="checkout-required-star">*</i></span><strong>اكتبي الرمز المختصر لملء العنوان تلقائيًا</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للتحقق</span></div>
+      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="AAAA 0000" aria-label="العنوان الوطني المختصر" required /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
       <p id="nationalAddressMessage">يتكون الرمز من 4 أحرف و4 أرقام.</p>
       <input name="address_verification_token" type="hidden" />
       <input name="latitude" type="hidden" />
       <input name="longitude" type="hidden" />
-    </section>`:`<label>الرمز الوطني المختصر<input name="short_address" maxlength="9" autocomplete="off" placeholder="AAAA 0000" style="direction:ltr;text-transform:uppercase" /></label>`}
+    </section>`:`<label><span class="checkout-label-text">الرمز الوطني المختصر<i>*</i></span><input name="short_address" maxlength="9" autocomplete="off" placeholder="AAAA 0000" style="direction:ltr;text-transform:uppercase" required /></label>`}
     <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" required data-address-field /></label>
     <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" required data-address-field /></label>
     <label><span class="checkout-label-text">الحي<i>*</i></span><input name="district" autocomplete="address-level3" required data-address-field /></label>
@@ -985,13 +994,13 @@ function renderCart(checkout=false) {
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
 }
 
 function bindCheckoutPhoneInput(){
   const form=document.getElementById("checkoutForm");if(!form)return;const country=form.elements.country_code,phone=form.elements.phone,prefix=document.getElementById("checkoutPhonePrefix"),hint=document.getElementById("checkoutPhoneHint"),control=document.getElementById("checkoutPhoneControl");
   const normalizeSaudi=()=>{let value=phone.value.replace(/\D/g,"").replace(/^966/,"");if(value.length===10&&value.startsWith("0"))value=value.slice(1);phone.value=value.slice(0,9);phone.setCustomValidity(value&&/^5\d{8}$/.test(phone.value)?"":"أدخلي 9 أرقام تبدأ بالرقم 5");};
-  const update=()=>{const saudi=country.value==="SA";control.classList.toggle("is-saudi",saudi);prefix.hidden=!saudi;hint.textContent=saudi?"9 أرقام بعد +966":"أدخلي رقم الهاتف مع مفتاح الدولة";phone.maxLength=saudi?10:18;phone.inputMode=saudi?"numeric":"tel";phone.placeholder=saudi?"5XXXXXXXX":"+971...";phone.setCustomValidity("");if(saudi)normalizeSaudi();};
+  const update=()=>{const saudi=country.value==="SA";control.classList.toggle("is-saudi",saudi);prefix.hidden=!saudi;hint.textContent=saudi?"9 أرقام بعد +966":"أدخلي رقم الهاتف مع مفتاح الدولة";phone.maxLength=saudi?10:18;phone.inputMode=saudi?"numeric":"tel";phone.placeholder=saudi?"5XXXXXXXX":"+971...";if(form.elements.short_address)form.elements.short_address.required=saudi;phone.setCustomValidity("");if(saudi)normalizeSaudi();};
   phone.addEventListener("input",()=>{if(country.value==="SA")normalizeSaudi();else phone.setCustomValidity("");});country.addEventListener("change",update);update();
 }
 
@@ -1024,7 +1033,7 @@ function renderCheckoutShippingChoices(quotes=[]){
 async function refreshCheckoutQuote(){
   const form=document.getElementById("checkoutForm");if(!form)return;const required=[...form.querySelectorAll("[required]")];if(required.some(input=>!input.value.trim()))return;
   const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
-  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
+  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);renderCheckoutPaymentWidgets(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
 }
 
 function changeCartQuantity(index,delta,checkout) {
