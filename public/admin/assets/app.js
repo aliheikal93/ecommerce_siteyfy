@@ -1668,6 +1668,7 @@
     const isNew = !recommendationId || recommendationId === "new";
     const row = isNew ? {} : recommendationRows(payload).find(item => String(item.id) === String(recommendationId)) || {};
     let selectedProduct = reviewProduct(row, products);
+    if (isNew && !selectedProduct?.id && state.socialProofProductId) selectedProduct = products.find(product => Number(product.id) === Number(state.socialProofProductId));
     if (!selectedProduct?.id) selectedProduct = null;
     const redrawProduct = () => { const target = document.getElementById("recommendationSelectedProduct"); target.innerHTML = selectedProduct?.id ? `<img src="${escapeHtml(collectionProductImage(selectedProduct))}" alt="" /><div><strong>${escapeHtml(collectionProductName(selectedProduct))}</strong><span>${escapeHtml(selectedProduct.sku || `#${selectedProduct.id}`)}</span></div><button class="btn" type="button" id="changeRecommendationProduct">${ui("Change", "تغيير")}</button>` : `<div class="recommendation-product-empty">${i("box")}<div><strong>${ui("No product selected", "لم يتم اختيار منتج")}</strong><span>${ui("Choose the product this editorial recommendation belongs to.", "اختر المنتج الذي تنتمي إليه توصية المتجر.")}</span></div></div><button class="btn primary" type="button" id="changeRecommendationProduct">${ui("Choose product", "اختيار منتج")}</button>`; document.getElementById("changeRecommendationProduct").onclick = () => openReviewProductPicker(products, selectedProduct?.id, product => { selectedProduct = product; redrawProduct(); }); };
     page.innerHTML = `<div class="recommendation-editor-head"><div><button class="btn back-link" type="button" id="backToReviews">${i("arrow-left")}${ui("Back to reviews", "العودة للتقييمات")}</button><span class="section-kicker">EDITORIAL</span><h1>${isNew ? ui("New store recommendation", "توصية متجر جديدة") : ui("Edit store recommendation", "تعديل توصية المتجر")}</h1><p>${ui("This content will be explicitly labeled as a Store Team Recommendation.", "سيظهر هذا المحتوى بوضوح على أنه توصية من فريق المتجر.")}</p></div><button class="btn primary" type="submit" form="recommendationForm">${i("check")}${t("save")}</button></div><form id="recommendationForm" class="recommendation-editor-layout"><main><section class="card card-pad"><div class="store-authored-notice">${i("star")}<div><strong>${ui("Store-authored content", "محتوى مكتوب بواسطة المتجر")}</strong><p>${ui("It is never presented as a customer review or verified purchase.", "لا يتم عرضه أبدًا كتقييم عميل أو عملية شراء موثقة.")}</p></div></div><div id="recommendationSelectedProduct" class="recommendation-selected-product"></div></section><section class="card card-pad"><div class="studio-card-head"><span class="section-kicker">COPY</span><div><h2>${ui("Recommendation content", "محتوى التوصية")}</h2><p>${ui("Write useful product guidance in both storefront languages.", "اكتب إرشادًا مفيدًا للمنتج بلغتي المتجر.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Author name", "اسم الكاتب")}</label><input name="author_name" value="${escapeHtml((state.lang === "ar" ? row.author_name_ar : row.author_name_en) || row.author_name_ar || row.author_name_en || "")}" placeholder="${ui("Store Team (default)", "فريق المتجر (افتراضي)")}" /><small>${ui("Leave empty to display Store Team.", "اتركه فارغًا ليظهر فريق المتجر.")}</small></div><div class="field"><label>${ui("Rating", "التقييم")}</label><select name="rating">${[5,4,3,2,1].map(value => `<option value="${value}" ${Number(row.rating || 5) === value ? "selected" : ""}>${value} / 5</option>`).join("")}</select></div><div class="field full"><label>${ui("English recommendation", "التوصية بالإنجليزية")}</label><textarea name="body_en">${escapeHtml(row.body_en || "")}</textarea></div><div class="field full"><label>${ui("Arabic recommendation", "التوصية بالعربية")}</label><textarea name="body_ar" dir="rtl">${escapeHtml(row.body_ar || "")}</textarea></div></div></section></main><aside><section class="card card-pad"><span class="section-kicker">DISPLAY</span><div class="editor-toggle-row"><div><strong>${ui("Active", "نشطة")}</strong><small>${ui("Visible on the product page", "ظاهرة في صفحة المنتج")}</small></div><input type="hidden" name="is_active" value="${row.is_active !== false}" />${switchButton({ field:"is_active", value:row.is_active !== false, label:false })}</div><div class="editor-toggle-row"><div><strong>${ui("Featured", "مميزة")}</strong><small>${ui("Place before regular store picks", "تظهر قبل التوصيات العادية")}</small></div><input type="hidden" name="is_featured" value="${row.is_featured === true}" />${switchButton({ field:"is_featured", value:row.is_featured === true, label:false })}</div><div class="field"><label>${ui("Display order", "ترتيب العرض")}</label><input name="sort_order" type="number" min="0" value="${Number(row.sort_order || 0)}" /></div></section></aside></form>`;
@@ -1788,7 +1789,10 @@
       const resource = resources[resourceKey];
       return switchButton({ id: row?.id, field: key, value, disabled: resource?.readOnly });
     }
-    if (resourceKey === "products" && key === "stock" && (!Number(value || 0))) return `<span class="status-pill good">${t("unlimitedStock")}</span>`;
+    if (resourceKey === "products" && key === "stock") {
+      if (row.inventory_mode === "out_of_stock" || value === 0) return `<span class="status-pill bad">${ui("Out of stock", "نافد")}</span>`;
+      if (row.inventory_mode === "unlimited" || value === null || value === undefined || value === "") return `<span class="status-pill good">${t("unlimitedStock")}</span>`;
+    }
     if (resourceKey === "categories" && key === "category_type") return `<span class="status-pill ${value === "smart" ? "good" : "empty"}">${value === "smart" ? ui("Smart", "ذكي") : ui("Manual", "يدوي")}</span>`;
     if (resourceKey === "categories" && key === "matched_product_count") return row.category_type === "smart" ? `<strong>${Number(value || 0)}</strong>` : `<span class="muted">${ui("Manual", "يدوي")}</span>`;
     if (isImageKey(key) && value) return `<img class="table-thumb" src="${value}" alt="" loading="lazy" />`;
@@ -1890,7 +1894,6 @@
             <button class="btn icon-btn" type="button" data-close>×</button>
           </div>
           <div class="modal-body">
-            ${key === "products" ? productAiPanel(row) : ""}
             <div class="catalog-form-layout">
               ${formGroups.map(group => `
                 <section class="catalog-form-section ${group.accent ? "accent" : ""}">
@@ -1911,7 +1914,6 @@
     document.querySelectorAll("[data-form-switch]").forEach(btn => btn.onclick = () => updateFormSwitch(btn));
     bindImageUploadFields();
     bindColorChoiceFields();
-    if (key === "products") bindProductAiPanel(row);
     document.getElementById("editorForm").onsubmit = (event) => saveRow(event, key, row.id);
   }
 
@@ -1921,18 +1923,19 @@
     const isEdit = Boolean(row.id);
     const resource = resources.products;
     const formGroups = groupedFields("products", resource.fields, row);
-    page.innerHTML = pageTitle(isEdit ? "edit" : "add", "", `
-      <button class="btn" type="button" id="backToProducts">${t("cancel")}</button>
-      <button class="btn primary" type="submit" form="editorForm">${t("save")}</button>
-    `);
-    page.innerHTML += `
+    const productTitle = isEdit
+      ? ui(`Edit: ${row.name_en || row.name_ar || `#${row.id}`}`, `تعديل: ${row.name_ar || row.name_en || `#${row.id}`}`)
+      : ui("Add new product", "إضافة منتج جديد");
+    page.innerHTML = `
+      <div class="product-editor-head">
+        <div><button class="btn back-link" type="button" id="backToProducts">${i("arrow-left")}${ui("Back to products", "العودة للمنتجات")}</button><span class="section-kicker">${isEdit ? `PRODUCT #${row.id}` : "NEW PRODUCT"}</span><h1>${escapeHtml(productTitle)}</h1><p>${ui("Manage the product, its exact sellable variants, media, and customer feedback from one place.", "أدر بيانات المنتج واختياراته القابلة للبيع وصوره وتقييماته من مكان واحد.")}</p></div>
+        <div class="product-editor-head-actions"><span class="product-draft-state" id="productDraftState">${ui("No unsaved changes", "لا توجد تعديلات غير محفوظة")}</span><button class="btn" type="button" id="cancelProduct">${t("cancel")}</button><button class="btn primary" type="submit" form="editorForm">${i("check")}${t("save")}</button></div>
+      </div>
       <form class="product-editor-page" id="editorForm">
-        ${productAiPanel(row)}
         <div class="catalog-form-layout">
           ${formGroups.map(group => `
-            <section class="catalog-form-section ${group.accent ? "accent" : ""}">
-              <div class="section-kicker">${group.kicker}</div>
-              <h3>${group.title}</h3>
+            <section class="catalog-form-section ${group.accent ? "accent" : ""}" id="${group.id || ""}">
+              <div class="product-section-heading"><div><span class="section-kicker">${group.kicker}</span><h3>${group.title}</h3>${group.description ? `<p>${group.description}</p>` : ""}</div>${group.action || ""}</div>
               <div class="form-grid ${group.single ? "single" : ""}">
                 ${group.fields.map(([name, labelKey, type, required]) => field(name, labelKey, type, row[name], required, "products")).join("")}
               </div>
@@ -1940,23 +1943,25 @@
             </section>
           `).join("")}
         </div>
-        ${row.id ? `<section class="catalog-form-section product-social-proof-link"><div><span class="section-kicker">REVIEWS</span><h3>${ui("Reviews & Social Proof", "التقييمات وSocial Proof")}</h3><p>${ui("Moderate customer feedback, add transparent store recommendations, and manage verified sales messaging for this product.", "راجع تقييمات العملاء وأضف توصيات متجر واضحة وتحكم في عرض المبيعات الموثقة لهذا المنتج.")}</p></div><button class="btn" type="button" id="openProductSocialProof">${i("star")}${ui("Open settings", "فتح الإعدادات")}</button></section>` : ""}
+        ${row.id ? productReviewsPanelShell(row) : `<section class="catalog-form-section product-editor-locked"><span>${i("star")}</span><div><h3>${ui("Reviews & social proof", "التقييمات وSocial Proof")}</h3><p>${ui("Save the product once, then its reviews and sales settings will be available here.", "احفظ المنتج أولًا، وبعدها ستظهر تقييماته وإعدادات المبيعات هنا.")}</p></div></section>`}
       </form>
     `;
-    document.getElementById("backToProducts").onclick = () => renderResource(page, "products");
+    const leave = () => renderResource(page, "products");
+    document.getElementById("backToProducts").onclick = document.getElementById("cancelProduct").onclick = leave;
     document.querySelectorAll("[data-form-switch]").forEach(btn => btn.onclick = () => updateFormSwitch(btn));
     bindImageUploadFields();
     bindColorChoiceFields();
     bindVariantBuilder();
-    bindGeneratedImageButtons();
-    bindProductAiPanel(row);
-    if (row.id) document.getElementById("openProductSocialProof").onclick = () => { state.reviewWorkspaceTab = "social"; state.socialProofProductId = row.id; location.hash = "reviewsRecommendations"; };
+    bindProductGallery(row);
+    bindProductInventory();
+    bindProductDirtyState();
+    if (row.id) loadProductReviewsPanel(row);
     document.getElementById("editorForm").onsubmit = (event) => saveRow(event, "products", row.id);
   }
 
   async function loadCatalogChoices() {
     await Promise.all([
-      ...["categories", "brands", "colors", "options"].map(key => state.rows[key]?.length ? Promise.resolve(state.rows[key]) : loadResource(key).catch(() => [])),
+      ...["categories", "brands", "colors", "options"].map(key => loadResource(key).catch(() => state.rows[key] || [])),
       loadProductShippingChoices()
     ]);
   }
@@ -1972,13 +1977,14 @@
     const pick = names => names.map(name => fieldMap[name]).filter(Boolean);
     if (key === "products") {
       return [
-        { kicker: "01", title: t("image"), accent: true, single: true, fields: pick(["main_photo_url"]) },
-        { kicker: "02", title: t("suggestedProductData"), fields: pick(["name_en", "name_ar", "slug", "sku", "barcode", "price", "sale_price", "cost", "stock", "is_active"]) },
-        { kicker: "03", title: t("catalog"), fields: pick(["category_slug", "brand_slug", "color", "options"]) },
-        { kicker: "04", title: ui("Shipping & fulfillment", "الشحن والتجهيز"), fields: pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
-        { kicker: "05", title: t("productVariants"), single: true, fields: [], extra: variantsField(row) },
-        { kicker: "06", title: t("shortDescription"), single: true, fields: pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
-        { kicker: "07", title: "SEO", single: true, fields: pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
+        { id:"productMediaSection", kicker:"01", title:ui("Product gallery", "معرض صور المنتج"), description:ui("All images remain a draft until you save the product.", "كل تغييرات الصور تظل مسودة حتى حفظ المنتج."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
+        { kicker:"02", title:ui("Product details", "بيانات المنتج"), description:ui("Names, codes, visibility, and storefront identity.", "الأسماء والأكواد وحالة الظهور في المتجر."), fields:pick(["name_en", "name_ar", "slug", "sku", "barcode", "is_active"]) },
+        { kicker:"03", title:ui("Pricing & inventory", "السعر والمخزون"), description:ui("Choose an explicit stock mode instead of relying on an empty quantity.", "اختر حالة مخزون واضحة بدل الاعتماد على حقل كمية فارغ."), fields:pick(["price", "sale_price", "cost"]), extra:productInventoryField(row) },
+        { kicker:"04", title:t("catalog"), description:ui("Current linked values stay visible even when a catalog item is inactive.", "تظل القيم المرتبطة حاليًا ظاهرة حتى لو كان عنصر الكتالوج غير نشط."), fields:pick(["category_slug", "brand_slug", "color", "options"]) },
+        { kicker:"05", title:t("productVariants"), description:ui("Each row is one exact sellable color, option, or combination.", "كل سطر يمثل لونًا أو خيارًا أو تركيبة قابلة للبيع."), single:true, fields:[], extra:variantsField(row) },
+        { kicker:"06", title:ui("Shipping & fulfillment", "الشحن والتجهيز"), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
+        { kicker:"07", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
+        { kicker:"08", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
       ];
     }
     if (key === "categories" || key === "brands") {
@@ -2059,17 +2065,22 @@
   }
 
   function choiceSelectField(name, labelKey, value = "", rows = [], kind = "") {
-    const choices = rows.filter(row => row.is_active !== false && row.isActive !== false);
     const current = String(value || "");
+    const aliases = row => [row.slug, row.id, row.name_en, row.nameEn, row.name_ar, row.nameAr].filter(item => item !== undefined && item !== null).map(item => String(item).toLowerCase());
+    const currentRow = rows.find(row => aliases(row).includes(current.toLowerCase()));
+    const choices = rows.filter(row => row.is_active !== false && row.isActive !== false || row === currentRow);
     return `
       <div class="field">
         <label>${t(labelKey)}</label>
         <select name="${name}" data-choice-kind="${kind}">
           <option value="">-</option>
+          ${current && !currentRow ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} · ${ui("Current legacy value", "القيمة الحالية القديمة")}</option>` : ""}
           ${choices.map(row => {
             const slug = row.slug || slugFromText(row.name_en || row.nameEn || row.name_ar || row.nameAr);
             const label = [row.name_en || row.nameEn, row.name_ar || row.nameAr].filter(Boolean).join(" / ");
-            return `<option value="${escapeHtml(slug)}" ${String(slug) === current ? "selected" : ""}>${escapeHtml(label || slug)}</option>`;
+            const selected = row === currentRow || String(slug).toLowerCase() === current.toLowerCase();
+            const inactive = row.is_active === false || row.isActive === false;
+            return `<option value="${escapeHtml(slug)}" ${selected ? "selected" : ""}>${escapeHtml(label || slug)}${inactive ? ` · ${ui("Inactive", "غير نشط")}` : ""}</option>`;
           }).join("")}
         </select>
       </div>
@@ -2078,24 +2089,32 @@
 
   function colorChoiceField(name, labelKey, value = "", rows = []) {
     const current = String(value || "").toLowerCase();
-    const choices = rows.filter(row => row.is_active !== false && row.isActive !== false);
+    const matches = row => [row.color, row.hex, row.slug, row.name_en, row.nameEn, row.name_ar, row.nameAr].filter(Boolean).some(item => String(item).toLowerCase() === current);
+    const currentRow = rows.find(matches);
+    const choices = rows.filter(row => row.is_active !== false && row.isActive !== false || row === currentRow);
+    const selectedLabel = currentRow ? (currentRow.name_en || currentRow.nameEn || currentRow.name_ar || currentRow.nameAr || currentRow.color) : value;
+    const selectedHex = currentRow?.color || currentRow?.hex || "#d7dae0";
     return `
-      <div class="field full">
+      <div class="field full catalog-color-field">
         <label>${t(labelKey)}</label>
         <input type="hidden" name="${name}" value="${escapeHtml(value || "")}" data-color-value />
-        <div class="color-choice-grid">
+        <details class="color-choice-popover">
+          <summary><span class="catalog-color-summary-swatch" style="background:${escapeHtml(selectedHex)}"></span><strong>${escapeHtml(selectedLabel || ui("Choose a color", "اختر لونًا"))}</strong><small>${choices.length} ${ui("available", "متاح")}</small>${i("chevron-down")}</summary>
+          <div class="color-choice-grid">
           ${choices.map(row => {
             const hex = row.color || row.hex || "#d7dae0";
             const label = row.name_en || row.nameEn || row.name_ar || row.nameAr || hex;
-            const selected = current && [String(hex).toLowerCase(), String(label).toLowerCase()].includes(current);
+            const selected = row === currentRow || current && [String(hex).toLowerCase(), String(label).toLowerCase()].includes(current);
+            const inactive = row.is_active === false || row.isActive === false;
             return `
-              <button class="color-choice ${selected ? "selected" : ""}" type="button" data-color-choice="${escapeHtml(label)}">
+              <button class="color-choice ${selected ? "selected" : ""}" type="button" data-color-choice="${escapeHtml(label)}" data-color-hex="${escapeHtml(hex)}">
                 <span style="background:${escapeHtml(hex)}"></span>
-                <strong>${escapeHtml(label)}</strong>
+                <strong>${escapeHtml(label)}${inactive ? ` · ${ui("Inactive", "غير نشط")}` : ""}</strong>
               </button>
             `;
           }).join("") || `<span class="muted small">${t("noRows")}</span>`}
-        </div>
+          </div>
+        </details>
       </div>
     `;
   }
@@ -2109,6 +2128,48 @@
     } catch {
       return [];
     }
+  }
+
+  function productInventoryField(row = {}) {
+    const mode = ["unlimited", "tracked", "out_of_stock"].includes(row.inventory_mode)
+      ? row.inventory_mode
+      : row.stock === null || row.stock === undefined || row.stock === "" ? "unlimited" : Number(row.stock) <= 0 ? "out_of_stock" : "tracked";
+    return `<div class="product-inventory-control" data-product-inventory>
+      <input type="hidden" name="inventory_mode" value="${mode}" />
+      <input type="hidden" name="stock" value="${mode === "tracked" ? Number(row.stock || 1) : mode === "out_of_stock" ? 0 : ""}" />
+      <div class="inventory-mode-grid" role="radiogroup" aria-label="${ui("Inventory mode", "حالة المخزون")}">
+        ${[["unlimited","infinity",ui("Unlimited", "غير محدود"),ui("Always available", "متاح دائمًا")],["tracked","boxes",ui("Track quantity", "تتبع كمية"),ui("Stop at zero", "يتوقف عند نفاد العدد")],["out_of_stock","circle-x",ui("Out of stock", "نافد"),ui("Visible but cannot be purchased", "ظاهر ولا يمكن شراؤه")]].map(([value,icon,title,hint]) => `<button class="inventory-mode-card ${mode === value ? "selected" : ""}" type="button" data-inventory-mode="${value}" role="radio" aria-checked="${mode === value}">${i(icon)}<span><strong>${title}</strong><small>${hint}</small></span></button>`).join("")}
+      </div>
+      <label class="inventory-quantity" ${mode === "tracked" ? "" : "hidden"}><span>${ui("Available quantity", "الكمية المتاحة")}</span><input type="number" min="1" step="1" value="${Math.max(1, Number(row.stock || 1))}" data-inventory-quantity /></label>
+    </div>`;
+  }
+
+  function productGalleryValues(row = {}) {
+    const side = Array.from(new Set([
+      ...parseJsonArray(row.side_photos),
+      ...parseJsonArray(row.gallery),
+      ...parseJsonArray(row.images)
+    ].map((entry) => typeof entry === "string" ? entry : entry?.url).filter(Boolean)));
+    return {
+      main:String(row.main_photo_url || row.image_url || ""),
+      side,
+      generated:parseJsonArray(row.generated_images)
+    };
+  }
+
+  function productGalleryField(row = {}) {
+    const media = productGalleryValues(row);
+    return `<div class="product-media-editor" data-product-media-editor>
+      <input type="hidden" name="main_photo_url" value="${escapeHtml(media.main)}" data-product-main-image />
+      <input type="hidden" name="side_photos" value="${escapeHtml(JSON.stringify(media.side))}" data-product-side-images />
+      <input type="hidden" name="generated_images" value="${escapeHtml(JSON.stringify(media.generated))}" data-generated-images-value />
+      <div class="product-media-toolbar"><label class="btn primary">${i("upload")}${ui("Upload images", "رفع صور")}<input type="file" accept="image/*" multiple data-product-gallery-upload /></label><span>${ui("Choose a main image, inspect usage, or unlink an image. Nothing is attached until Save.", "اختر الصورة الرئيسية أو راجع ارتباطاتها أو أزل ربطها. لن يعتمد شيء قبل الحفظ.")}</span></div>
+      <div class="product-media-grid" id="productMediaGrid"></div>
+    </div>`;
+  }
+
+  function productReviewsPanelShell(row = {}) {
+    return `<section class="catalog-form-section product-reviews-inline" id="productReviewsSection"><div class="product-section-heading"><div><span class="section-kicker">09</span><h3>${ui("Reviews & social proof", "التقييمات وSocial Proof")}</h3><p>${ui("Only feedback and settings for this product are shown here.", "تظهر هنا تقييمات وإعدادات هذا المنتج فقط.")}</p></div><button class="btn" type="button" id="openFullReviews">${i("external-link")}${ui("Full review center", "مركز التقييمات الكامل")}</button></div><div class="product-reviews-body" id="productReviewsBody"><div class="review-loading">${i("refresh")} ${ui("Loading product feedback…", "جاري تحميل تقييمات المنتج…")}</div></div></section>`;
   }
 
   function variantsField(row = {}) {
@@ -2134,12 +2195,24 @@
     const type = variant.type || (variant.color && variant.option ? "color_option" : variant.color ? "color" : "option");
     const active = variant.is_active !== false && variant.isActive !== false && variant.active !== false;
     const inStock = variant.is_in_stock !== false && variant.in_stock !== false && variant.stock_status !== "out_of_stock";
+    const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(variant.inventory_mode)
+      ? variant.inventory_mode
+      : !inStock ? "out_of_stock" : variant.stock === "" || variant.stock === null || variant.stock === undefined ? "unlimited" : "tracked";
+    const colorMatches = item => [item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.color,item.hex].filter(Boolean).some(value => String(value).toLowerCase() === String(variant.color || "").toLowerCase());
+    const selectedOptionValue = String(variant.value || variant.option || "");
+    const optionMatches = item => [item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.id].filter(Boolean).some(value => String(value).toLowerCase() === selectedOptionValue.toLowerCase());
+    const matchedOption = options.find(optionMatches);
+    const selectedOptionGroup = matchedOption
+      ? (matchedOption.groupEn || matchedOption.group_en || matchedOption.groupAr || matchedOption.group_ar || variant.option || "")
+      : (variant.option || "");
     return `
       <div class="variant-row">
         <input type="hidden" data-variant-field="type" value="${escapeHtml(type)}" />
         <input type="hidden" data-variant-field="is_active" value="${active ? "true" : "false"}" />
         <input type="hidden" data-variant-field="is_in_stock" value="${inStock ? "true" : "false"}" />
+        <input type="hidden" data-variant-field="inventory_mode" value="${inventoryMode}" />
         <input type="hidden" data-variant-field="image_url" value="${escapeHtml(variant.image_url || "")}" />
+        <input type="hidden" data-variant-field="option" value="${escapeHtml(selectedOptionGroup)}" />
         <div class="variant-kind">
           <span>${t("variantType")}</span>
           <strong>${type === "color" ? t("colors") : type === "option" ? t("options") : `${t("colors")} + ${t("options")}`}</strong>
@@ -2147,25 +2220,29 @@
         <div class="variant-image-upload">
           <span>${t("image")}</span>
           <div class="variant-image-box">
-            <div class="variant-image-preview">${variant.image_url ? `<img src="${escapeHtml(variant.image_url)}" alt="" />` : i("image")}</div>
-            <input type="file" accept="image/*" data-variant-image-upload />
+            <button class="variant-image-preview" type="button" data-open-variant-image ${variant.image_url ? "" : "disabled"}>${variant.image_url ? `<img src="${escapeHtml(variant.image_url)}" alt="" />` : i("image")}</button>
+            <div class="variant-image-actions"><label class="btn icon-btn" title="${ui("Replace image", "استبدال الصورة")}">${i("upload")}<input type="file" accept="image/*" data-variant-image-upload /></label><button class="btn icon-btn danger" type="button" data-remove-variant-image title="${ui("Remove image", "إزالة الصورة")}" ${variant.image_url ? "" : "disabled"}>${i("trash")}</button></div>
           </div>
         </div>
         <label><span>${t("colors")}</span><select data-variant-field="color" ${type === "option" ? "disabled" : ""}>
           <option value="">-</option>
+          ${variant.color && !colors.some(colorMatches) ? `<option value="${escapeHtml(variant.color)}" selected>${escapeHtml(variant.color)} · ${ui("Current value", "القيمة الحالية")}</option>` : ""}
           ${colors.map(row => {
             const label = row.name_en || row.nameEn || row.name_ar || row.nameAr || row.color;
-            return `<option value="${escapeHtml(label)}" ${String(variant.color || "") === String(label) ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            const hex = row.color || row.hex || "#d7dae0";
+            return `<option value="${escapeHtml(label)}" ${colorMatches(row) ? "selected" : ""}>● ${escapeHtml(label)} · ${escapeHtml(hex)}</option>`;
           }).join("")}
         </select></label>
-        <label><span>${t("options")}</span><select data-variant-field="option" ${type === "color" ? "disabled" : ""}>
+        <label><span>${ui("Option choice", "اختيار الخيار")}</span><select data-variant-option-choice ${type === "color" ? "disabled" : ""}>
           <option value="">-</option>
+          ${selectedOptionValue && !options.some(optionMatches) ? `<option value="${escapeHtml(selectedOptionValue)}" selected>${escapeHtml(selectedOptionValue)} · ${ui("Current value", "القيمة الحالية")}</option>` : ""}
           ${options.map(row => {
             const label = row.name_en || row.nameEn || row.name_ar || row.nameAr;
-            return `<option value="${escapeHtml(label)}" ${String(variant.option || "") === String(label) ? "selected" : ""}>${escapeHtml(label)}</option>`;
+            const group = row.groupEn || row.group_en || row.groupAr || row.group_ar || variant.option || "";
+            return `<option value="${escapeHtml(label)}" data-option-group="${escapeHtml(group)}" ${optionMatches(row) ? "selected" : ""}>${escapeHtml(label)}</option>`;
           }).join("")}
         </select></label>
-        <label><span>${t("optionValue")}</span><input data-variant-field="value" value="${escapeHtml(variant.value || "")}" ${type === "color" ? "disabled" : ""} /></label>
+        <label><span>${ui("Selected value", "القيمة المختارة")}</span><input data-variant-field="value" value="${escapeHtml(variant.value || variant.option || "")}" ${type === "color" ? "disabled" : ""} /></label>
         <label><span>${t("sku")}</span><input data-variant-field="sku" value="${escapeHtml(variant.sku || "")}" /></label>
         <label><span>${t("barcode")}</span><input data-variant-field="barcode" value="${escapeHtml(variant.barcode || "")}" /></label>
         <label><span>${t("price")}</span><input data-variant-field="price" type="number" step="0.01" value="${variant.price ?? ""}" /></label>
@@ -2173,7 +2250,8 @@
         <label><span>${t("cost")}</span><input data-variant-field="cost" type="number" step="0.01" value="${variant.cost ?? ""}" /></label>
         <label><span>${t("priceAdjustment")}</span><input data-variant-field="price_adjustment" type="number" step="0.01" value="${Number(variant.price_adjustment || 0)}" /></label>
         <label><span>${t("weightKg")}</span><input data-variant-field="weight" type="number" min="0" step="0.01" value="${variant.weight ?? ""}" /></label>
-        <label><span>${t("stock")}</span><input data-variant-field="stock" type="number" value="${variant.stock ?? ""}" /></label>
+        <label><span>${ui("Inventory", "المخزون")}</span><select data-variant-inventory-mode><option value="unlimited" ${inventoryMode === "unlimited" ? "selected" : ""}>${ui("Unlimited", "غير محدود")}</option><option value="tracked" ${inventoryMode === "tracked" ? "selected" : ""}>${ui("Track quantity", "تتبع كمية")}</option><option value="out_of_stock" ${inventoryMode === "out_of_stock" ? "selected" : ""}>${ui("Out of stock", "نافد")}</option></select></label>
+        <label data-variant-stock-wrap ${inventoryMode === "tracked" ? "" : "hidden"}><span>${t("stock")}</span><input data-variant-field="stock" type="number" min="1" value="${inventoryMode === "tracked" ? Math.max(1, Number(variant.stock || 1)) : ""}" /></label>
         <div class="variant-switch">
           ${switchButton({ field: "variant_is_active", value: active, id: "", label: true })}
         </div>
@@ -2201,10 +2279,19 @@
         return item;
       }).filter(item => item.color || item.option || item.value || item.sku || item.barcode || item.image_url || item.price || item.compare_at_price || item.cost || item.price_adjustment || item.weight || item.stock);
       const hidden = document.querySelector("[data-variants-value]");
-      if (hidden) hidden.value = JSON.stringify(rows);
+      if (hidden) { hidden.value = JSON.stringify(rows); hidden.dispatchEvent(new Event("input", { bubbles:true })); }
     };
     const rebind = () => {
       list.querySelectorAll("[data-variant-field]").forEach(input => input.oninput = sync);
+      list.querySelectorAll("[data-variant-option-choice]").forEach(select => select.onchange = () => {
+        const row = select.closest(".variant-row");
+        const selected = select.selectedOptions[0];
+        const option = row?.querySelector("[data-variant-field='option']");
+        const value = row?.querySelector("[data-variant-field='value']");
+        if (option) option.value = selected?.dataset.optionGroup || option.value || "";
+        if (value) value.value = select.value;
+        sync();
+      });
       list.querySelectorAll("[data-form-switch='variant_is_active']").forEach(btn => {
         btn.onclick = () => {
           updateFormSwitch(btn);
@@ -2216,8 +2303,15 @@
       list.querySelectorAll("[data-form-switch='variant_in_stock']").forEach(btn => {
         btn.onclick = () => {
           updateFormSwitch(btn);
-          const hidden = btn.closest(".variant-row")?.querySelector("[data-variant-field='is_in_stock']");
+          const row = btn.closest(".variant-row");
+          const hidden = row?.querySelector("[data-variant-field='is_in_stock']");
           if (hidden) hidden.value = btn.dataset.switchValue;
+          const mode = row?.querySelector("[data-variant-field='inventory_mode']");
+          const modeSelect = row?.querySelector("[data-variant-inventory-mode]");
+          if (btn.dataset.switchValue === "false") { if (mode) mode.value = "out_of_stock"; if (modeSelect) modeSelect.value = "out_of_stock"; }
+          else if (mode?.value === "out_of_stock") { mode.value = "unlimited"; if (modeSelect) modeSelect.value = "unlimited"; }
+          const stockWrap = row?.querySelector("[data-variant-stock-wrap]");
+          if (stockWrap) stockWrap.hidden = mode?.value !== "tracked";
           sync();
         };
       });
@@ -2226,6 +2320,35 @@
           btn.closest(".variant-row")?.remove();
           sync();
         };
+      });
+      list.querySelectorAll("[data-variant-inventory-mode]").forEach(select => {
+        select.onchange = () => {
+          const row = select.closest(".variant-row");
+          const mode = select.value;
+          const modeInput = row?.querySelector("[data-variant-field='inventory_mode']");
+          const inStockInput = row?.querySelector("[data-variant-field='is_in_stock']");
+          const stockWrap = row?.querySelector("[data-variant-stock-wrap]");
+          const stockInput = row?.querySelector("[data-variant-field='stock']");
+          if (modeInput) modeInput.value = mode;
+          if (inStockInput) inStockInput.value = mode === "out_of_stock" ? "false" : "true";
+          if (stockWrap) stockWrap.hidden = mode !== "tracked";
+          if (stockInput) stockInput.value = mode === "tracked" ? Math.max(1, Number(stockInput.value || 1)) : "";
+          sync();
+        };
+      });
+      list.querySelectorAll("[data-open-variant-image]").forEach(btn => btn.onclick = () => {
+        const url = btn.closest(".variant-row")?.querySelector("[data-variant-field='image_url']")?.value;
+        if (url) openProductMediaViewer(url, [{ label:ui("Product variant", "متغير المنتج"), detail:ui("This image is linked to this exact option row.", "هذه الصورة مرتبطة بسطر الخيار المحدد.") }]);
+      });
+      list.querySelectorAll("[data-remove-variant-image]").forEach(btn => btn.onclick = () => {
+        const row = btn.closest(".variant-row");
+        const hidden = row?.querySelector("[data-variant-field='image_url']");
+        const preview = row?.querySelector(".variant-image-preview");
+        if (hidden) hidden.value = "";
+        if (preview) { preview.innerHTML = i("image"); preview.disabled = true; }
+        btn.disabled = true;
+        sync();
+        renderProductGallery();
       });
       list.querySelectorAll("[data-variant-image-upload]").forEach(input => {
         input.onchange = async () => {
@@ -2240,8 +2363,11 @@
             const data = await api("/api/admin/upload/single", { method: "POST", body: form });
             const url = data.url || data.fileUrl || data.path;
             if (hidden) hidden.value = url;
-            if (preview) preview.innerHTML = `<img src="${escapeHtml(url)}" alt="" />`;
+            if (preview) { preview.innerHTML = `<img src="${escapeHtml(url)}" alt="" />`; preview.disabled = false; }
+            const remove = row?.querySelector("[data-remove-variant-image]");
+            if (remove) remove.disabled = false;
             sync();
+            renderProductGallery();
             toast(t("uploadImages"));
           } catch (error) {
             toast(error.message, "error");
@@ -2334,9 +2460,148 @@
         field?.querySelectorAll(".color-choice").forEach(item => item.classList.remove("selected"));
         btn.classList.add("selected");
         const hidden = field?.querySelector("[data-color-value]");
-        if (hidden) hidden.value = btn.dataset.colorChoice || "";
+        if (hidden) { hidden.value = btn.dataset.colorChoice || ""; hidden.dispatchEvent(new Event("input", { bubbles:true })); }
+        const summary = field?.querySelector(".color-choice-popover summary");
+        if (summary) summary.innerHTML = `<span class="catalog-color-summary-swatch" style="background:${escapeHtml(btn.dataset.colorHex || "#d7dae0")}"></span><strong>${escapeHtml(btn.dataset.colorChoice || "")}</strong><small>${ui("Selected", "مختار")}</small>${i("chevron-down")}`;
+        field?.querySelector("details")?.removeAttribute("open");
       };
     });
+  }
+
+  function bindProductInventory() {
+    const root = document.querySelector("[data-product-inventory]");
+    if (!root) return;
+    const modeInput = root.querySelector('[name="inventory_mode"]');
+    const stockInput = root.querySelector('[name="stock"]');
+    const quantity = root.querySelector("[data-inventory-quantity]");
+    const quantityWrap = root.querySelector(".inventory-quantity");
+    const choose = mode => {
+      modeInput.value = mode;
+      stockInput.value = mode === "tracked" ? Math.max(1, Number(quantity.value || 1)) : mode === "out_of_stock" ? 0 : "";
+      quantityWrap.hidden = mode !== "tracked";
+      root.querySelectorAll("[data-inventory-mode]").forEach(button => { const active = button.dataset.inventoryMode === mode; button.classList.toggle("selected", active); button.setAttribute("aria-checked", String(active)); });
+      modeInput.dispatchEvent(new Event("input", { bubbles:true }));
+    };
+    root.querySelectorAll("[data-inventory-mode]").forEach(button => button.onclick = () => choose(button.dataset.inventoryMode));
+    quantity.oninput = () => { stockInput.value = Math.max(1, Number(quantity.value || 1)); stockInput.dispatchEvent(new Event("input", { bubbles:true })); };
+  }
+
+  function productMediaEntries() {
+    const main = document.querySelector("[data-product-main-image]")?.value || "";
+    const side = parseJsonArray(document.querySelector("[data-product-side-images]")?.value);
+    const generated = parseJsonArray(document.querySelector("[data-generated-images-value]")?.value);
+    const variantRows = [...document.querySelectorAll(".variant-row")];
+    const map = new Map();
+    const add = (url, source, detail = "") => {
+      if (!url) return;
+      if (!map.has(url)) map.set(url, { url, sources:[] });
+      map.get(url).sources.push({ source, detail });
+    };
+    add(main, "main", ui("Main storefront image", "الصورة الرئيسية في المتجر"));
+    side.forEach((url, index) => add(url, "gallery", `${ui("Gallery image", "صورة معرض")} ${index + 1}`));
+    generated.forEach((url, index) => add(url, "generated", `${ui("AI generated archive", "أرشيف الصور المولدة")} ${index + 1}`));
+    variantRows.forEach((variant, index) => { const url = variant.querySelector("[data-variant-field='image_url']")?.value; const color = variant.querySelector("[data-variant-field='color']")?.value; const option = variant.querySelector("[data-variant-field='option']")?.value; const value = variant.querySelector("[data-variant-field='value']")?.value; add(url, "variant", [ui("Variant", "متغير"), color, option, value].filter(Boolean).join(" · ") || `#${index + 1}`); });
+    return [...map.values()];
+  }
+
+  function renderProductGallery() {
+    const grid = document.getElementById("productMediaGrid");
+    if (!grid) return;
+    const entries = productMediaEntries();
+    grid.innerHTML = entries.length ? entries.map(entry => {
+      const isMain = entry.sources.some(item => item.source === "main");
+      const libraryUsage = state.productGalleryUsage?.[entry.url]?.usage || [];
+      const labels = [...new Set(entry.sources.map(item => ({ main:ui("Main", "رئيسية"), gallery:ui("Gallery", "معرض"), generated:ui("Generated", "مولدة"), variant:ui("Variant", "متغير") }[item.source])))];
+      return `<article class="product-media-card" data-product-media-url="${escapeHtml(entry.url)}"><button class="product-media-preview" type="button" data-view-product-media><img src="${escapeHtml(entry.url)}" alt="" loading="lazy" />${isMain ? `<span>${ui("Main image", "الصورة الرئيسية")}</span>` : ""}</button><div class="product-media-meta"><div>${labels.map(label => `<span>${label}</span>`).join("")}${libraryUsage.length ? `<span>${libraryUsage.length} ${ui("system links", "ارتباط بالنظام")}</span>` : ""}</div><small>${escapeHtml(entry.url.split("/").pop() || entry.url)}</small></div><div class="product-media-actions"><button class="btn icon-btn" type="button" data-media-info title="${ui("Image information", "معلومات الصورة")}">${i("info")}</button>${isMain ? "" : `<button class="btn" type="button" data-set-main-media>${ui("Set as main", "تعيين رئيسية")}</button>`}<button class="btn icon-btn danger" type="button" data-unlink-media title="${ui("Unlink from product", "إزالة الربط بالمنتج")}">${i("trash")}</button></div></article>`;
+    }).join("") : `<div class="product-media-empty">${i("image")}<strong>${ui("No product images yet", "لا توجد صور للمنتج")}</strong><p>${ui("Upload one or more images. The first image becomes the main image.", "ارفع صورة أو أكثر، وستصبح الأولى هي الصورة الرئيسية.")}</p></div>`;
+    grid.querySelectorAll("[data-product-media-url]").forEach(card => {
+      const url = card.dataset.productMediaUrl;
+      const entry = entries.find(item => item.url === url);
+      const localUsage = entry.sources.map(item => ({ label:({ main:ui("Main image", "صورة رئيسية"), gallery:ui("Product gallery", "معرض المنتج"), generated:ui("Generated image", "صورة مولدة"), variant:ui("Product variant", "متغير منتج") }[item.source]), detail:item.detail }));
+      const systemUsage = (state.productGalleryUsage?.[url]?.usage || []).map(item => ({ label:`${item.entity} #${item.id}`, detail:item.label || "" }));
+      card.querySelector("[data-view-product-media]").onclick = () => openProductMediaViewer(url, [...localUsage, ...systemUsage]);
+      card.querySelector("[data-media-info]").onclick = () => openProductMediaViewer(url, [...localUsage, ...systemUsage]);
+      card.querySelector("[data-set-main-media]")?.addEventListener("click", () => { const hidden = document.querySelector("[data-product-main-image]"); hidden.value = url; hidden.dispatchEvent(new Event("input", { bubbles:true })); renderProductGallery(); });
+      card.querySelector("[data-unlink-media]").onclick = () => unlinkProductMedia(url);
+    });
+  }
+
+  function unlinkProductMedia(url) {
+    const main = document.querySelector("[data-product-main-image]");
+    const side = document.querySelector("[data-product-side-images]");
+    const generated = document.querySelector("[data-generated-images-value]");
+    if (main?.value === url) main.value = "";
+    if (side) side.value = JSON.stringify(parseJsonArray(side.value).filter(item => item !== url));
+    if (generated) generated.value = JSON.stringify(parseJsonArray(generated.value).filter(item => item !== url));
+    document.querySelectorAll(".variant-row").forEach(row => { const hidden = row.querySelector("[data-variant-field='image_url']"); if (hidden?.value === url) { hidden.value = ""; const preview = row.querySelector(".variant-image-preview"); if (preview) { preview.innerHTML = i("image"); preview.disabled = true; } row.querySelector("[data-remove-variant-image]").disabled = true; } });
+    main?.dispatchEvent(new Event("input", { bubbles:true }));
+    document.querySelector("[data-variants-value]")?.dispatchEvent(new Event("input", { bubbles:true }));
+    renderProductGallery();
+  }
+
+  function openProductMediaViewer(url, usage = []) {
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop product-media-viewer-backdrop"><div class="modal product-media-viewer" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>${ui("Image details", "تفاصيل الصورة")}</h2><p class="muted">${escapeHtml(url)}</p></div><button class="btn icon-btn" type="button" data-close-media-viewer aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><img src="${escapeHtml(url)}" alt="" /><div class="product-media-usage"><h3>${ui("Linked inside this product", "مرتبطة داخل المنتج بـ")}</h3>${usage.length ? usage.map(item => `<div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail || "")}</span></div>`).join("") : `<p>${ui("No active link in this draft.", "لا يوجد ارتباط نشط في هذه المسودة.")}</p>`}</div></div><div class="modal-foot"><button class="btn" type="button" data-close-media-viewer>${t("close")}</button></div></div></div>`);
+    const backdrop = document.querySelector(".product-media-viewer-backdrop");
+    backdrop.querySelectorAll("[data-close-media-viewer]").forEach(button => button.onclick = () => backdrop.remove());
+  }
+
+  async function bindProductGallery() {
+    const input = document.querySelector("[data-product-gallery-upload]");
+    if (!input) return;
+    input.onchange = async () => {
+      if (!input.files?.length) return;
+      const form = new FormData();
+      [...input.files].forEach(file => form.append("files", file));
+      input.disabled = true;
+      try {
+        const data = await api("/api/admin/image-gallery/upload", { method:"POST", body:form });
+        const urls = (data.images || []).map(image => image.url || image.fileUrl || image.path).filter(Boolean);
+        const main = document.querySelector("[data-product-main-image]");
+        const side = document.querySelector("[data-product-side-images]");
+        const currentSide = parseJsonArray(side.value);
+        urls.forEach(url => { if (!main.value) main.value = url; else if (!currentSide.includes(url) && main.value !== url) currentSide.push(url); });
+        side.value = JSON.stringify(currentSide);
+        main.dispatchEvent(new Event("input", { bubbles:true }));
+        renderProductGallery();
+        toast(ui(`${urls.length} image(s) added to the draft`, `تمت إضافة ${urls.length} صورة للمسودة`));
+      } catch (error) { toast(error.message, "error"); } finally { input.disabled = false; input.value = ""; }
+    };
+    renderProductGallery();
+    try {
+      const payload = await api("/api/admin/image-gallery");
+      state.productGalleryUsage = Object.fromEntries((payload.images || []).map(image => [image.url, image]));
+      renderProductGallery();
+    } catch {}
+  }
+
+  function bindProductDirtyState() {
+    const form = document.getElementById("editorForm");
+    const stateNode = document.getElementById("productDraftState");
+    if (!form || !stateNode) return;
+    const mark = () => { stateNode.textContent = ui("Unsaved draft", "مسودة غير محفوظة"); stateNode.classList.add("is-dirty"); };
+    form.addEventListener("input", mark);
+    form.addEventListener("change", mark);
+  }
+
+  async function loadProductReviewsPanel(row) {
+    const body = document.getElementById("productReviewsBody");
+    if (!body) return;
+    document.getElementById("openFullReviews").onclick = () => { state.socialProofProductId = row.id; state.reviewWorkspaceTab = "reviews"; location.hash = "reviewsRecommendations"; };
+    try {
+      const [reviewPayload, socialPayload] = await Promise.all([api(`/api/admin/reviews?product_id=${row.id}&limit=500`), api(`/api/admin/products/${row.id}/social-proof`)]);
+      const reviews = reviewRows(reviewPayload);
+      const customer = reviews.filter(item => item.source === "customer");
+      const recommendations = reviews.filter(item => item.source === "store");
+      const settings = socialPayload.settings || socialPayload.social_proof || socialPayload;
+      const pending = customer.filter(item => (item.status || "pending") === "pending").length;
+      body.innerHTML = `<div class="product-review-metrics"><article><strong>${customer.length}</strong><span>${ui("Customer reviews", "تقييمات العملاء")}</span></article><article class="${pending ? "attention" : ""}"><strong>${pending}</strong><span>${ui("Pending", "بانتظار الموافقة")}</span></article><article><strong>${Number(socialPayload.aggregate?.average || 0).toFixed(1)}</strong><span>${ui("Average rating", "متوسط التقييم")}</span></article><article><strong>${recommendations.length}</strong><span>${ui("Store recommendations", "توصيات المتجر")}</span></article></div>
+        <div class="product-review-layout"><div class="product-review-queue"><div class="product-inline-subhead"><h4>${ui("Latest feedback", "أحدث التقييمات")}</h4><span>${customer.length}</span></div>${customer.length ? customer.map(item => `<article><div><strong>${escapeHtml(reviewCustomerName(item))}</strong>${reviewStars(item.rating, true)}<p>${escapeHtml(item.comment || ui("No written comment", "بدون تعليق مكتوب"))}</p><small>${reviewStatusLabel(item.status)} · ${formatDateTime(item.created_at)}</small></div><div>${item.status !== "published" ? `<button class="btn primary" type="button" data-inline-review-status="published" data-review-id="${item.id}">${i("check")}${ui("Publish", "نشر")}</button>` : `<button class="btn" type="button" data-inline-review-status="hidden" data-review-id="${item.id}">${ui("Hide", "إخفاء")}</button>`}<button class="btn icon-btn danger" type="button" data-inline-delete-review="${item.id}" title="${t("delete")}">${i("trash")}</button></div></article>`).join("") : `<div class="review-empty compact"><h3>${ui("No reviews for this product", "لا توجد تقييمات لهذا المنتج")}</h3></div>`}</div>
+        <div class="product-social-inline" id="productSocialInline"><div class="product-inline-subhead"><h4>Social Proof</h4><span>${ui("Product only", "هذا المنتج")}</span></div>${[["reviews_enabled",ui("Show reviews", "عرض التقييمات")],["accepting_reviews",ui("Accept new reviews", "قبول تقييمات جديدة")],["show_rating_summary",ui("Show rating summary", "عرض ملخص التقييم")],["show_sales",ui("Show sales count", "عرض عدد المبيعات")]].map(([name,label]) => `<div class="editor-toggle-row"><strong>${label}</strong>${switchButton({ field:name, value:settings[name] !== false, label:false })}</div>`).join("")}<button class="btn primary" type="button" id="saveProductSocialInline">${i("check")}${ui("Save settings", "حفظ الإعدادات")}</button></div></div>`;
+      body.querySelectorAll("[data-form-switch]").forEach(button => button.onclick = () => updateFormSwitch(button));
+      body.querySelectorAll("[data-inline-review-status]").forEach(button => button.onclick = async () => { button.disabled = true; try { await api(`/api/admin/reviews/${button.dataset.reviewId}`, { method:"PATCH", body:JSON.stringify({ status:button.dataset.inlineReviewStatus }) }); toast(t("updated")); loadProductReviewsPanel(row); } catch(error) { toast(error.message,"error"); button.disabled=false; } });
+      body.querySelectorAll("[data-inline-delete-review]").forEach(button => button.onclick = async () => { if (!confirm(ui("Delete this customer review?", "حذف تقييم العميل؟"))) return; await api(`/api/admin/reviews/${button.dataset.inlineDeleteReview}`, { method:"DELETE" }); toast(t("deleted")); loadProductReviewsPanel(row); });
+      document.getElementById("saveProductSocialInline").onclick = async event => { const button = event.currentTarget; const panel = document.getElementById("productSocialInline"); const enabled = name => panel.querySelector(`[data-form-switch="${name}"]`)?.dataset.switchValue === "true"; const payload = { ...settings, reviews_enabled:enabled("reviews_enabled"), accepting_reviews:enabled("accepting_reviews"), show_rating_summary:enabled("show_rating_summary"), show_sales:enabled("show_sales") }; button.disabled = true; try { await api(`/api/admin/products/${row.id}/social-proof`, { method:"PUT", body:JSON.stringify(payload) }); toast(t("saved")); } catch (error) { toast(error.message, "error"); } finally { button.disabled = false; } };
+    } catch (error) { body.innerHTML = `<div class="review-empty"><h3>${ui("Could not load product feedback", "تعذر تحميل تقييمات المنتج")}</h3><p>${escapeHtml(error.message)}</p><button class="btn" type="button" id="retryProductReviews">${ui("Try again", "إعادة المحاولة")}</button></div>`; document.getElementById("retryProductReviews").onclick = () => loadProductReviewsPanel(row); }
   }
 
   async function analyzeProductInEditor(row = {}) {
@@ -2451,10 +2716,15 @@
     new FormData(event.currentTarget).forEach((value, name) => {
       if (value === "true") payload[name] = true;
       else if (value === "false") payload[name] = false;
-      else if (["variants", "generated_images"].includes(name)) payload[name] = parseJsonArray(value);
+      else if (["variants", "generated_images", "side_photos"].includes(name)) payload[name] = parseJsonArray(value);
       else if (event.currentTarget.elements[name]?.type === "number") payload[name] = Number(value || 0);
       else payload[name] = value;
     });
+    if (key === "products") {
+      payload.image_url = payload.main_photo_url || "";
+      payload.gallery = [];
+      payload.images = [];
+    }
     try {
       await api(id ? `${resource.api}/${id}` : resource.api, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
       closeModal();

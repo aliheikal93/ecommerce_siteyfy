@@ -4364,7 +4364,15 @@ function normalizedProductVariant(variant = {}, index = 0) {
   const option = String(variant.option || variant.option_name || "").trim();
   const value = String(variant.value || variant.option_value || "").trim();
   const type = variant.type || (color && option ? "color_option" : color ? "color" : "option");
-  const isInStock = variant.is_in_stock !== false && variant.in_stock !== false && variant.stock_status !== "out_of_stock";
+  const requestedInventoryMode = String(variant.inventory_mode || "").toLowerCase();
+  const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(requestedInventoryMode)
+    ? requestedInventoryMode
+    : variant.is_in_stock === false || variant.in_stock === false || variant.stock_status === "out_of_stock"
+      ? "out_of_stock"
+      : variant.stock === "" || variant.stock === null || variant.stock === undefined || Number(variant.stock || 0) === 0
+        ? "unlimited"
+        : "tracked";
+  const isInStock = inventoryMode !== "out_of_stock";
   const stableFallbackId = `variant-${crypto.createHash("sha256").update(JSON.stringify([color, option, value, variant.sku || "", variant.barcode || "", index])).digest("hex").slice(0, 12)}`;
   return {
     id: variant.id || stableFallbackId,
@@ -4382,7 +4390,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
     cost: variant.cost === "" || variant.cost === null || variant.cost === undefined ? 0 : Number(variant.cost || 0),
     price_adjustment: Number(variant.price_adjustment || variant.price_delta || 0),
     weight: variant.weight === "" || variant.weight === null || variant.weight === undefined ? null : Math.max(0, Number(variant.weight || 0)),
-    stock: variant.stock === "" || variant.stock === null || variant.stock === undefined || Number(variant.stock || 0) === 0 ? null : Number(variant.stock || 0),
+    inventory_mode: inventoryMode,
+    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(1, Number(variant.stock || 1)),
     is_in_stock: isInStock,
     stock_status: isInStock ? "in_stock" : "out_of_stock",
     is_active: variant.is_active !== false && variant.isActive !== false && variant.active !== false,
@@ -4393,12 +4402,19 @@ function normalizedProductVariant(variant = {}, index = 0) {
 function normalizeProductPayload(payload = {}) {
   const variants = asArray(payload.variants).map(normalizedProductVariant).filter((variant) => variant.color || variant.option || variant.value);
   const nullableNumber = (value) => value === "" || value === null || value === undefined || Number(value) <= 0 ? null : Number(value);
+  const requestedInventoryMode = String(payload.inventory_mode || "").toLowerCase();
+  const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(requestedInventoryMode)
+    ? requestedInventoryMode
+    : payload.stock === "" || payload.stock === null || payload.stock === undefined || Number(payload.stock || 0) === 0
+      ? "unlimited"
+      : "tracked";
   return {
     ...payload,
     sku: String(payload.sku || "").trim().toUpperCase(),
     barcode: String(payload.barcode || "").trim(),
     cost: Number(payload.cost || 0),
-    stock: payload.stock === "" || payload.stock === null || payload.stock === undefined || Number(payload.stock || 0) === 0 ? null : Number(payload.stock || 0),
+    inventory_mode: inventoryMode,
+    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(1, Number(payload.stock || 1)),
     goods_type_id: String(payload.goods_type_id || "").trim(),
     shipping_profile_id: String(payload.shipping_profile_id || "").trim(),
     requires_shipping: payload.requires_shipping !== false && payload.requires_shipping !== "false",
@@ -4411,7 +4427,11 @@ function normalizeProductPayload(payload = {}) {
     shipping_data_source: ["manual", "imported", "estimated", "profile"].includes(payload.shipping_data_source) ? payload.shipping_data_source : "profile",
     variants,
     active_variants: variants.filter((variant) => variant.is_active !== false),
-    generated_images: asArray(payload.generated_images)
+    generated_images: asArray(payload.generated_images),
+    side_photos: asArray(payload.side_photos || payload.gallery || payload.images).filter(Boolean),
+    gallery: payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
+    images: payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
+    image_url: payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim()
   };
 }
 
