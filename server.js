@@ -1521,8 +1521,25 @@ function edfapayLegacyHash(parts, password) {
   return crypto.createHash("sha1").update(crypto.createHash("md5").update(input).digest("hex")).digest("hex");
 }
 
+function edfapayReturnToken(orderId) {
+  return crypto.createHmac("sha256", jwtSecret).update(`edfapay_return:${Number(orderId)}`).digest("base64url");
+}
+
+function verifyEdfaPayReturnToken(token, orderId) {
+  const supplied = String(token || "");
+  const expected = edfapayReturnToken(orderId);
+  if (supplied.length === expected.length && crypto.timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) return true;
+  // Keep already-issued JWT return links valid while new checkouts use the compact signature.
+  try {
+    const decoded = jwt.verify(supplied, jwtSecret, { audience: "siteyfy-edfapay" });
+    return decoded?.type === "edfapay_return" && Number(decoded.order_id) === Number(orderId);
+  } catch {
+    return false;
+  }
+}
+
 function edfapaySafeError(data, status) {
-  const candidate = data?.error_message || data?.message || data?.errorCode || data?.errors?.[0]?.error_message || `EdfaPay request failed (${status})`;
+  const candidate = data?.error_message || data?.message || data?.errorCode || data?.errors?.[0]?.error_message || data?.error || `EdfaPay request failed (${status})`;
   return String(typeof candidate === "string" ? candidate : JSON.stringify(candidate)).slice(0, 500);
 }
 
@@ -1547,6 +1564,8 @@ async function edfapayInitiateRequest(fields, timeoutMs = 15000) {
       error.edfapay_context = {
         provider_http_status: Number(response.status || 0),
         provider_error_code: String(data?.error_code || data?.errorCode || "").slice(0, 80) || null,
+        provider_response_error: String(data?.error || data?.message || "").slice(0, 160) || null,
+        provider_response_path: String(data?.path || "").slice(0, 160) || null,
         provider_response_received: Boolean(text),
         provider_content_type: String(response.headers.get("content-type") || "").slice(0, 120) || null
       };
@@ -7667,7 +7686,7 @@ async function createEdfaPayCheckout(order, req) {
   const orderReference = String(order.id);
   const description = `SITEYFY order #${order.id}`;
   const name = tamaraPersonName(order.customer?.full_name || "");
-  const returnToken = jwt.sign({ type: "edfapay_return", order_id: Number(order.id) }, jwtSecret, { expiresIn: "1d", audience: "siteyfy-edfapay" });
+  const returnToken = edfapayReturnToken(order.id);
   const returnUrl = publicStoreUrl(`/payment/edfapay/return?order_id=${order.id}&token=${encodeURIComponent(returnToken)}`);
   const address = [order.customer?.street, order.customer?.building_number, order.customer?.district].filter(Boolean).join(" ").slice(0, 255);
   let payerIp = await edfapayPayerIp(req);
@@ -9949,8 +9968,7 @@ app.get("/api/store/payment-methods", (_req, res) => res.json(ok(publicPaymentGa
 app.get("/api/store/payments/edfapay/status", (req, res, next) => {
   try {
     const orderId = Number(req.query.order_id || 0);
-    const decoded = jwt.verify(String(req.query.token || ""), jwtSecret, { audience: "siteyfy-edfapay" });
-    if (decoded?.type !== "edfapay_return" || Number(decoded.order_id) !== orderId) fail("INVALID_PAYMENT_RETURN", 401);
+    if (!verifyEdfaPayReturnToken(req.query.token, orderId)) fail("INVALID_PAYMENT_RETURN", 401);
     const order = getRecord("orders", orderId);
     if (!order || order.payment?.provider !== "edfapay") fail("PAYMENT_ORDER_NOT_FOUND", 404);
     res.json(ok({ order: { id: order.id, status: order.status, total: order.total, currency: order.currency_snapshot?.code || "SAR", payment_status: order.payment?.status || "pending", provider_status: order.payment?.provider_status || null, provider: "edfapay" } }));
@@ -10079,12 +10097,7 @@ app.post("/api/webhooks/tabby", async (req, res) => {
 app.post("/payment/edfapay/return", async (req, res) => {
   const orderId = Number(req.query.order_id || 0);
   const token = String(req.query.token || "");
-  try {
-    const decoded = jwt.verify(token, jwtSecret, { audience: "siteyfy-edfapay" });
-    if (decoded?.type !== "edfapay_return" || Number(decoded.order_id) !== orderId) fail("INVALID_PAYMENT_RETURN", 401);
-  } catch (error) {
-    console.error("EdfaPay customer return failed", String(error.message || error));
-  }
+  if (!verifyEdfaPayReturnToken(token, orderId)) console.error("EdfaPay customer return failed INVALID_PAYMENT_RETURN");
   res.redirect(303, `/payment/edfapay/return?order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}`);
 });
 app.get("/api/addresses", (_req, res) => res.json(ok({ addresses: [] })));

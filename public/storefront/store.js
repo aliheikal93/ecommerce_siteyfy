@@ -1022,34 +1022,42 @@ function appliedPromotionCodes(discount) {
 }
 
 function promotionErrorMessage(message="") {
-  if(message.includes("INVALID_SAUDI_PHONE"))return "أدخلي رقم جوال سعودي صحيح: 9 أرقام بعد +966 ويبدأ بالرقم 5";
-  if(message.includes("Missing checkout fields"))return "راجعي بيانات الاسم والعنوان المطلوبة قبل تأكيد الطلب";
-  if(message.includes("PAYMENT_ATTEMPT_EXPIRED"))return "انتهت محاولة الدفع السابقة. اضغطي تأكيد الطلب لبدء محاولة جديدة";
-  if(message.includes("PAYMENT_ATTEMPT_CLOSED"))return "محاولة الدفع السابقة مغلقة. راجعي حالة الطلب أو ابدئي محاولة جديدة";
-  if(message.includes("PAYMENT_REDIRECT"))return "تم إيقاف التحويل لحمايتك من حلقة إعادة توجيه. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
-  if(message.includes("TAMARA_CUSTOMER_NOT_ELIGIBLE"))return "تمارا غير متاحة لهذا الطلب حاليًا. يمكنك اختيار طريقة دفع أخرى";
-  if(message.includes("TAMARA_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "تمارا غير متاحة لدولة أو عملة هذا الطلب";
-  if(message.includes("TAMARA_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر تمارا";
-  if(message.includes("TAMARA"))return "تعذر بدء الدفع عبر تمارا الآن. حاولي مرة أخرى أو اختاري الدفع عند الاستلام";
-  if(message.includes("EDFAPAY_EMAIL_REQUIRED"))return "البريد الإلكتروني مطلوب للدفع عبر ادفع باي";
-  if(message.includes("EDFAPAY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "ادفع باي غير متاحة لدولة أو عملة هذا الطلب";
-  if(message.includes("EDFAPAY_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر ادفع باي";
-  if(message.includes("EDFAPAY"))return "تعذر بدء الدفع عبر ادفع باي الآن. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
-  if(message.includes("TABBY_CUSTOMER_DETAILS_REQUIRED"))return "رقم الجوال والبريد الإلكتروني مطلوبان للدفع عبر تابي";
-  if(message.includes("TABBY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "تابي غير متاحة لدولة أو عملة هذا الطلب";
-  if(message.includes("TABBY_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر تابي";
-  if(message.includes("TABBY"))return "تعذر بدء الدفع عبر تابي الآن. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
-  if(message.includes("PROMO_ALREADY_USED"))return "تم استخدام هذا الكود لهذا العميل من قبل";
-  if(message.includes("PROMO_CURRENTLY_RESERVED"))return "الكود محجوز حاليًا لطلب آخر";
-  if(message.includes("PROMO_FIRST_ORDER_ONLY"))return "هذا العرض متاح لأول طلب فقط";
-  if(message.includes("PROMO_GUESTS_NOT_ALLOWED"))return "سجّلي الدخول لاستخدام هذا الكود";
-  if(message.includes("PROMO_MANUAL_LIMIT"))return "وصلتِ للحد المسموح من أكواد الخصم";
-  if(message.includes("PROMO_EXCLUSIVE_CONFLICT"))return "لا يمكن جمع هذا الكود مع عرض حصري";
-  if(message.includes("PROMO_SAME_GROUP_CONFLICT"))return "تم تطبيق العرض الأفضل من هذه المجموعة";
-  if(message.includes("PROMO_NOT_COMPATIBLE"))return "لا يمكن جمع هذين العرضين";
-  if(message.includes("not found"))return "كود الخصم غير موجود";
-  if(message.includes("not active"))return "كود الخصم غير نشط";
+  const normalized=String(message||"").toUpperCase(),lower=String(message||"").toLowerCase();
+  if(normalized.includes("INVALID_SAUDI_PHONE"))return "أدخلي رقم جوال سعودي صحيح: 9 أرقام بعد +966 ويبدأ بالرقم 5";
+  if(normalized.includes("MISSING CHECKOUT FIELDS"))return "راجعي بيانات الاسم والعنوان المطلوبة قبل تأكيد الطلب";
+  if(normalized.includes("PAYMENT_ATTEMPT_EXPIRED"))return "انتهت محاولة الدفع السابقة. اضغطي تأكيد الطلب لبدء محاولة جديدة";
+  if(normalized.includes("PAYMENT_ATTEMPT_CLOSED"))return "محاولة الدفع السابقة مغلقة. راجعي حالة الطلب أو ابدئي محاولة جديدة";
+  if(normalized.includes("PAYMENT_REDIRECT"))return "تم إيقاف التحويل لحمايتك من حلقة إعادة توجيه. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
+  if(normalized.includes("TAMARA_CUSTOMER_NOT_ELIGIBLE"))return "تمارا غير متاحة لهذا الطلب حاليًا. يمكنك اختيار طريقة دفع أخرى";
+  if(normalized.includes("TAMARA_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "تمارا غير متاحة لدولة أو عملة هذا الطلب";
+  if(normalized.includes("TAMARA_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر تمارا";
+  if(normalized.includes("TAMARA"))return "تعذر بدء الدفع عبر تمارا الآن. حاولي مرة أخرى أو اختاري الدفع عند الاستلام";
+  if(normalized.includes("EDFAPAY_EMAIL_REQUIRED"))return "البريد الإلكتروني مطلوب للدفع عبر ادفع باي";
+  if(normalized.includes("EDFAPAY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "ادفع باي غير متاحة لدولة أو عملة هذا الطلب";
+  if(normalized.includes("EDFAPAY_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر ادفع باي";
+  if(normalized.includes("EDFAPAY"))return "تعذر بدء الدفع عبر ادفع باي الآن. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
+  if(normalized.includes("TABBY_CUSTOMER_DETAILS_REQUIRED"))return "رقم الجوال والبريد الإلكتروني مطلوبان للدفع عبر تابي";
+  if(normalized.includes("TABBY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "تابي غير متاحة لدولة أو عملة هذا الطلب";
+  if(normalized.includes("TABBY_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر تابي";
+  if(normalized.includes("TABBY"))return "تعذر بدء الدفع عبر تابي الآن. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";
+  if(normalized.includes("PROMO_ALREADY_USED"))return "تم استخدام هذا الكود لهذا العميل من قبل";
+  if(normalized.includes("PROMO_CURRENTLY_RESERVED"))return "الكود محجوز حاليًا لطلب آخر";
+  if(normalized.includes("PROMO_FIRST_ORDER_ONLY"))return "هذا العرض متاح لأول طلب فقط";
+  if(normalized.includes("PROMO_GUESTS_NOT_ALLOWED"))return "سجّلي الدخول لاستخدام هذا الكود";
+  if(normalized.includes("PROMO_MANUAL_LIMIT"))return "وصلتِ للحد المسموح من أكواد الخصم";
+  if(normalized.includes("PROMO_EXCLUSIVE_CONFLICT"))return "لا يمكن جمع هذا الكود مع عرض حصري";
+  if(normalized.includes("PROMO_SAME_GROUP_CONFLICT"))return "تم تطبيق العرض الأفضل من هذه المجموعة";
+  if(normalized.includes("PROMO_NOT_COMPATIBLE"))return "لا يمكن جمع هذين العرضين";
+  if(lower.includes("not found"))return "كود الخصم غير موجود";
+  if(lower.includes("not active"))return "كود الخصم غير نشط";
   return "كود الخصم غير صالح لهذا الطلب";
+}
+
+function checkoutErrorMessage(message=""){
+  const normalized=String(message||"").toUpperCase();
+  if(/PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT|INVALID_SAUDI_PHONE|MISSING CHECKOUT FIELDS/.test(normalized))return promotionErrorMessage(message);
+  if(normalized.includes("PROMO")||String(message||"").toLowerCase().includes("discount"))return promotionErrorMessage(message);
+  return "تعذر إتمام الطلب الآن. راجعي البيانات وحاولي مرة أخرى";
 }
 
 function storefrontShippingQuote(subtotal,discount) {
@@ -1346,7 +1354,7 @@ async function placeOrder(options={}) {
     clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
   }catch(error){
     if(error.code==="CART_REVALIDATION_REQUIRED"&&error.data){state.cart=error.data.items||[];state.cartRevisionToken=error.data.revision_token||"";state.cartVerifiedAt=Date.now();state.checkoutQuote=null;saveLocalCart({invalidateRevision:false});clearPaymentAttempt();await revalidateCartDiscount();renderCart(true);restoreCheckoutFormState(formValues);refreshCheckoutQuote();if(error.data.changes?.length)showCartChanges(error.data.changes);else toast("تم تحديث التحقق من السلة. راجعي الإجمالي ثم أكدي الطلب مرة أخرى.");return;}
-    if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message)){clearPaymentAttempt();if(retryClosedAttempt){button.disabled=false;button.textContent="جاري إنشاء جلسة دفع جديدة...";return placeOrder({retryClosedAttempt:false});}}const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
+    if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message)){clearPaymentAttempt();if(retryClosedAttempt){button.disabled=false;button.textContent="جاري إنشاء جلسة دفع جديدة...";return placeOrder({retryClosedAttempt:false});}}const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(checkoutErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
   }
 }
 

@@ -1322,6 +1322,7 @@
     const rows=[
       [ui("Provider HTTP status","حالة استجابة البوابة"),diagnostic.provider_http_status],
       [ui("Provider error code","كود خطأ البوابة"),diagnostic.provider_error_code],
+      [ui("Provider response","رسالة استجابة البوابة"),diagnostic.provider_response_error],
       [ui("IP source","مصدر عنوان الاتصال"),diagnostic.payer_ip_source],
       [ui("Gateway retries","محاولات البوابة الإضافية"),diagnostic.retry_count??diagnostic.gateway_retry_count],
       [ui("Retried after provider error","أعيدت المحاولة بعد خطأ من البوابة"),diagnostic.retried_after_provider_5xx===true?ui("Yes","نعم"):diagnostic.retried_after_provider_5xx===false?ui("No","لا"):null]
@@ -1341,8 +1342,8 @@
   function checkoutRecoveryDiagnosticHint(session={}) {
     if(session.payment_provider!=="edfapay"||!String(session.last_error_message||"").includes("EdfaPay request failed (500)"))return "";
     return ui(
-      "EdfaPay rejected the request while opening its hosted payment page; no payment was charged. The public-IP handling has since been corrected. Ask the customer to start a new payment attempt.",
-      "رفضت EdfaPay الطلب أثناء فتح صفحة الدفع المستضافة، ولم يتم خصم أي مبلغ. تم إصلاح طريقة إرسال عنوان الاتصال العام بعد هذه المحاولة؛ يلزم بدء محاولة دفع جديدة."
+      "EdfaPay rejected the request while opening its hosted payment page; no payment was charged. The oversized return URL used by this attempt has since been replaced with a compact signed URL. Ask the customer to start a new payment attempt.",
+      "رفضت EdfaPay الطلب أثناء فتح صفحة الدفع المستضافة، ولم يتم خصم أي مبلغ. كان رابط الرجوع في هذه المحاولة أطول من الحد الذي تقبله البوابة، وتم استبداله برابط مختصر وموقّع؛ يلزم بدء محاولة دفع جديدة."
     );
   }
 
