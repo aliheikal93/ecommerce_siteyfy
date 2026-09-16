@@ -5087,7 +5087,6 @@ function normalizeCategoryPayload(payload = {}, existing = {}) {
   const lookbackDays = Math.min(3650, Math.max(0, Math.floor(Number(rawRule.lookback_days ?? 90))));
   const minimumUnits = Math.min(1000000, Math.max(0, Math.floor(Number(rawRule.minimum_units ?? 1))));
   const productLimit = Math.min(200, Math.max(1, Math.floor(Number(rawRule.product_limit ?? 12))));
-  const ids = (value) => [...new Set(asArray(value).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
   return {
     ...merged,
     name_en: String(merged.name_en || "").trim(),
@@ -5100,9 +5099,7 @@ function normalizeCategoryPayload(payload = {}, existing = {}) {
       minimum_units: minimumUnits,
       product_limit: productLimit,
       fallback: smartCategoryFallbacks.has(rawRule.fallback) ? rawRule.fallback : "empty",
-      include_verified_legacy: boolValue(rawRule.include_verified_legacy, true),
-      included_product_ids: ids(rawRule.included_product_ids),
-      excluded_product_ids: ids(rawRule.excluded_product_ids)
+      include_verified_legacy: boolValue(rawRule.include_verified_legacy, true)
     },
     show_in_category_strip: boolValue(merged.show_in_category_strip, true),
     show_in_filters: boolValue(merged.show_in_filters, true),
@@ -5161,8 +5158,6 @@ function smartCategoryMatches(category = {}, products = storeProductRows()) {
   const normalized = normalizeCategoryPayload(category, category);
   if (normalized.category_type !== "smart") return [];
   const rule = normalized.smart_rule;
-  const included = new Set(rule.included_product_ids.map(Number));
-  const excluded = new Set(rule.excluded_product_ids.map(Number));
   const createdTime = (product) => {
     const parsed = new Date(product.created_at || product.updated_at || 0).getTime();
     return Number.isFinite(parsed) ? parsed : 0;
@@ -5172,7 +5167,7 @@ function smartCategoryMatches(category = {}, products = storeProductRows()) {
     const sales = smartCategorySalesMap(rule);
     scored = products
       .map((product) => ({ product, score: Number(sales.get(Number(product.id)) || 0) }))
-      .filter(({ product, score }) => included.has(Number(product.id)) || score >= rule.minimum_units)
+      .filter(({ score }) => score >= rule.minimum_units)
       .sort((a, b) => b.score - a.score || createdTime(b.product) - createdTime(a.product));
   } else if (rule.type === "on_sale") {
     scored = products
@@ -5182,12 +5177,6 @@ function smartCategoryMatches(category = {}, products = storeProductRows()) {
   } else {
     scored = products.map((product) => ({ product, score: createdTime(product) })).sort((a, b) => b.score - a.score);
   }
-  const found = new Set(scored.map(({ product }) => Number(product.id)));
-  for (const id of included) {
-    const product = products.find((row) => Number(row.id) === id);
-    if (product && !found.has(id)) scored.unshift({ product, score: 0 });
-  }
-  scored = scored.filter(({ product }) => !excluded.has(Number(product.id)));
   if (!scored.length && rule.fallback === "latest") {
     scored = products.map((product) => ({ product, score: createdTime(product) })).sort((a, b) => b.score - a.score);
   }
