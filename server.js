@@ -6752,7 +6752,7 @@ function paymentTransaction(payload = {}) {
     const existing = entityRows("payment_transactions").find((row) => row.provider_event_key === eventKey);
     if (existing) return existing;
   }
-  return createRecord("payment_transactions", {
+  const transaction = createRecord("payment_transactions", {
     provider: String(payload.provider || "internal"),
     order_id: Number(payload.order_id || 0) || null,
     provider_order_id: String(payload.provider_order_id || "") || null,
@@ -6765,6 +6765,190 @@ function paymentTransaction(payload = {}) {
     details: payload.details || {},
     occurred_at: payload.occurred_at || new Date().toISOString()
   });
+  try { syncCheckoutRecoveryFromPaymentTransaction(transaction); }
+  catch (error) { console.error(`Checkout recovery payment sync failed: ${error.message}`); }
+  return transaction;
+}
+
+const checkoutRecoveryFinalStatuses = new Set(["completed", "recovered", "closed"]);
+const checkoutRecoveryClientStatuses = new Set(["active", "payment_pending"]);
+const checkoutRecoveryStages = new Set([
+  "checkout_started", "contact_started", "address_started", "ready_to_submit", "validation_failed",
+  "order_created", "gateway_initializing", "payment_redirected", "payment_pending", "payment_failed",
+  "payment_cancelled", "payment_completed", "checkout_completed", "checkout_failed"
+]);
+const checkoutRecoveryClientEvents = new Set([
+  "checkout_started", "checkout_updated", "payment_method_selected", "validation_failed", "checkout_submitted",
+  "payment_redirected", "checkout_left", "client_error"
+]);
+
+function checkoutRecoverySettings(payload = null) {
+  const current = getSetting("checkoutRecovery") || {};
+  if (payload) {
+    const normalized = {
+      enabled: payload.enabled !== false && payload.enabled !== "false",
+      abandon_after_minutes: Math.min(1440, Math.max(5, Number(payload.abandon_after_minutes || current.abandon_after_minutes || 30))),
+      pending_review_after_minutes: Math.min(10080, Math.max(15, Number(payload.pending_review_after_minutes || current.pending_review_after_minutes || 120))),
+      retention_days: Math.min(730, Math.max(7, Number(payload.retention_days || current.retention_days || 90))),
+      updated_at: new Date().toISOString()
+    };
+    setSetting("checkoutRecovery", normalized);
+    return normalized;
+  }
+  return {
+    enabled: current.enabled !== false,
+    abandon_after_minutes: Math.min(1440, Math.max(5, Number(current.abandon_after_minutes || 30))),
+    pending_review_after_minutes: Math.min(10080, Math.max(15, Number(current.pending_review_after_minutes || 120))),
+    retention_days: Math.min(730, Math.max(7, Number(current.retention_days || 90))),
+    updated_at: current.updated_at || null
+  };
+}
+
+function sanitizeCheckoutCustomer(customer = {}) {
+  const pick = (key, max = 180) => String(customer[key] || "").trim().slice(0, max);
+  return {
+    first_name: pick("first_name", 80), last_name: pick("last_name", 80), phone: pick("phone", 32), email: pick("email", 160).toLowerCase(),
+    country_code: pick("country_code", 4).toUpperCase(), short_address: pick("short_address", 20).toUpperCase(), province: pick("province"),
+    city: pick("city"), district: pick("district"), street: pick("street", 240), building_number: pick("building_number", 32),
+    postal_code: pick("postal_code", 32), additional_number: pick("additional_number", 32), address_notes: pick("address_notes", 500)
+  };
+}
+
+function checkoutRecoveryCustomer(session = {}) {
+  try { return sanitizeCheckoutCustomer(JSON.parse(decryptIntegrationSecret(session.customer_encrypted) || "{}")); }
+  catch { return {}; }
+}
+
+function checkoutRecoveryCart(items = []) {
+  return asArray(items).slice(0, 80).map((item) => ({
+    key: String(item.key || "").slice(0, 160), item_type: item.item_type === "bundle" ? "bundle" : "product",
+    product_id: Number(item.product_id || 0) || null, bundle_id: Number(item.bundle_id || 0) || null,
+    variant_id: item.variant_id ? String(item.variant_id).slice(0, 160) : null,
+    name_ar: String(item.name_ar || "").slice(0, 240), name_en: String(item.name_en || "").slice(0, 240),
+    variant_label: String(item.variant_label || "").slice(0, 240), image_url: String(item.image_url || item.bundle_main_photo_url || "").slice(0, 500),
+    quantity: Math.min(999, Math.max(1, Number(item.quantity || 1))), price: Math.max(0, Number(item.price || 0))
+  }));
+}
+
+function redactCheckoutDiagnostic(value) {
+  return String(value || "")
+    .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [redacted]")
+    .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]+\b/g, "[redacted-key]")
+    .replace(/[A-Za-z0-9_-]{80,}/g, "[redacted-token]")
+    .slice(0, 800);
+}
+
+function checkoutRecoverySessionByKey(key) {
+  return entityRows("checkout_recovery_sessions").find((row) => row.session_key === String(key || "")) || null;
+}
+
+function signCheckoutRecoverySession(session) {
+  return jwt.sign({ type:"checkout_recovery", session_id:session.id, session_key:session.session_key }, jwtSecret, { expiresIn:"30d", audience:"siteyfy-checkout-recovery" });
+}
+
+function verifyCheckoutRecoverySession(sessionKey, token) {
+  try {
+    const decoded = jwt.verify(String(token || ""), jwtSecret, { audience:"siteyfy-checkout-recovery" });
+    if (decoded?.type !== "checkout_recovery" || decoded.session_key !== String(sessionKey || "")) return null;
+    const session = getRecord("checkout_recovery_sessions", decoded.session_id);
+    return session?.session_key === decoded.session_key ? session : null;
+  } catch { return null; }
+}
+
+function recordCheckoutRecoveryEvent(session, type, payload = {}) {
+  if (!session?.id) return null;
+  return createRecord("checkout_recovery_events", {
+    session_id: Number(session.id), session_key: session.session_key, event_type: String(type || "status").slice(0, 80),
+    source: String(payload.source || "storefront").slice(0, 40), stage: String(payload.stage || session.stage || "").slice(0, 80),
+    status: String(payload.status || session.status || "active").slice(0, 80), order_id: Number(payload.order_id || session.order_id || 0) || null,
+    payment_attempt_id: String(payload.payment_attempt_id || session.payment_attempt_id || "").slice(0, 120) || null,
+    provider: String(payload.provider || session.payment_provider || "").slice(0, 40) || null,
+    reason_code: String(payload.reason_code || "").slice(0, 120) || null,
+    message: redactCheckoutDiagnostic(payload.message || ""), details: payload.details && typeof payload.details === "object" ? payload.details : {},
+    occurred_at: payload.occurred_at || new Date().toISOString()
+  });
+}
+
+function updateCheckoutRecoverySession(session, payload = {}, eventType = "") {
+  if (!session) return null;
+  const now = new Date().toISOString();
+  const customer = payload.customer ? { ...checkoutRecoveryCustomer(session), ...sanitizeCheckoutCustomer(payload.customer) } : checkoutRecoveryCustomer(session);
+  const cart = payload.items ? checkoutRecoveryCart(payload.items) : asArray(session.cart_snapshot);
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+  const status = checkoutRecoveryFinalStatuses.has(session.status) ? session.status : String(payload.status || session.status || "active");
+  const stage = checkoutRecoveryStages.has(payload.stage) ? payload.stage : (session.stage || "checkout_started");
+  const updated = updateRecord("checkout_recovery_sessions", session.id, {
+    customer_encrypted: encryptIntegrationSecret(JSON.stringify(customer)), customer_name_hash: identityHash(`${customer.first_name} ${customer.last_name}`),
+    phone_hash: identityHash(customer.phone), email_hash: identityHash(customer.email), cart_snapshot: cart,
+    cart_count: cart.reduce((sum, item) => sum + Number(item.quantity || 1), 0), subtotal: Number(subtotal.toFixed(2)),
+    total: payload.total === undefined ? Number(session.total ?? subtotal) : Math.max(0, Number(payload.total || 0)),
+    payment_provider: String(payload.payment_provider || session.payment_provider || "").slice(0, 40) || null,
+    payment_attempt_id: String(payload.payment_attempt_id || session.payment_attempt_id || "").slice(0, 120) || null,
+    order_id: Number(payload.order_id || session.order_id || 0) || null, stage, status,
+    locale: String(payload.locale || session.locale || "ar_SA").slice(0, 20), last_seen_at: now,
+    submitted_at: payload.submitted_at || session.submitted_at || null, completed_at: payload.completed_at || session.completed_at || null,
+    last_error_code: payload.reason_code ? String(payload.reason_code).slice(0, 120) : session.last_error_code || null,
+    last_error_message: payload.message ? redactCheckoutDiagnostic(payload.message) : session.last_error_message || null
+  });
+  if (eventType) recordCheckoutRecoveryEvent(updated, eventType, payload);
+  return updated;
+}
+
+function checkoutRecoveryAdminView(session = {}) {
+  const customer = checkoutRecoveryCustomer(session);
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ").trim();
+  return { ...session, customer_encrypted:undefined, customer:{ ...customer, full_name:fullName }, contact_name:fullName, phone:customer.phone || "", email:customer.email || "" };
+}
+
+function refreshCheckoutRecoveryStatuses() {
+  const settings = checkoutRecoverySettings();
+  const now = Date.now();
+  for (const session of entityRows("checkout_recovery_sessions")) {
+    if (checkoutRecoveryFinalStatuses.has(session.status) || ["failed", "cancelled", "abandoned"].includes(session.status)) continue;
+    const inactiveMinutes = (now - new Date(session.last_seen_at || session.updated_at || session.created_at).getTime()) / 60000;
+    if (session.status === "payment_pending" && inactiveMinutes >= settings.pending_review_after_minutes) {
+      const updated = updateRecord("checkout_recovery_sessions", session.id, { status:"pending_review", last_error_code:"PAYMENT_CONFIRMATION_TIMEOUT" });
+      recordCheckoutRecoveryEvent(updated, "payment_confirmation_timeout", { source:"system", status:"pending_review", reason_code:"PAYMENT_CONFIRMATION_TIMEOUT", message:"No final payment confirmation was received within the configured review window." });
+    } else if (session.status === "active" && inactiveMinutes >= settings.abandon_after_minutes) {
+      const updated = updateRecord("checkout_recovery_sessions", session.id, { status:"abandoned", abandoned_at:new Date().toISOString() });
+      recordCheckoutRecoveryEvent(updated, "checkout_abandoned", { source:"system", status:"abandoned", message:"Checkout activity stopped before completion." });
+    }
+  }
+}
+
+function pruneCheckoutRecoveryHistory() {
+  const settings = checkoutRecoverySettings();
+  const cutoff = Date.now() - settings.retention_days * 86_400_000;
+  const expired = entityRows("checkout_recovery_sessions").filter((session) => {
+    if (!["abandoned", "failed", "cancelled", "completed", "recovered", "closed"].includes(session.status)) return false;
+    return new Date(session.completed_at || session.abandoned_at || session.updated_at || session.created_at).getTime() < cutoff;
+  });
+  if (!expired.length) return 0;
+  const ids = new Set(expired.map((session) => Number(session.id)));
+  entityRows("checkout_recovery_events").filter((row) => ids.has(Number(row.session_id))).forEach((row) => softDelete("checkout_recovery_events", row.id));
+  entityRows("checkout_recovery_contacts").filter((row) => ids.has(Number(row.session_id))).forEach((row) => softDelete("checkout_recovery_contacts", row.id));
+  expired.forEach((session) => softDelete("checkout_recovery_sessions", session.id));
+  return expired.length;
+}
+
+function checkoutRecoveryByOrder(orderId) {
+  return entityRows("checkout_recovery_sessions").find((row) => Number(row.order_id || 0) === Number(orderId || 0)) || null;
+}
+
+function syncCheckoutRecoveryFromPaymentTransaction(transaction = {}) {
+  if (!transaction.order_id) return;
+  const session = checkoutRecoveryByOrder(transaction.order_id);
+  if (!session) return;
+  const status = String(transaction.status || "pending").toLowerCase();
+  const success = ["authorised", "authorized", "captured", "partially_captured", "fully_captured", "completed", "paid"].includes(status);
+  const failed = ["failed", "declined", "cancelled", "canceled", "expired", "rejected"].includes(status);
+  updateCheckoutRecoverySession(session, {
+    status: success ? "completed" : failed ? (status.includes("cancel") ? "cancelled" : "failed") : "payment_pending",
+    stage: success ? "payment_completed" : failed ? (status.includes("cancel") ? "payment_cancelled" : "payment_failed") : "payment_pending",
+    payment_provider: transaction.provider, order_id:transaction.order_id, completed_at:success ? new Date().toISOString() : null,
+    reason_code: failed ? String(transaction.details?.reason || transaction.details?.provider_status || status).slice(0,120) : null,
+    message: failed ? String(transaction.details?.reason || transaction.details?.provider_status || status) : ""
+  }, success ? "payment_completed" : failed ? "payment_failed" : "payment_status_updated");
 }
 
 function releaseOrderPromotionReservations(order, reason = "payment_cancelled") {
@@ -7934,6 +8118,75 @@ app.get("/api/admin/payment-gateways/transactions", (req, res) => {
   rows.sort((a, b) => recentTimestamp(b) - recentTimestamp(a));
   res.json(ok({ transactions: rows.slice(0, Math.min(250, Math.max(10, Number(req.query.limit || 100)))), total: rows.length }));
 });
+app.get("/api/admin/checkout-recovery", (req, res) => {
+  refreshCheckoutRecoveryStatuses();
+  let rows = entityRows("checkout_recovery_sessions").map(checkoutRecoveryAdminView);
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const status = String(req.query.status || "").trim().toLowerCase();
+  const provider = String(req.query.provider || "").trim().toLowerCase();
+  const dateFrom = String(req.query.date_from || "");
+  const dateTo = String(req.query.date_to || "");
+  if (q) rows = rows.filter((row) => [row.id,row.session_key,row.order_id,row.contact_name,row.phone,row.email].some((value) => String(value || "").toLowerCase().includes(q)));
+  if (status) rows = rows.filter((row) => row.status === status);
+  if (provider) rows = rows.filter((row) => row.payment_provider === provider);
+  if (dateFrom) rows = rows.filter((row) => String(row.started_at || row.created_at) >= dateFrom);
+  if (dateTo) rows = rows.filter((row) => String(row.started_at || row.created_at).slice(0,10) <= dateTo);
+  rows.sort((a,b) => recentTimestamp(b) - recentTimestamp(a));
+  const all = entityRows("checkout_recovery_sessions");
+  const stats = {
+    total:all.length, active:all.filter(row=>row.status==="active").length, abandoned:all.filter(row=>row.status==="abandoned").length,
+    failed:all.filter(row=>["failed","cancelled"].includes(row.status)).length, pending:all.filter(row=>["payment_pending","pending_review"].includes(row.status)).length,
+    completed:all.filter(row=>row.status==="completed").length, recovered:all.filter(row=>row.status==="recovered"||row.recovery_state==="recovered").length
+  };
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.min(100, Math.max(10, Number(req.query.limit || 30)));
+  const totalPages = Math.max(1, Math.ceil(rows.length / limit));
+  const safePage = Math.min(page, totalPages);
+  res.json(ok({ sessions:rows.slice((safePage-1)*limit,safePage*limit), stats, pagination:{ page:safePage, limit, total:rows.length, total_pages:totalPages }, settings:checkoutRecoverySettings() }));
+});
+app.get("/api/admin/checkout-recovery/:id", (req, res) => {
+  refreshCheckoutRecoveryStatuses();
+  const session = getRecord("checkout_recovery_sessions", req.params.id) || checkoutRecoverySessionByKey(req.params.id);
+  if (!session) fail("Checkout recovery session not found", 404);
+  const events = entityRows("checkout_recovery_events").filter(row=>Number(row.session_id)===Number(session.id)).sort((a,b)=>recentTimestamp(a)-recentTimestamp(b));
+  const contacts = entityRows("checkout_recovery_contacts").filter(row=>Number(row.session_id)===Number(session.id)).sort((a,b)=>recentTimestamp(b)-recentTimestamp(a));
+  const order = session.order_id ? getRecord("orders", session.order_id) : null;
+  const transactions = session.order_id ? entityRows("payment_transactions").filter(row=>Number(row.order_id)===Number(session.order_id)).sort((a,b)=>recentTimestamp(a)-recentTimestamp(b)) : [];
+  res.json(ok({ session:checkoutRecoveryAdminView(session), events, contacts, order:order?adminOrderView(order):null, transactions }));
+});
+app.patch("/api/admin/checkout-recovery/:id", (req, res) => {
+  const session = getRecord("checkout_recovery_sessions", req.params.id) || checkoutRecoverySessionByKey(req.params.id);
+  if (!session) fail("Checkout recovery session not found", 404);
+  const allowedStatus = ["active","abandoned","payment_pending","pending_review","failed","cancelled","completed","recovered","closed"];
+  const status = allowedStatus.includes(req.body?.status) ? req.body.status : session.status;
+  const recoveryState = ["new","contacted","follow_up","recovered","not_reachable","closed"].includes(req.body?.recovery_state) ? req.body.recovery_state : session.recovery_state;
+  const updated = updateRecord("checkout_recovery_sessions", session.id, {
+    status, recovery_state:recoveryState, assigned_to:String(req.body?.assigned_to || session.assigned_to || "").slice(0,120) || null,
+    follow_up_at:req.body?.follow_up_at || session.follow_up_at || null,
+    completed_at:status==="recovered" ? (session.completed_at || new Date().toISOString()) : session.completed_at || null
+  });
+  recordCheckoutRecoveryEvent(updated, "admin_status_updated", { source:`admin:${req.user.email||req.user.id}`, status, message:`Recovery state changed to ${recoveryState}` });
+  res.json(ok({ session:checkoutRecoveryAdminView(updated) }));
+});
+app.post("/api/admin/checkout-recovery/:id/contacts", (req, res) => {
+  const session = getRecord("checkout_recovery_sessions", req.params.id) || checkoutRecoverySessionByKey(req.params.id);
+  if (!session) fail("Checkout recovery session not found", 404);
+  const channel = ["phone","whatsapp","email","other"].includes(req.body?.channel) ? req.body.channel : "phone";
+  const outcome = ["contacted","no_answer","follow_up","recovered","not_interested","wrong_number"].includes(req.body?.outcome) ? req.body.outcome : "contacted";
+  const contact = createRecord("checkout_recovery_contacts", {
+    session_id:Number(session.id), channel, outcome, note:String(req.body?.note || "").trim().slice(0,2000),
+    contacted_by:req.user.email || String(req.user.id), contacted_at:new Date().toISOString(), follow_up_at:req.body?.follow_up_at || null
+  });
+  const recoveryState = outcome === "recovered" ? "recovered" : outcome === "follow_up" ? "follow_up" : outcome === "no_answer" ? "not_reachable" : "contacted";
+  const updated = updateRecord("checkout_recovery_sessions", session.id, {
+    recovery_state:recoveryState, status:outcome==="recovered"?"recovered":session.status,
+    last_contacted_at:new Date().toISOString(), follow_up_at:req.body?.follow_up_at || session.follow_up_at || null
+  });
+  recordCheckoutRecoveryEvent(updated, "customer_contacted", { source:`admin:${req.user.email||req.user.id}`, status:updated.status, message:`${channel}: ${outcome}` });
+  res.json(ok({ contact, session:checkoutRecoveryAdminView(updated) }));
+});
+app.get("/api/admin/checkout-recovery-settings", (_req, res) => res.json(ok({ settings:checkoutRecoverySettings() })));
+app.put("/api/admin/checkout-recovery-settings", (req, res) => res.json(ok({ settings:checkoutRecoverySettings(req.body || {}) })));
 app.get("/api/admin/shipping/carrier-bills", (req, res) => {
   let bills = entityRows("shipping_carrier_bills").filter((bill) => bill.provider === "imile");
   if (req.query.type) bills = bills.filter((bill) => bill.bill_type === String(req.query.type));
@@ -8906,6 +9159,42 @@ app.get("/api/pages", (_req, res) => res.json(ok([])));
 app.get("/api/wishlist", (_req, res) => res.json(ok({ items: [] })));
 app.post("/api/wishlist", (_req, res) => res.json(ok({ message: "Wishlist disabled until user setup" })));
 app.delete("/api/wishlist/:id", (_req, res) => res.json(ok({ message: "Removed" })));
+app.post("/api/store/checkout-recovery/session", (req, res) => {
+  const settings = checkoutRecoverySettings();
+  if (!settings.enabled) return res.json(ok({ enabled:false }));
+  const guest = guestIdentity(req, res);
+  const suppliedKey = String(req.body?.session_id || "");
+  const suppliedToken = String(req.body?.session_token || "");
+  let session = suppliedKey && suppliedToken ? verifyCheckoutRecoverySession(suppliedKey, suppliedToken) : null;
+  if (session && checkoutRecoveryFinalStatuses.has(session.status)) session = null;
+  if (!session) {
+    session = createRecord("checkout_recovery_sessions", {
+      session_key: crypto.randomUUID(), guest_hash: guest.guest_hash, user_id: req.user?.role !== "admin" ? Number(req.user?.id || 0) || null : null,
+      customer_encrypted: encryptIntegrationSecret("{}"), cart_snapshot: [], cart_count:0, subtotal:0, total:0,
+      status:"active", stage:"checkout_started", locale:String(req.body?.locale || "ar_SA").slice(0,20),
+      started_at:new Date().toISOString(), last_seen_at:new Date().toISOString(), recovery_state:"new"
+    });
+    recordCheckoutRecoveryEvent(session, "checkout_started", { source:"storefront", stage:"checkout_started", status:"active" });
+  }
+  session = updateCheckoutRecoverySession(session, {
+    customer:req.body?.customer, items:req.body?.items, total:req.body?.total, locale:req.body?.locale,
+    payment_provider:req.body?.payment_provider, stage:req.body?.stage || session.stage, status:"active"
+  });
+  res.json(ok({ enabled:true, session_id:session.session_key, session_token:signCheckoutRecoverySession(session), status:session.status, stage:session.stage, updated_at:session.updated_at }));
+});
+app.post("/api/store/checkout-recovery/session/:sessionKey/sync", (req, res) => {
+  const session = verifyCheckoutRecoverySession(req.params.sessionKey, req.body?.session_token);
+  if (!session) fail("CHECKOUT_RECOVERY_SESSION_INVALID", 401);
+  const eventType = checkoutRecoveryClientEvents.has(req.body?.event_type) ? req.body.event_type : "checkout_updated";
+  const requestedStatus = checkoutRecoveryClientStatuses.has(req.body?.status) ? req.body.status : session.status;
+  const updated = updateCheckoutRecoverySession(session, {
+    customer:req.body?.customer, items:req.body?.items, total:req.body?.total, locale:req.body?.locale,
+    payment_provider:req.body?.payment_provider, payment_attempt_id:req.body?.payment_attempt_id,
+    stage:req.body?.stage, status:requestedStatus, reason_code:req.body?.reason_code,
+    message:req.body?.message, source:"storefront", details:{ field_names:asArray(req.body?.field_names).slice(0,30).map(value=>String(value).slice(0,80)) }
+  }, eventType);
+  res.json(ok({ session_id:updated.session_key, status:updated.status, stage:updated.stage, updated_at:updated.updated_at }));
+});
 app.get("/api/cart", (req, res) => res.json(ok(cartSummary(cartFromRequest(req)))));
 app.post("/api/cart", (req, res) => {
   const item = publicCartItem(req.body || {});
@@ -9022,7 +9311,15 @@ app.get("/api/orders/my-orders", (req, res) => {
   res.json(ok({ orders }));
 });
 app.post("/api/orders", async (req, res, next) => {
+ let recoverySession = null;
  try {
+  try {
+    recoverySession = verifyCheckoutRecoverySession(req.body?.checkout_session_id, req.body?.checkout_session_token);
+    if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, {
+      customer:req.body?.customer, items:req.body?.items, payment_provider:req.body?.payment_method,
+      payment_attempt_id:req.body?.payment_attempt_id, stage:"ready_to_submit", status:"active", submitted_at:new Date().toISOString(), source:"server"
+    }, "checkout_submitted");
+  } catch (error) { console.error(`Checkout recovery submit sync failed: ${error.message}`); }
   const sessionUser = customerSessionUser(req);
   if (sessionUser && !sessionUser.permissions.includes("place_orders")) fail("You do not have permission to place orders", 403);
   const items = checkoutLineItems(req.body?.items || cartFromRequest(req));
@@ -9130,9 +9427,15 @@ app.post("/api/orders", async (req, res, next) => {
     discount_breakdown: applied?.line_discounts || [],
     customer_identity: identities
   });
+  if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, {
+    customer, items:orderItems, total, payment_provider:requestedPaymentMethod, payment_attempt_id:paymentAttemptId,
+    order_id:order.id, stage:"order_created", status:hostedPayment?"payment_pending":"active", source:"server"
+  }, "order_created");
   if (requestedPaymentMethod === "tamara") {
     try {
+      if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, { stage:"gateway_initializing", status:"payment_pending", payment_provider:"tamara", source:"server" }, "gateway_initializing");
       const pendingOrder = await createTamaraCheckout(order, req);
+      if (recoverySession) updateCheckoutRecoverySession(recoverySession, { stage:"payment_redirected", status:"payment_pending", payment_provider:"tamara", order_id:order.id, source:"server" }, "payment_redirect_ready");
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "tamara" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "tamara_checkout_failed");
@@ -9143,7 +9446,9 @@ app.post("/api/orders", async (req, res, next) => {
   }
   if (requestedPaymentMethod === "edfapay") {
     try {
+      if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, { stage:"gateway_initializing", status:"payment_pending", payment_provider:"edfapay", source:"server" }, "gateway_initializing");
       const pendingOrder = await createEdfaPayCheckout(order, req);
+      if (recoverySession) updateCheckoutRecoverySession(recoverySession, { stage:"payment_redirected", status:"payment_pending", payment_provider:"edfapay", order_id:order.id, source:"server" }, "payment_redirect_ready");
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "edfapay" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "edfapay_checkout_failed");
@@ -9154,7 +9459,9 @@ app.post("/api/orders", async (req, res, next) => {
   }
   if (requestedPaymentMethod === "tabby") {
     try {
+      if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, { stage:"gateway_initializing", status:"payment_pending", payment_provider:"tabby", source:"server" }, "gateway_initializing");
       const pendingOrder = await createTabbyCheckout(order);
+      if (recoverySession) updateCheckoutRecoverySession(recoverySession, { stage:"payment_redirected", status:"payment_pending", payment_provider:"tabby", order_id:order.id, source:"server" }, "payment_redirect_ready");
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "tabby" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "tabby_checkout_failed");
@@ -9166,9 +9473,18 @@ app.post("/api/orders", async (req, res, next) => {
   await initializeOrderShipping(order);
   finalizePromotionRedemptions(applied?.applied_promotions || [], identities, order.id);
   updateRecord("orders", order.id, { promotion_redemptions_finalized_at: new Date().toISOString() });
+  if (recoverySession) updateCheckoutRecoverySession(recoverySession, { stage:"checkout_completed", status:"completed", order_id:order.id, completed_at:new Date().toISOString(), source:"server" }, "checkout_completed");
   persistCart(res, []);
   res.json(ok({ order: getRecord("orders", order.id), payment_provider: "internal" }));
  } catch (error) {
+   if (recoverySession && !checkoutRecoveryFinalStatuses.has(recoverySession.status)) {
+     try {
+       const paymentStarted = Boolean(recoverySession.order_id || recoverySession.payment_attempt_id || ["order_created", "gateway_initializing", "payment_redirected", "payment_pending"].includes(recoverySession.stage));
+       const validationError = [400, 409, 422].includes(Number(error.status || 0));
+       updateCheckoutRecoverySession(recoverySession, { stage:paymentStarted?"payment_failed":validationError?"validation_failed":"checkout_failed", status:"failed", reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0], message:error.message, source:"server" }, "checkout_failed");
+     }
+     catch (recoveryError) { console.error(`Checkout recovery failure sync failed: ${recoveryError.message}`); }
+   }
    next(error);
  }
 });
@@ -9639,6 +9955,8 @@ app.use((err, _req, res, _next) => {
 app.listen(port, () => {
   refreshConfiguredShippingEstimates({ overwriteConfigured: false });
   backfillShippingSettlementSnapshots();
+  refreshCheckoutRecoveryStatuses();
+  pruneCheckoutRecoveryHistory();
   console.log(`Slyrah commerce copy running on port ${port}`);
   const runScheduledShippingSync = async () => {
     const integrations = publicShippingIntegrations();
@@ -9662,4 +9980,8 @@ app.listen(port, () => {
   };
   setTimeout(runScheduledShippingSync, 30_000);
   setInterval(runScheduledShippingSync, 60_000);
+  setInterval(() => {
+    try { refreshCheckoutRecoveryStatuses(); pruneCheckoutRecoveryHistory(); }
+    catch (error) { console.error(`Checkout recovery maintenance failed: ${error.message}`); }
+  }, 5 * 60_000);
 });

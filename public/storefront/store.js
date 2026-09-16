@@ -21,6 +21,8 @@ const state = {
   addressConfig:{ enabled:false, format:"AAAA0000" },
   paymentMethods:{ methods:[] },
   customer:null,
+  checkoutRecovery:null,
+  checkoutRecoveryPromise:null,
   helpfulReviews:new Set()
 };
 
@@ -1051,7 +1053,7 @@ function renderCart(checkout=false) {
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
 }
 
 function bindCheckoutPhoneInput(){
@@ -1065,6 +1067,62 @@ function checkoutCustomerValues(form){
   const values=Object.fromEntries(new FormData(form));
   if(values.country_code==="SA"){let local=String(values.phone||"").replace(/\D/g,"").replace(/^966/,"");if(local.length===10&&local.startsWith("0"))local=local.slice(1);values.phone=`+966${local}`;}
   return values;
+}
+
+const CHECKOUT_RECOVERY_KEY="siteyfy_checkout_recovery";
+let checkoutRecoveryTimer=null;
+let checkoutRecoveryPagehideBound=false;
+
+function storedCheckoutRecovery(){
+  try{return JSON.parse(localStorage.getItem(CHECKOUT_RECOVERY_KEY)||"null");}catch{return null;}
+}
+
+function checkoutRecoverySnapshot(form=document.getElementById("checkoutForm")){
+  const values=form?checkoutCustomerValues(form):{};
+  const payment_provider=String(values.payment_method||form?.elements?.payment_method?.value||"");
+  delete values.payment_method;delete values.shipping_quote_choice;delete values.address_verification_token;
+  const required=form?[...form.querySelectorAll("[required]")]:[];
+  const missing=required.filter(input=>!String(input.value||"").trim()).map(input=>input.name||input.id).filter(Boolean);
+  const hasContact=Boolean(values.first_name||values.last_name||values.phone||values.email);
+  const hasAddress=Boolean(values.city||values.district||values.street||values.short_address);
+  const stage=missing.length===0&&form?"ready_to_submit":hasAddress?"address_started":hasContact?"contact_started":"checkout_started";
+  return { customer:values,items:state.cart,total:cartTotals().total,payment_provider,stage,locale:"ar_SA",missing };
+}
+
+async function ensureCheckoutRecovery(){
+  if(state.checkoutRecovery?.session_id&&state.checkoutRecovery?.session_token)return state.checkoutRecovery;
+  if(state.checkoutRecoveryPromise)return state.checkoutRecoveryPromise;
+  state.checkoutRecoveryPromise=(async()=>{
+    const stored=storedCheckoutRecovery()||{};
+    try{
+      const result=await api("/api/store/checkout-recovery/session",{method:"POST",body:JSON.stringify({...checkoutRecoverySnapshot(),session_id:stored.session_id,session_token:stored.session_token})});
+      if(!result.enabled)return null;
+      state.checkoutRecovery={session_id:result.session_id,session_token:result.session_token,status:result.status,stage:result.stage};
+      localStorage.setItem(CHECKOUT_RECOVERY_KEY,JSON.stringify(state.checkoutRecovery));
+      return state.checkoutRecovery;
+    }catch{return null;}
+    finally{state.checkoutRecoveryPromise=null;}
+  })();
+  return state.checkoutRecoveryPromise;
+}
+
+async function syncCheckoutRecovery(event_type="checkout_updated",overrides={},useBeacon=false){
+  const recovery=state.checkoutRecovery||(!useBeacon?await ensureCheckoutRecovery():storedCheckoutRecovery());
+  if(!recovery?.session_id||!recovery?.session_token)return null;
+  const snapshot={...checkoutRecoverySnapshot(),...overrides,event_type,session_token:recovery.session_token};
+  const url=`/api/store/checkout-recovery/session/${encodeURIComponent(recovery.session_id)}/sync`;
+  if(useBeacon&&navigator.sendBeacon){navigator.sendBeacon(url,new Blob([JSON.stringify(snapshot)],{type:"application/json"}));return recovery;}
+  try{const result=await api(url,{method:"POST",body:JSON.stringify(snapshot)});state.checkoutRecovery={...recovery,status:result.status,stage:result.stage};localStorage.setItem(CHECKOUT_RECOVERY_KEY,JSON.stringify(state.checkoutRecovery));return result;}catch{return null;}
+}
+
+function clearCheckoutRecovery(){state.checkoutRecovery=null;state.checkoutRecoveryPromise=null;localStorage.removeItem(CHECKOUT_RECOVERY_KEY);}
+
+function bindCheckoutRecovery(form){
+  ensureCheckoutRecovery();
+  const schedule=()=>{clearTimeout(checkoutRecoveryTimer);checkoutRecoveryTimer=setTimeout(()=>syncCheckoutRecovery("checkout_updated"),900);};
+  form.addEventListener("input",schedule);
+  form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",()=>syncCheckoutRecovery("payment_method_selected",{payment_provider:input.value})));
+  if(!checkoutRecoveryPagehideBound){checkoutRecoveryPagehideBound=true;window.addEventListener("pagehide",()=>{if(location.pathname==="/checkout")syncCheckoutRecovery("checkout_left",{},true);});}
 }
 
 function bindSaudiAddressVerification(){
@@ -1140,6 +1198,7 @@ function safeGatewayRedirect(rawUrl){
 function continueGatewayPayment(result,attempt,button){
   const redirectUrl=safeGatewayRedirect(result.payment_redirect_url),maxRedirects=Number(state.paymentMethods?.redirect_policy?.max_automatic_redirects??1);
   attempt.order_id=result.order?.id||attempt.order_id;attempt.checkout_url=redirectUrl;
+  syncCheckoutRecovery("payment_redirected",{stage:"payment_redirected",status:"payment_pending",payment_provider:result.payment_provider||attempt.provider,payment_attempt_id:attempt.id},true);
   localStorage.setItem("siteyfy_pending_payment",JSON.stringify({provider:result.payment_provider||attempt.provider,order_id:attempt.order_id,started_at:new Date().toISOString()}));
   if(Number(attempt.automatic_redirects||0)>=maxRedirects){
     sessionStorage.setItem(PAYMENT_ATTEMPT_KEY,JSON.stringify(attempt));
@@ -1156,15 +1215,15 @@ function continueGatewayPayment(result,attempt,button){
 }
 
 async function placeOrder() {
-  const form=document.getElementById("checkoutForm");if(!form.reportValidity())return;const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values;const discount=cartTotals().discount;const button=document.getElementById("placeOrder");button.disabled=true;button.textContent="جاري تأكيد الطلب...";
+  const form=document.getElementById("checkoutForm");if(!form.reportValidity()){const missing=[...form.querySelectorAll(":invalid")].map(input=>input.name||input.id).filter(Boolean);syncCheckoutRecovery("validation_failed",{stage:"validation_failed",reason_code:"CHECKOUT_FORM_INVALID",message:"Required checkout fields are incomplete",field_names:missing});return;}const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values;const discount=cartTotals().discount;const button=document.getElementById("placeOrder");button.disabled=true;button.textContent="جاري تأكيد الطلب...";
   const attempt=payment_method==="cod"?null:paymentAttempt(payment_method);
-  try{const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}clearPaymentAttempt(result.order?.id);state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);}catch(error){if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";}
+  try{const recovery=await ensureCheckoutRecovery();await syncCheckoutRecovery("checkout_submitted",{stage:"ready_to_submit",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id});const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);}catch(error){if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";}
 }
 
 async function renderTamaraReturn(outcome="success"){
   const params=new URLSearchParams(location.search),orderId=params.get("order_id"),token=params.get("token");
   shell(`${breadcrumbs("حالة الدفع")}<section class="container payment-return"><div class="payment-return-state is-loading">${icon("loader-circle",54)}<span>تمارا</span><h1>جاري تأكيد حالة الدفع</h1><p>نراجع العملية مباشرة مع تمارا، انتظري لحظة.</p></div></section>`);
-  try{const result=await api(`/api/store/payments/tamara/status?order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome)}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);if(paid){clearPaymentAttempt(order.id||orderId);state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span>تمارا</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية Tamara.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}const cancelled=["cancelled","failed","expired"].includes(order.payment_status)||outcome!=="success";if(cancelled){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}shell(`${breadcrumbs(cancelled?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${cancelled?"is-failed":"is-pending"}">${icon(cancelled?"circle-x":"clock",58)}<span>تمارا</span><h1>${cancelled?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${cancelled?"لم يتم خصم الطلب ويمكنك العودة لإتمامه بطريقة أخرى.":"استلمنا العملية وننتظر تأكيد Tamara النهائي. سيتم تحديث الطلب تلقائيًا."}</p><a class="primary-button" href="/checkout">${cancelled?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);}catch(error){shell(`${breadcrumbs("تعذر التحقق")}<section class="container payment-return"><div class="payment-return-state is-failed">${icon("circle-x",58)}<span>تمارا</span><h1>تعذر التحقق من العملية</h1><p>${esc(promotionErrorMessage(error.message))}</p><a class="primary-button" href="/checkout">العودة لإتمام الطلب</a></div></section>`);}
+  try{const result=await api(`/api/store/payments/tamara/status?order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome)}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);if(paid){clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span>تمارا</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية Tamara.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}const cancelled=["cancelled","failed","expired"].includes(order.payment_status)||outcome!=="success";if(cancelled){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}shell(`${breadcrumbs(cancelled?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${cancelled?"is-failed":"is-pending"}">${icon(cancelled?"circle-x":"clock",58)}<span>تمارا</span><h1>${cancelled?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${cancelled?"لم يتم خصم الطلب ويمكنك العودة لإتمامه بطريقة أخرى.":"استلمنا العملية وننتظر تأكيد Tamara النهائي. سيتم تحديث الطلب تلقائيًا."}</p><a class="primary-button" href="/checkout">${cancelled?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);}catch(error){shell(`${breadcrumbs("تعذر التحقق")}<section class="container payment-return"><div class="payment-return-state is-failed">${icon("circle-x",58)}<span>تمارا</span><h1>تعذر التحقق من العملية</h1><p>${esc(promotionErrorMessage(error.message))}</p><a class="primary-button" href="/checkout">العودة لإتمام الطلب</a></div></section>`);}
   hydrateIcons();
 }
 
@@ -1175,7 +1234,7 @@ async function renderHostedPaymentReturn(provider,outcome="success"){
   try{
     const query=`order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome||"")}`;
     const result=await api(`/api/store/payments/${provider}/status?${query}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);
-    if(paid){clearPaymentAttempt(order.id||orderId);state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية ${esc(label)}.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}
+    if(paid){clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية ${esc(label)}.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}
     const failed=["cancelled","failed","expired","rejected"].includes(order.payment_status)||order.status==="cancelled"||["cancel","failure"].includes(outcome);
     if(failed){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}
     shell(`${breadcrumbs(failed?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${failed?"is-failed":"is-pending"}">${icon(failed?"circle-x":"clock",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>${failed?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${failed?"لم يتم تأكيد الدفع ويمكنك العودة لإتمام الطلب بطريقة أخرى.":`لم يصل التأكيد النهائي من ${esc(label)} بعد. سيُحدّث الطلب تلقائيًا عند وصول الإشعار.`}</p><a class="primary-button" href="/checkout">${failed?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);
