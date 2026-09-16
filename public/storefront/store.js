@@ -23,6 +23,11 @@ const state = {
   customer:null,
   checkoutRecovery:null,
   checkoutRecoveryPromise:null,
+  cartRevisionToken:"",
+  cartVerifiedAt:0,
+  cartReconcilePromise:null,
+  pendingCartChanges:[],
+  cartValidationError:null,
   helpfulReviews:new Set()
 };
 
@@ -34,8 +39,9 @@ function readLocalCart() {
   try { return JSON.parse(localStorage.getItem("slyrah_cart") || "[]"); } catch { return []; }
 }
 
-function saveLocalCart() {
+function saveLocalCart({ invalidateRevision=true } = {}) {
   localStorage.setItem("slyrah_cart", JSON.stringify(state.cart));
+  if(invalidateRevision){state.cartRevisionToken="";state.cartVerifiedAt=0;state.checkoutQuote=null;}
   updateCartCount();
 }
 
@@ -43,7 +49,7 @@ async function api(endpoint, options = {}) {
   const customerToken=customerAuthToken();
   const response = await fetch(endpoint, { ...options, headers:{ Accept:"application/json", ...(options.body ? { "Content-Type":"application/json" } : {}), ...(customerToken ? { Authorization:`Bearer ${customerToken}` } : {}), ...(options.headers || {}) } });
   const payload = await response.json().catch(() => null);
-  if (!response.ok || payload?.success === false) throw new Error(payload?.error?.message || "تعذر تنفيذ الطلب");
+  if (!response.ok || payload?.success === false) { const error=new Error(payload?.error?.message || "تعذر تنفيذ الطلب");error.code=payload?.error?.code||payload?.error?.message||"REQUEST_FAILED";error.status=response.status;error.data=payload?.data||payload?.error?.data||null;throw error; }
   return payload?.data ?? payload;
 }
 
@@ -904,6 +910,77 @@ function cartTotals() {
   return {subtotal,discount,discountAmount,shipping,total:Math.max(0,subtotal-discountAmount)+shipping.amount};
 }
 
+function cartPageName(){return location.pathname==="/checkout"?"checkout":"cart";}
+
+function checkoutFormState(){
+  const form=document.getElementById("checkoutForm");if(!form)return null;
+  return [...new FormData(form).entries()].reduce((result,[key,value])=>{result[key]=value;return result;},{});
+}
+
+function restoreCheckoutFormState(values){
+  const form=document.getElementById("checkoutForm");if(!form||!values)return;
+  Object.entries(values).forEach(([name,value])=>{
+    const controls=[...form.querySelectorAll(`[name="${String(name).replaceAll('"','\\"')}"]`)];
+    controls.forEach(control=>{if(control.type==="radio"||control.type==="checkbox")control.checked=String(control.value)===String(value);else control.value=value;});
+  });
+  form.querySelector('[name="payment_method"]:checked')?.dispatchEvent(new Event("change",{bubbles:true}));
+}
+
+async function revalidateCartDiscount(){
+  let discount=null;try{discount=JSON.parse(localStorage.getItem("slyrah_discount")||"null");}catch{}
+  const codes=appliedPromotionCodes(discount);if(!codes.length)return;
+  try{const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:state.cart.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0),items:state.cart})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}
+  catch{clearDiscount();}
+}
+
+function cartChangeTitle(change={}){
+  if(change.type==="price_changed")return "تم تحديث السعر";
+  if(change.type==="quantity_adjusted")return "تم تعديل الكمية المتاحة";
+  if(change.type==="item_updated")return "تم تحديث بيانات المنتج";
+  if(change.type==="out_of_stock")return "نفدت الكمية";
+  return "لم يعد المنتج متاحًا";
+}
+
+function showCartChanges(changes=[]){
+  if(!changes.length)return;
+  const rows=changes.map(change=>`<article class="cart-update-line"><span class="cart-update-icon">${icon(change.type==="price_changed"?"badge-dollar-sign":change.type==="quantity_adjusted"?"package-check":change.type==="item_updated"?"refresh-cw":"package-x",20)}</span><div><strong>${esc(change.name_ar||change.name_en||"منتج في السلة")}</strong><small>${cartChangeTitle(change)}</small>${change.type==="price_changed"?`<p><del>${money(change.previous_price)}</del>${icon("arrow-left",15)}<b>${money(change.current_price)}</b></p>`:""}${change.type==="quantity_adjusted"?`<p><del>${Number(change.previous_quantity||0)}</del>${icon("arrow-left",15)}<b>${Number(change.current_quantity||0)}</b></p>`:""}${["out_of_stock","item_removed"].includes(change.type)?`<p class="is-removed">تم حذف هذا الاختيار من السلة حتى لا يتم طلبه بالخطأ.</p>`:""}</div></article>`).join("");
+  overlayRoot.innerHTML=`<span class="drawer-backdrop cart-update-backdrop"></span><section class="cart-update-dialog" role="dialog" aria-modal="true" aria-labelledby="cartUpdateTitle"><header><span>${icon("refresh-cw",22)}</span><div><small>تحديث السلة</small><h2 id="cartUpdateTitle">تم تحديث بعض بيانات سلتك</h2><p>راجع التغييرات التالية قبل المتابعة.</p></div></header><div class="cart-update-list">${rows}</div><footer><p>${icon("shield-check",17)}تم حساب الإجمالي والخصومات والشحن مرة أخرى بالبيانات الحالية.</p><button class="primary-button" type="button" id="acceptCartUpdates">مراجعة السلة والمتابعة</button></footer></section>`;
+  document.body.classList.add("is-locked");document.getElementById("acceptCartUpdates").onclick=()=>{state.pendingCartChanges=[];closeOverlay();};hydrateIcons();
+}
+
+function showCartValidationError(){
+  overlayRoot.innerHTML=`<span class="drawer-backdrop cart-update-backdrop"></span><section class="cart-update-dialog is-error" role="alertdialog" aria-modal="true"><header><span>${icon("wifi-off",22)}</span><div><small>تعذر التحقق</small><h2>لا يمكن تأكيد أسعار السلة الآن</h2><p>لن نسمح بإتمام الطلب قبل التأكد من الأسعار والمخزون الحاليين.</p></div></header><footer><p>${icon("shield-alert",17)}تحققي من الاتصال ثم أعيدي المحاولة.</p><button class="primary-button" type="button" id="retryCartValidation">إعادة التحقق</button></footer></section>`;
+  document.body.classList.add("is-locked");document.getElementById("retryCartValidation").onclick=()=>location.reload();hydrateIcons();
+}
+
+async function reconcileCart({ page=cartPageName(), force=false }={}){
+  if(!state.cart.length){state.cartRevisionToken="";state.cartVerifiedAt=Date.now();return {items:[],changes:[]};}
+  if(!force&&state.cartRevisionToken&&Date.now()-state.cartVerifiedAt<30_000)return {items:state.cart,changes:[]};
+  if(state.cartReconcilePromise)return state.cartReconcilePromise;
+  state.cartReconcilePromise=(async()=>{
+    const recovery=state.checkoutRecovery||storedCheckoutRecovery()||{};
+    const result=await api("/api/store/cart/reconcile",{method:"POST",body:JSON.stringify({items:state.cart,page,checkout_session_id:recovery.session_id,checkout_session_token:recovery.session_token})});
+    state.cart=Array.isArray(result.items)?result.items:[];state.cartRevisionToken=result.revision_token||"";state.cartVerifiedAt=Date.now();state.checkoutQuote=null;
+    saveLocalCart({invalidateRevision:false});
+    if(result.changes?.length){state.pendingCartChanges=result.changes;clearPaymentAttempt();await revalidateCartDiscount();}
+    return result;
+  })().finally(()=>{state.cartReconcilePromise=null;});
+  return state.cartReconcilePromise;
+}
+
+async function revalidateVisibleCart({ force=true }={}){
+  if(!["/cart","/checkout"].includes(location.pathname)||document.visibilityState==="hidden")return true;
+  const checkout=location.pathname==="/checkout",formValues=checkoutFormState();
+  try{
+    const result=await reconcileCart({page:checkout?"checkout":"cart",force});
+    if(result.changes?.length){renderCart(checkout);restoreCheckoutFormState(formValues);if(checkout)refreshCheckoutQuote();showCartChanges(result.changes);}
+    return !result.changes?.length;
+  }catch(error){
+    if(checkout){const button=document.getElementById("placeOrder");if(button){button.disabled=true;button.textContent="تعذر التحقق من الأسعار";}}
+    toast("تعذر التحقق من أسعار السلة. تحققي من الاتصال وحاولي مرة أخرى.");return false;
+  }
+}
+
 function checkoutShippingPrice(shipping){
   if(Number(shipping?.amount||0)>0)return money(shipping.amount);
   const base=Number(shipping?.base_amount||0);
@@ -1118,7 +1195,7 @@ async function syncCheckoutRecovery(event_type="checkout_updated",overrides={},u
 function clearCheckoutRecovery(){state.checkoutRecovery=null;state.checkoutRecoveryPromise=null;localStorage.removeItem(CHECKOUT_RECOVERY_KEY);}
 
 function bindCheckoutRecovery(form){
-  ensureCheckoutRecovery();
+  const pendingChanges=state.pendingCartChanges.slice();ensureCheckoutRecovery().then(()=>{if(pendingChanges.length)syncCheckoutRecovery("cart_revalidated",{message:`${pendingChanges.length} cart change(s) were applied before checkout.`,page:"checkout",cart_changes:pendingChanges});});
   const schedule=()=>{clearTimeout(checkoutRecoveryTimer);checkoutRecoveryTimer=setTimeout(()=>syncCheckoutRecovery("checkout_updated"),900);};
   form.addEventListener("input",schedule);
   form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",()=>syncCheckoutRecovery("payment_method_selected",{payment_provider:input.value})));
@@ -1215,9 +1292,21 @@ function continueGatewayPayment(result,attempt,button){
 }
 
 async function placeOrder() {
-  const form=document.getElementById("checkoutForm");if(!form.reportValidity()){const missing=[...form.querySelectorAll(":invalid")].map(input=>input.name||input.id).filter(Boolean);syncCheckoutRecovery("validation_failed",{stage:"validation_failed",reason_code:"CHECKOUT_FORM_INVALID",message:"Required checkout fields are incomplete",field_names:missing});return;}const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values;const discount=cartTotals().discount;const button=document.getElementById("placeOrder");button.disabled=true;button.textContent="جاري تأكيد الطلب...";
+  const initialButton=document.getElementById("placeOrder");if(!initialButton)return;initialButton.disabled=true;initialButton.textContent="جاري التحقق من الأسعار...";
+  const cartCurrent=await revalidateVisibleCart({force:true});if(!cartCurrent)return;
+  const form=document.getElementById("checkoutForm"),button=document.getElementById("placeOrder");if(!form||!button)return;
+  if(!form.reportValidity()){const missing=[...form.querySelectorAll(":invalid")].map(input=>input.name||input.id).filter(Boolean);syncCheckoutRecovery("validation_failed",{stage:"validation_failed",reason_code:"CHECKOUT_FORM_INVALID",message:"Required checkout fields are incomplete",field_names:missing});button.disabled=false;button.textContent="تأكيد الطلب";return;}
+  const formValues=checkoutFormState(),values=checkoutCustomerValues(form),payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values,discount=cartTotals().discount;button.disabled=true;button.textContent="جاري تأكيد الطلب...";
   const attempt=payment_method==="cod"?null:paymentAttempt(payment_method);
-  try{const recovery=await ensureCheckoutRecovery();await syncCheckoutRecovery("checkout_submitted",{stage:"ready_to_submit",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id});const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);}catch(error){if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";}
+  try{
+    const recovery=await ensureCheckoutRecovery();await syncCheckoutRecovery("checkout_submitted",{stage:"ready_to_submit",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id});
+    const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,cart_revision_token:state.cartRevisionToken,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});
+    if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}
+    clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
+  }catch(error){
+    if(error.code==="CART_REVALIDATION_REQUIRED"&&error.data){state.cart=error.data.items||[];state.cartRevisionToken=error.data.revision_token||"";state.cartVerifiedAt=Date.now();state.checkoutQuote=null;saveLocalCart({invalidateRevision:false});clearPaymentAttempt();await revalidateCartDiscount();renderCart(true);restoreCheckoutFormState(formValues);refreshCheckoutQuote();if(error.data.changes?.length)showCartChanges(error.data.changes);else toast("تم تحديث التحقق من السلة. راجعي الإجمالي ثم أكدي الطلب مرة أخرى.");return;}
+    if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
+  }
 }
 
 async function renderTamaraReturn(outcome="success"){
@@ -1253,14 +1342,16 @@ async function init() {
       api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
     ]);
     state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;
+    if(["/cart","/checkout"].includes(location.pathname)&&state.cart.length){try{await reconcileCart({page:cartPageName(),force:true});}catch(error){state.cartValidationError=error;}}
     applyTheme();
     renderStoreRoute();
+    if(state.cartValidationError)showCartValidationError();else if(state.pendingCartChanges.length)showCartChanges(state.pendingCartChanges);
   } catch(error) {
     app.innerHTML=`<section class="store-loading"><h1>تعذر تحميل المتجر</h1><p>${esc(error.message)}</p><button class="primary-button" onclick="location.reload()">إعادة المحاولة</button></section>`;
   }
 }
 
-document.addEventListener("keydown",event=>{if(event.key==="Escape"){closeOverlay();document.getElementById("filterSidebar")?.classList.remove("mobile-open");document.body.classList.remove("is-locked");}});
+document.addEventListener("keydown",event=>{if(event.key==="Escape"){if(overlayRoot.querySelector(".cart-update-dialog"))return;closeOverlay();document.getElementById("filterSidebar")?.classList.remove("mobile-open");document.body.classList.remove("is-locked");}});
 document.addEventListener("click",event=>{
   const link=event.target.closest("a[href^='/collection/']");
   if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
@@ -1272,4 +1363,8 @@ document.addEventListener("click",event=>{
   scrollTo({top:0,behavior:"smooth"});
 });
 window.addEventListener("popstate",()=>renderStoreRoute());
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&["/cart","/checkout"].includes(location.pathname)&&Date.now()-state.cartVerifiedAt>30_000)revalidateVisibleCart({force:true});});
+window.addEventListener("focus",()=>{if(["/cart","/checkout"].includes(location.pathname)&&Date.now()-state.cartVerifiedAt>30_000)revalidateVisibleCart({force:true});});
+window.addEventListener("storage",event=>{if(event.key!=="slyrah_cart"||!["/cart","/checkout"].includes(location.pathname))return;state.cart=readLocalCart();state.cartRevisionToken="";state.cartVerifiedAt=0;revalidateVisibleCart({force:true});});
+setInterval(()=>{if(location.pathname==="/checkout"&&document.visibilityState==="visible"&&Date.now()-state.cartVerifiedAt>60_000)revalidateVisibleCart({force:true});},30_000);
 init();

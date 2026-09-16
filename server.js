@@ -631,6 +631,11 @@ function publicCartItem(body = {}) {
     if (!bundle) fail("Bundle was not found", 404);
     const quantity = Math.max(1, Number(body.quantity || 1));
     if (bundle.available_stock !== null && quantity > bundle.available_stock) fail("Bundle quantity is out of stock");
+    const bundleRaw = getRecord("bundles", bundle.id) || bundle;
+    const componentRevision = bundle.items.map((component) => {
+      const product = getRecord("products", component.product_id);
+      return `${component.product_id}:${product?.updated_at || "missing"}`;
+    }).join("|");
     return {
       key: String(body.key || `bundle:${bundle.id}`),
       item_type: "bundle",
@@ -646,29 +651,129 @@ function publicCartItem(body = {}) {
       variant_id: null,
       variant_label: `${bundle.items.length} منتجات`,
       price: Number(bundle.price || 0),
-      quantity
+      quantity,
+      catalog_revision: crypto.createHash("sha256").update(`${bundleRaw.updated_at || ""}|${bundle.price}|${bundle.available_stock}|${componentRevision}`).digest("hex").slice(0, 24)
     };
   }
-  const product = findProduct(body.product_id || body.productId || body.id || body.product?.id);
-  if (!product) fail("Product was not found", 404);
+  const productId = Number(body.product_id || body.productId || body.id || body.product?.id || 0);
+  const storeProduct = findProduct(productId);
+  const rawProduct = getRecord("products", productId);
+  if (!storeProduct || !rawProduct || rawProduct.is_active === false || rawProduct.isActive === false || rawProduct.active === false) fail("Product was not found or is inactive", 404);
+  const product = normalizeProductPayload(rawProduct);
   const variantId = body.variant_id || body.variantId || null;
-  const variant = variantId ? (product?.variants || []).find((item) => String(item.id) === String(variantId)) : null;
-  if (variantId && !variant) fail("Product option was not found or is inactive", 404);
-  if (variant && variant.in_stock === false) fail("Product option is out of stock", 409);
-  const price = Number(body.price || variant?.price || product?.sale_price || product?.price || 0);
-  return {
-    key: String(body.key || `${product?.id || body.product_id || body.id || Date.now()}:${variantId || "base"}`),
+  const variant = variantId ? product.variants.find((item) => String(item.id) === String(variantId)) : null;
+  if (variantId && (!variant || variant.is_active === false)) fail("Product option was not found or is inactive", 404);
+  if (variant?.is_in_stock === false) fail("Product option is out of stock", 409);
+  const quantity = Math.max(1, Number(body.quantity || 1));
+  const availableStock = variant ? variant.stock : product.stock;
+  if (availableStock !== null && availableStock !== undefined && quantity > Number(availableStock)) fail("Requested product quantity is out of stock", 409);
+  const price = effectiveVariantPrice(product, variant);
+    return {
+      key: String(body.key || `${product?.id || body.product_id || body.id || Date.now()}:${variantId || "base"}`),
     product_id: Number(product?.id || body.product_id || body.productId || body.id || 0),
     slug: product?.slug || body.slug || "",
     category_slug: product?.category_slug || product?.category?.slug || body.category_slug || body.categorySlug || "",
     name_ar: product?.name_ar || body.name_ar || body.name || "منتج",
     name_en: product?.name_en || body.name_en || body.name || "Product",
-    image_url: variant?.image_url || product?.main_photo_url || product?.image_url || body.image_url || "/uploads/catalog/gift.png",
+    image_url: variant?.image_url || product?.main_photo_url || product?.image_url || "/uploads/catalog/gift.png",
     variant_id: variantId,
-    variant_label: body.variant_label || [variant?.color, variant?.option, variant?.value].filter(Boolean).join(" / "),
+    variant_label: [variant?.color, variant?.option, variant?.value].filter(Boolean).join(" / ") || String(body.variant_label || ""),
     price,
-    quantity: Math.max(1, Number(body.quantity || 1))
+    quantity,
+    catalog_revision: crypto.createHash("sha256").update(`${rawProduct.updated_at || ""}|${price}|${availableStock}|${variant?.is_active !== false}|${variant?.is_in_stock !== false}`).digest("hex").slice(0, 24)
   };
+}
+
+function cartRevisionFingerprint(items = []) {
+  const lines = items.map((item) => ({
+    key:String(item.key || ""), type:item.item_type === "bundle" || item.bundle_id ? "bundle" : "product",
+    product_id:Number(item.product_id || 0), bundle_id:Number(item.bundle_id || 0), variant_id:String(item.variant_id || ""),
+    quantity:Number(item.quantity || 1), price:Number(item.price || 0).toFixed(2), catalog_revision:String(item.catalog_revision || "")
+  }));
+  return crypto.createHash("sha256").update(JSON.stringify(lines)).digest("hex");
+}
+
+function signCartRevision(items = []) {
+  return jwt.sign({ type:"cart_revision", fp:cartRevisionFingerprint(items) }, jwtSecret, { audience:"siteyfy-cart-revision", expiresIn:"30m" });
+}
+
+function verifyCartRevision(token, items = []) {
+  try {
+    const decoded = jwt.verify(String(token || ""), jwtSecret, { audience:"siteyfy-cart-revision" });
+    return decoded?.type === "cart_revision" && decoded.fp === cartRevisionFingerprint(items);
+  } catch { return false; }
+}
+
+function cartChangeBase(input = {}, index = 0) {
+  return {
+    key:String(input.key || `${input.bundle_id ? "bundle" : "product"}:${input.bundle_id || input.product_id || index}`),
+    item_type:input.item_type === "bundle" || input.bundle_id || input.bundleId ? "bundle" : "product",
+    product_id:Number(input.product_id || input.productId || 0) || null,
+    bundle_id:Number(input.bundle_id || input.bundleId || 0) || null,
+    variant_id:input.variant_id || input.variantId || null,
+    name_ar:String(input.name_ar || input.name_en || "منتج"), name_en:String(input.name_en || input.name_ar || "Product")
+  };
+}
+
+function reconcileCartItems(items = []) {
+  const reconciled = [];
+  const changes = [];
+  asArray(items).slice(0, 80).forEach((input, index) => {
+    const base = cartChangeBase(input, index);
+    const changeCountBefore = changes.length;
+    let candidate = { ...input, quantity:Math.max(1, Number(input.quantity || 1)) };
+    if (base.item_type === "bundle") {
+      const bundle = findBundle(base.bundle_id);
+      if (!bundle) { changes.push({ ...base, type:"item_removed", reason:"BUNDLE_UNAVAILABLE" }); return; }
+      if (bundle.available_stock !== null && Number(bundle.available_stock) <= 0) { changes.push({ ...base, type:"out_of_stock", reason:"BUNDLE_OUT_OF_STOCK" }); return; }
+      if (bundle.available_stock !== null && candidate.quantity > Number(bundle.available_stock)) {
+        changes.push({ ...base, type:"quantity_adjusted", previous_quantity:candidate.quantity, current_quantity:Number(bundle.available_stock), reason:"BUNDLE_STOCK_CHANGED" });
+        candidate.quantity = Number(bundle.available_stock);
+      }
+    } else {
+      const rawProduct = getRecord("products", base.product_id);
+      if (!findProduct(base.product_id) || !rawProduct || rawProduct.is_active === false || rawProduct.isActive === false || rawProduct.active === false) { changes.push({ ...base, type:"item_removed", reason:"PRODUCT_UNAVAILABLE" }); return; }
+      const product = normalizeProductPayload(rawProduct);
+      const variant = base.variant_id ? product.variants.find((row) => String(row.id) === String(base.variant_id)) : null;
+      if (base.variant_id && (!variant || variant.is_active === false)) { changes.push({ ...base, type:"item_removed", reason:"OPTION_UNAVAILABLE" }); return; }
+      if (variant?.is_in_stock === false) { changes.push({ ...base, type:"out_of_stock", reason:"OPTION_OUT_OF_STOCK" }); return; }
+      const stock = variant ? variant.stock : product.stock;
+      if (stock !== null && stock !== undefined && candidate.quantity > Number(stock)) {
+        if (Number(stock) <= 0) { changes.push({ ...base, type:"out_of_stock", reason:"PRODUCT_OUT_OF_STOCK" }); return; }
+        changes.push({ ...base, type:"quantity_adjusted", previous_quantity:candidate.quantity, current_quantity:Number(stock), reason:"PRODUCT_STOCK_CHANGED" });
+        candidate.quantity = Number(stock);
+      }
+    }
+    try {
+      const current = publicCartItem(candidate);
+      const previousPrice = Number(input.price || 0);
+      if (input.price !== undefined && input.price !== null && Math.abs(previousPrice - Number(current.price || 0)) >= 0.005) {
+        changes.push({ ...base, name_ar:current.name_ar, name_en:current.name_en, type:"price_changed", previous_price:previousPrice, current_price:Number(current.price || 0), reason:"CATALOG_PRICE_CHANGED" });
+      }
+      if (changes.length === changeCountBefore && input.catalog_revision && String(input.catalog_revision) !== String(current.catalog_revision)) {
+        changes.push({ ...base, name_ar:current.name_ar, name_en:current.name_en, type:"item_updated", reason:"CATALOG_ITEM_CHANGED" });
+      }
+      reconciled.push(current);
+    } catch (error) {
+      changes.push({ ...base, type:"item_removed", reason:String(error.message || "ITEM_UNAVAILABLE").replace(/\s+/g,"_").toUpperCase().slice(0,120) });
+    }
+  });
+  return { items:reconciled, changes, revision_token:signCartRevision(reconciled), revision_fingerprint:cartRevisionFingerprint(reconciled), verified_at:new Date().toISOString() };
+}
+
+function recordCartReconciliation(req, res, reconciliation, page = "cart", options = {}) {
+  if (!reconciliation.changes.length && !options.stale_revision) return;
+  const guest = guestIdentity(req, res);
+  const safeChanges = reconciliation.changes.slice(0, 80).map((change) => ({
+    type:change.type, reason:change.reason, key:change.key, product_id:change.product_id, bundle_id:change.bundle_id, variant_id:change.variant_id,
+    previous_price:change.previous_price, current_price:change.current_price, previous_quantity:change.previous_quantity, current_quantity:change.current_quantity
+  }));
+  createRecord("cart_reconciliation_events", { event_type:options.stale_revision && !safeChanges.length ? "stale_revision" : "cart_changed", guest_hash:guest.guest_hash, page:["cart","checkout"].includes(page)?page:"cart", changes:safeChanges, detected_at:new Date().toISOString() });
+  const session = verifyCheckoutRecoverySession(req.body?.checkout_session_id, req.body?.checkout_session_token);
+  if (session) {
+    const updated = updateCheckoutRecoverySession(session, { items:reconciliation.items, total:reconciliation.items.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0), source:"server" });
+    recordCheckoutRecoveryEvent(updated, "stale_cart_detected", { source:"server", stage:updated.stage, status:updated.status, message:safeChanges.length?`${safeChanges.length} cart change(s) detected on ${page}.`:`A stale cart revision was blocked on ${page}.`, details:{ page, stale_revision:Boolean(options.stale_revision), changes:safeChanges } });
+  }
 }
 
 function cartSummary(items = []) {
@@ -4922,6 +5027,7 @@ function checkoutLineItems(items = []) {
     const unitPrice = effectiveVariantPrice(product, variant);
     const quantity = Math.max(1, Number(item.quantity || 1));
     if (variant?.stock !== null && variant?.stock !== undefined && quantity > Number(variant.stock)) fail("Requested product option quantity is out of stock", 409);
+    if (!variant && product.stock !== null && product.stock !== undefined && quantity > Number(product.stock)) fail("Requested product quantity is out of stock", 409);
     const shipping = productShippingSnapshot(product, variant);
     return {
       key: String(item.key || [productId, item.colorId || "", variantId || "", index].join(":")),
@@ -6779,7 +6885,7 @@ const checkoutRecoveryStages = new Set([
 ]);
 const checkoutRecoveryClientEvents = new Set([
   "checkout_started", "checkout_updated", "payment_method_selected", "validation_failed", "checkout_submitted",
-  "payment_redirected", "checkout_left", "client_error"
+  "payment_redirected", "checkout_left", "client_error", "cart_revalidated"
 ]);
 
 function checkoutRecoverySettings(payload = null) {
@@ -9191,9 +9297,19 @@ app.post("/api/store/checkout-recovery/session/:sessionKey/sync", (req, res) => 
     customer:req.body?.customer, items:req.body?.items, total:req.body?.total, locale:req.body?.locale,
     payment_provider:req.body?.payment_provider, payment_attempt_id:req.body?.payment_attempt_id,
     stage:req.body?.stage, status:requestedStatus, reason_code:req.body?.reason_code,
-    message:req.body?.message, source:"storefront", details:{ field_names:asArray(req.body?.field_names).slice(0,30).map(value=>String(value).slice(0,80)) }
+    message:req.body?.message, source:"storefront", details:{
+      field_names:asArray(req.body?.field_names).slice(0,30).map(value=>String(value).slice(0,80)),
+      page:["cart","checkout"].includes(req.body?.page)?req.body.page:null,
+      changes:asArray(req.body?.cart_changes).slice(0,80).map(change=>({ type:String(change?.type||"").slice(0,50), reason:String(change?.reason||"").slice(0,120), product_id:Number(change?.product_id||0)||null, bundle_id:Number(change?.bundle_id||0)||null, variant_id:String(change?.variant_id||"").slice(0,120)||null, previous_price:Number(change?.previous_price||0), current_price:Number(change?.current_price||0), previous_quantity:Number(change?.previous_quantity||0), current_quantity:Number(change?.current_quantity||0) }))
+    }
   }, eventType);
   res.json(ok({ session_id:updated.session_key, status:updated.status, stage:updated.stage, updated_at:updated.updated_at }));
+});
+app.post("/api/store/cart/reconcile", (req, res) => {
+  const reconciliation = reconcileCartItems(req.body?.items || cartFromRequest(req));
+  persistCart(res, reconciliation.items);
+  recordCartReconciliation(req, res, reconciliation, String(req.body?.page || "cart"));
+  res.json(ok({ ...reconciliation, ...cartSummary(reconciliation.items) }));
 });
 app.get("/api/cart", (req, res) => res.json(ok(cartSummary(cartFromRequest(req)))));
 app.post("/api/cart", (req, res) => {
@@ -9207,8 +9323,8 @@ app.post("/api/cart", (req, res) => {
 });
 app.put("/api/cart/:id", (req, res) => {
   const items = cartFromRequest(req);
-  const target = items.find((entry) => entry.key === req.params.id || String(entry.product_id) === String(req.params.id));
-  if (target) Object.assign(target, req.body || {}, { quantity: Math.max(1, Number(req.body?.quantity || target.quantity || 1)) });
+  const index = items.findIndex((entry) => entry.key === req.params.id || String(entry.product_id) === String(req.params.id));
+  if (index >= 0) items[index] = publicCartItem({ ...items[index], quantity:Math.max(1, Number(req.body?.quantity || items[index].quantity || 1)) });
   persistCart(res, items);
   res.json(ok({ message: "Cart updated", id: req.params.id, ...cartSummary(items) }));
 });
@@ -9322,7 +9438,15 @@ app.post("/api/orders", async (req, res, next) => {
   } catch (error) { console.error(`Checkout recovery submit sync failed: ${error.message}`); }
   const sessionUser = customerSessionUser(req);
   if (sessionUser && !sessionUser.permissions.includes("place_orders")) fail("You do not have permission to place orders", 403);
-  const items = checkoutLineItems(req.body?.items || cartFromRequest(req));
+  const submittedItems = req.body?.items || cartFromRequest(req);
+  const reconciliation = reconcileCartItems(submittedItems);
+  const cartRevisionValid = verifyCartRevision(req.body?.cart_revision_token, reconciliation.items);
+  if (reconciliation.changes.length || !cartRevisionValid) {
+    persistCart(res, reconciliation.items);
+    recordCartReconciliation(req, res, reconciliation, "checkout", { stale_revision:!cartRevisionValid });
+    return res.status(409).json({ success:false, error:{ message:"CART_REVALIDATION_REQUIRED", code:"CART_REVALIDATION_REQUIRED" }, data:{ ...reconciliation, ...cartSummary(reconciliation.items), verification_only:reconciliation.changes.length===0 } });
+  }
+  const items = checkoutLineItems(reconciliation.items);
   if (!items.length) fail("Cart is empty");
   const customer = await normalizeVerifiedCheckoutCustomer(req.body?.customer || {}, "place_order");
   const requestedPaymentMethod = String(req.body?.payment_method || "cod").toLowerCase();
