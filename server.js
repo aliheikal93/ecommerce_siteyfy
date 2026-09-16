@@ -1,6 +1,7 @@
 import cors from "cors";
 import compression from "compression";
 import crypto from "node:crypto";
+import dns from "node:dns/promises";
 import Database from "better-sqlite3";
 import express from "express";
 import fs from "node:fs";
@@ -1473,6 +1474,48 @@ function edfapayAmount(amount, currency = "SAR") {
   return Number(Math.max(0, Number(amount || 0))).toFixed(digits);
 }
 
+function normalizedPublicIpv4(value = "") {
+  const candidate = String(value || "").trim().replace(/^::ffff:/i, "");
+  const parts = candidate.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return "";
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127 || a >= 224) return "";
+  if (a === 169 && b === 254) return "";
+  if (a === 172 && b >= 16 && b <= 31) return "";
+  if (a === 192 && b === 168) return "";
+  if (a === 100 && b >= 64 && b <= 127) return "";
+  return candidate;
+}
+
+async function edfapayServerIpv4() {
+  const configured = normalizedPublicIpv4(process.env.PAYMENT_FALLBACK_IPV4);
+  if (configured) return { ip: configured, source: "configured_server_ipv4" };
+  try {
+    const resolved = (await dns.resolve4(defaultPublicDomain)).map(normalizedPublicIpv4).find(Boolean);
+    if (resolved) return { ip: resolved, source: "resolved_store_ipv4" };
+  } catch {}
+  return null;
+}
+
+async function edfapayPayerIp(req) {
+  const candidates = [
+    ["cf_connecting_ipv4", req.headers["cf-pseudo-ipv4"]],
+    ["cf_connecting_ip", req.headers["cf-connecting-ip"]],
+    ["reverse_proxy_real_ip", req.headers["x-real-ip"]],
+    ["forwarded_for", req.headers["x-forwarded-for"]],
+    ["express_request_ip", req.ip]
+  ];
+  for (const [source, raw] of candidates) {
+    for (const value of String(raw || "").split(",")) {
+      const ip = normalizedPublicIpv4(value);
+      if (ip) return { ip, source };
+    }
+  }
+  const fallback = await edfapayServerIpv4();
+  if (fallback) return fallback;
+  fail("EDFAPAY_PUBLIC_IPV4_REQUIRED", 409);
+}
+
 function edfapayLegacyHash(parts, password) {
   const input = [...parts, password].map((value) => String(value ?? "")).join("").toUpperCase();
   return crypto.createHash("sha1").update(crypto.createHash("md5").update(input).digest("hex")).digest("hex");
@@ -1498,7 +1541,17 @@ async function edfapayInitiateRequest(fields, timeoutMs = 15000) {
     let data;
     try { data = JSON.parse(text); }
     catch { data = Object.fromEntries(new URLSearchParams(text)); }
-    if (!response.ok || String(data?.result || "").toUpperCase() === "ERROR") fail(edfapaySafeError(data, response.status), response.status || 502);
+    if (!response.ok || String(data?.result || "").toUpperCase() === "ERROR") {
+      const error = new Error(edfapaySafeError(data, response.status));
+      error.status = response.status || 502;
+      error.edfapay_context = {
+        provider_http_status: Number(response.status || 0),
+        provider_error_code: String(data?.error_code || data?.errorCode || "").slice(0, 80) || null,
+        provider_response_received: Boolean(text),
+        provider_content_type: String(response.headers.get("content-type") || "").slice(0, 120) || null
+      };
+      throw error;
+    }
     return data;
   } catch (error) {
     if (error.name === "AbortError") fail("EDFAPAY_REQUEST_TIMEOUT", 504);
@@ -7255,7 +7308,8 @@ function syncCheckoutRecoveryFromPaymentTransaction(transaction = {}) {
     stage: success ? "payment_completed" : failed ? (status.includes("cancel") ? "payment_cancelled" : "payment_failed") : "payment_pending",
     payment_provider: transaction.provider, order_id:transaction.order_id, completed_at:success ? new Date().toISOString() : null,
     reason_code: failed ? String(transaction.details?.reason || transaction.details?.provider_status || status).slice(0,120) : null,
-    message: failed ? String(transaction.details?.reason || transaction.details?.provider_status || status) : ""
+    message: failed ? String(transaction.details?.reason || transaction.details?.provider_status || status) : "",
+    details: failed && transaction.details?.diagnostic && typeof transaction.details.diagnostic === "object" ? transaction.details.diagnostic : {}
   }, success ? "payment_completed" : failed ? "payment_failed" : "payment_status_updated");
 }
 
@@ -7616,8 +7670,7 @@ async function createEdfaPayCheckout(order, req) {
   const returnToken = jwt.sign({ type: "edfapay_return", order_id: Number(order.id) }, jwtSecret, { expiresIn: "1d", audience: "siteyfy-edfapay" });
   const returnUrl = publicStoreUrl(`/payment/edfapay/return?order_id=${order.id}&token=${encodeURIComponent(returnToken)}`);
   const address = [order.customer?.street, order.customer?.building_number, order.customer?.district].filter(Boolean).join(" ").slice(0, 255);
-  const forwardedIp = String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim().replace(/^::ffff:/, "");
-  const payerIp = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/.test(forwardedIp) ? forwardedIp : "127.0.0.1";
+  let payerIp = await edfapayPayerIp(req);
   const fields = {
     action: "SALE",
     edfa_merchant_id: merchantId,
@@ -7636,13 +7689,32 @@ async function createEdfaPayCheckout(order, req) {
     payer_zip: String(order.customer?.postal_code || "").slice(0, 10),
     payer_email: String(order.customer?.email || "").slice(0, 256),
     payer_phone: String(order.customer?.phone || "").replace(/[^0-9+]/g, "").slice(0, 32),
-    payer_ip: payerIp,
+    payer_ip: payerIp.ip,
     term_url_3ds: returnUrl,
     recurring_init: "N",
     auth: "N",
     hash: edfapayLegacyHash([orderReference, amount, currency, description], merchantPassword)
   };
-  const result = await edfapayInitiateRequest(fields);
+  let result;
+  let retryCount = 0;
+  try {
+    result = await edfapayInitiateRequest(fields);
+  } catch (error) {
+    const serverIp = await edfapayServerIpv4();
+    const canRetryWithServerIp = Number(error.status || 0) >= 500 && serverIp?.ip && serverIp.ip !== fields.payer_ip;
+    if (!canRetryWithServerIp) {
+      error.edfapay_context = { ...(error.edfapay_context || {}), payer_ip_source: payerIp.source, retry_count: retryCount };
+      throw error;
+    }
+    retryCount = 1;
+    payerIp = serverIp;
+    fields.payer_ip = serverIp.ip;
+    try { result = await edfapayInitiateRequest(fields); }
+    catch (retryError) {
+      retryError.edfapay_context = { ...(retryError.edfapay_context || {}), payer_ip_source: payerIp.source, retry_count: retryCount, retried_after_provider_5xx: true };
+      throw retryError;
+    }
+  }
   const redirectUrl = result.redirect_url || result.redirectUrl || result.data?.redirectUrl;
   if (!redirectUrl) fail(edfapaySafeError(result, 502), 502);
   const checkoutUrl = verifiedPaymentRedirectUrl(redirectUrl, config);
@@ -7656,9 +7728,24 @@ async function createEdfaPayCheckout(order, req) {
     environment: config.environment,
     return_url: returnUrl,
     description,
+    payer_ip_source: payerIp.source,
+    gateway_retry_count: retryCount,
     created_at: new Date().toISOString()
   };
-  paymentTransaction({ provider: "edfapay", order_id: order.id, type: "checkout_created", status: "pending", amount: order.total, currency, details: { environment: config.environment, provider_status: payment.provider_status } });
+  paymentTransaction({
+    provider: "edfapay",
+    order_id: order.id,
+    type: "checkout_created",
+    status: "pending",
+    amount: order.total,
+    currency,
+    details: {
+      environment: config.environment,
+      provider_status: payment.provider_status,
+      payer_ip_source: payerIp.source,
+      gateway_retry_count: retryCount
+    }
+  });
   return updateRecord("orders", order.id, { payment });
 }
 
@@ -9823,7 +9910,7 @@ app.post("/api/orders", async (req, res, next) => {
     } catch (error) {
       releaseOrderPromotionReservations(order, "edfapay_checkout_failed");
       updateRecord("orders", order.id, { status: "cancelled", payment: { ...commerceSnapshot.payment, provider: "edfapay", status: "failed", failure_reason: String(error.message || "EDFAPAY_CHECKOUT_FAILED"), last_updated_at: new Date().toISOString() }, payment_failed_at: new Date().toISOString() });
-      paymentTransaction({ provider: "edfapay", order_id: order.id, type: "checkout_failed", status: "failed", amount: total, currency: commerceSnapshot.currency.code, details: { reason: String(error.message || "EDFAPAY_CHECKOUT_FAILED").slice(0, 500) } });
+      paymentTransaction({ provider: "edfapay", order_id: order.id, type: "checkout_failed", status: "failed", amount: total, currency: commerceSnapshot.currency.code, details: { reason: String(error.message || "EDFAPAY_CHECKOUT_FAILED").slice(0, 500), diagnostic: error.edfapay_context || {} } });
       throw error;
     }
   }
@@ -9851,7 +9938,7 @@ app.post("/api/orders", async (req, res, next) => {
      try {
        const paymentStarted = Boolean(recoverySession.order_id || recoverySession.payment_attempt_id || ["order_created", "gateway_initializing", "payment_redirected", "payment_pending"].includes(recoverySession.stage));
        const validationError = [400, 409, 422].includes(Number(error.status || 0));
-       updateCheckoutRecoverySession(recoverySession, { stage:paymentStarted?"payment_failed":validationError?"validation_failed":"checkout_failed", status:"failed", reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0], message:error.message, source:"server" }, "checkout_failed");
+       updateCheckoutRecoverySession(recoverySession, { stage:paymentStarted?"payment_failed":validationError?"validation_failed":"checkout_failed", status:"failed", reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0], message:error.message, details:error.edfapay_context || {}, source:"server" }, "checkout_failed");
      }
      catch (recoveryError) { console.error(`Checkout recovery failure sync failed: ${recoveryError.message}`); }
    }

@@ -11,6 +11,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       PUBLIC_DOMAIN: ecommerce.siteyfy.com
+      PAYMENT_FALLBACK_IPV4: 92.113.25.225
       DB_PATH: /app/data/slyrah.sqlite
     volumes:
       - slyrah_data:/app/data

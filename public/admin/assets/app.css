@@ -3393,6 +3393,8 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .recovery-diagnostic code { width:max-content;max-width:100%;margin:5px 0;padding:3px 6px;background:rgba(255,255,255,.75);overflow-wrap:anywhere; }
 .recovery-diagnostic p { font-size:13px;line-height:1.6; }
 .recovery-diagnostic small { margin-top:4px;color:var(--muted); }
+.recovery-diagnostic-hint { display:flex;align-items:flex-start;gap:7px;margin:10px 0 6px;padding:9px;border-radius:5px;background:rgba(255,255,255,.72);font-size:12px;line-height:1.65; }
+.recovery-diagnostic-hint svg { flex:0 0 auto;width:15px;height:15px;margin-top:2px;color:var(--info); }
 .recovery-detail-layout { display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,.55fr);align-items:start;gap:16px; }
 .recovery-main-column,.recovery-side-column { display:grid;gap:16px; }
 .recovery-section { padding:18px;background:var(--panel);border:1px solid var(--line);border-radius:8px; }
@@ -3424,6 +3426,12 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .recovery-timeline p { margin:4px 0;font-size:12px;line-height:1.55; }
 .recovery-timeline small { color:var(--muted);line-height:1.6; }
 .recovery-timeline code { padding:2px 4px;background:var(--panel-soft);font-size:10px; }
+.payment-diagnostic-details { display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin:9px 0;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft); }
+.payment-diagnostic-details>div { min-width:0; }
+.payment-diagnostic-details span,.payment-diagnostic-details strong { display:block;line-height:1.45; }
+.payment-diagnostic-details span { color:var(--muted);font-size:10px; }
+.payment-diagnostic-details strong { margin-top:2px;font-size:11px;overflow-wrap:anywhere; }
+.recovery-transaction-table .payment-diagnostic-details { min-width:310px; }
 .recovery-timeline article.promotion-event .recovery-timeline-dot { border-color:#d8f1e5;background:var(--success); }
 .recovery-timeline article.promotion-event.bad .recovery-timeline-dot { border-color:#f9d5d2;background:var(--danger); }
 .promotion-event-details { display:grid;gap:6px;margin:8px 0;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft); }
