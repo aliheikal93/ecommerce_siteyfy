@@ -4776,7 +4776,7 @@ function evaluatePromotions({ codes = [], code = "", order_total = 0, product_id
       assertPromotionUsage(result.discount, promotionIdentities({ ...identity, customer }), { allowOwnReservation: true });
       candidates.push({ ...result, automatic: entry.automatic });
     } catch (error) {
-      rejected.push({ code: entry.code, reason: error.message });
+      rejected.push({ code: entry.code, reason: error.message, automatic: entry.automatic });
     }
   }
   candidates.sort((a, b) => {
@@ -4788,8 +4788,8 @@ function evaluatePromotions({ codes = [], code = "", order_total = 0, product_id
   const accepted = [];
   for (const candidate of candidates) {
     const check = promotionCompatible(candidate.discount, accepted);
-    if (!check.compatible) rejected.push({ code: candidate.discount.code, discount_id: candidate.discount.id, reason: check.reason });
-    else if (candidate.free_shipping && !policy.allow_shipping_benefit) rejected.push({ code: candidate.discount.code, discount_id: candidate.discount.id, reason: "PROMO_SHIPPING_DISABLED" });
+    if (!check.compatible) rejected.push({ code: candidate.discount.code, discount_id: candidate.discount.id, reason: check.reason, automatic: candidate.automatic });
+    else if (candidate.free_shipping && !policy.allow_shipping_benefit) rejected.push({ code: candidate.discount.code, discount_id: candidate.discount.id, reason: "PROMO_SHIPPING_DISABLED", automatic: candidate.automatic });
     else accepted.push(candidate);
   }
   const subtotal = Number(candidates[0]?.cart_subtotal ?? order_total ?? 0);
@@ -7016,7 +7016,7 @@ const checkoutRecoveryStages = new Set([
 ]);
 const checkoutRecoveryClientEvents = new Set([
   "checkout_started", "checkout_updated", "payment_method_selected", "validation_failed", "checkout_submitted",
-  "payment_redirected", "checkout_left", "client_error", "cart_revalidated"
+  "payment_redirected", "checkout_left", "client_error", "cart_revalidated", "promotion_removed"
 ]);
 
 function checkoutRecoverySettings(payload = null) {
@@ -7103,6 +7103,57 @@ function recordCheckoutRecoveryEvent(session, type, payload = {}) {
     reason_code: String(payload.reason_code || "").slice(0, 120) || null,
     message: redactCheckoutDiagnostic(payload.message || ""), details: payload.details && typeof payload.details === "object" ? payload.details : {},
     occurred_at: payload.occurred_at || new Date().toISOString()
+  });
+}
+
+function promotionTrackingDetails(result = {}, extra = {}) {
+  const cleanPromotion = (promotion = {}) => ({
+    code: String(promotion.code || "").slice(0, 80),
+    name_ar: String(promotion.name_ar || "").slice(0, 180),
+    name_en: String(promotion.name_en || "").slice(0, 180),
+    type: String(promotion.type || "").slice(0, 80),
+    automatic: promotion.automatic === true,
+    discount_amount: Math.max(0, Number(promotion.discount_amount || 0)),
+    free_shipping: promotion.free_shipping === true
+  });
+  return {
+    action: String(extra.action || "evaluate").slice(0, 30),
+    attempted_code: String(extra.attempted_code || "").trim().toUpperCase().slice(0, 80) || null,
+    removed_code: String(extra.removed_code || "").trim().toUpperCase().slice(0, 80) || null,
+    applied_promotions: asArray(result.applied_promotions).slice(0, 20).map(cleanPromotion),
+    rejected_promotions: asArray(result.rejected_promotions).slice(0, 20).map((promotion) => ({
+      code: String(promotion.code || "").slice(0, 80),
+      reason: String(promotion.reason || "PROMO_NOT_APPLIED").slice(0, 160),
+      automatic: promotion.automatic === true
+    })),
+    discount_amount: Math.max(0, Number(result.discount_amount || 0)),
+    free_shipping: result.free_shipping === true
+  };
+}
+
+function recordPromotionEvaluation(req, result = {}) {
+  const session = verifyCheckoutRecoverySession(req.body?.checkout_session_id, req.body?.checkout_session_token);
+  if (!session) return null;
+  const action = ["apply", "remove", "revalidate"].includes(req.body?.tracking_action) ? req.body.tracking_action : "evaluate";
+  const attemptedCode = String(req.body?.attempted_code || "").trim().toUpperCase();
+  const removedCode = String(req.body?.removed_code || "").trim().toUpperCase();
+  const details = promotionTrackingDetails(result, { action, attempted_code:attemptedCode, removed_code:removedCode });
+  const rejectedAttempt = attemptedCode && details.rejected_promotions.find((item) => item.code === attemptedCode);
+  const appliedAttempt = attemptedCode && details.applied_promotions.find((item) => item.code === attemptedCode);
+  const automaticCount = details.applied_promotions.filter((item) => item.automatic).length;
+  let eventType = action === "remove" ? "promotion_removed" : rejectedAttempt ? "promotion_rejected" : appliedAttempt ? "promotion_applied" : automaticCount ? "automatic_promotion_applied" : "promotions_evaluated";
+  let message = action === "remove"
+    ? `Promotion code ${removedCode || "-"} was removed.`
+    : rejectedAttempt
+      ? `Promotion code ${attemptedCode} was rejected: ${rejectedAttempt.reason}.`
+      : appliedAttempt
+        ? `Promotion code ${attemptedCode} was applied.`
+        : automaticCount
+          ? `${automaticCount} automatic promotion(s) applied.`
+          : "Promotions were evaluated with no discount applied.";
+  return recordCheckoutRecoveryEvent(session, eventType, {
+    source:"promotion_engine", stage:session.stage, status:session.status, order_id:session.order_id,
+    reason_code:rejectedAttempt?.reason || null, message, details
   });
 }
 
@@ -7851,7 +7902,11 @@ app.get("/api/admin/order-management/:id", (req, res) => {
   const order = getRecord("orders", req.params.id);
   if (!order) fail("ORDER_NOT_FOUND", 404);
   const events = entityRows("order_events").filter((event) => Number(event.order_id) === Number(order.id)).sort((a, b) => String(b.occurred_at || b.created_at).localeCompare(String(a.occurred_at || a.created_at)));
-  res.json(ok({ order: adminOrderView(order), events, integrations: publicShippingIntegrations() }));
+  const recoverySession = checkoutRecoveryByOrder(order.id);
+  const checkoutEvents = recoverySession
+    ? entityRows("checkout_recovery_events").filter((event) => Number(event.session_id) === Number(recoverySession.id)).sort((a, b) => recentTimestamp(a) - recentTimestamp(b))
+    : [];
+  res.json(ok({ order: adminOrderView(order), events, checkout_events:checkoutEvents, checkout_session:recoverySession ? { id:recoverySession.id, session_key:recoverySession.session_key } : null, integrations: publicShippingIntegrations() }));
 });
 app.patch("/api/admin/order-management/:id/status", (req, res) => {
   if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
@@ -9459,6 +9514,8 @@ app.post("/api/store/checkout-recovery/session/:sessionKey/sync", (req, res) => 
     message:req.body?.message, source:"storefront", details:{
       field_names:asArray(req.body?.field_names).slice(0,30).map(value=>String(value).slice(0,80)),
       page:["cart","checkout"].includes(req.body?.page)?req.body.page:null,
+      action:String(req.body?.promotion_action || "").slice(0,30) || null,
+      removed_code:String(req.body?.removed_code || "").trim().toUpperCase().slice(0,80) || null,
       changes:asArray(req.body?.cart_changes).slice(0,80).map(change=>({ type:String(change?.type||"").slice(0,50), reason:String(change?.reason||"").slice(0,120), product_id:Number(change?.product_id||0)||null, bundle_id:Number(change?.bundle_id||0)||null, variant_id:String(change?.variant_id||"").slice(0,120)||null, previous_price:Number(change?.previous_price||0), current_price:Number(change?.current_price||0), previous_quantity:Number(change?.previous_quantity||0), current_quantity:Number(change?.current_quantity||0) }))
     }
   }, eventType);
@@ -9657,6 +9714,12 @@ app.post("/api/orders", async (req, res, next) => {
   const rejectedSubmitted = discountCodes.find((item) => !appliedCodeSet.has(item));
   if (rejectedSubmitted) {
     const rejection = (applied.rejected_promotions || []).find((item) => item.code === rejectedSubmitted);
+    if (recoverySession) recordCheckoutRecoveryEvent(recoverySession, "promotion_rejected", {
+      source:"promotion_engine", stage:"ready_to_submit", status:recoverySession.status,
+      reason_code:rejection?.reason || "PROMO_NOT_APPLIED",
+      message:`Promotion code ${rejectedSubmitted} was rejected while creating the order.`,
+      details:promotionTrackingDetails(applied, { action:"order_submit", attempted_code:rejectedSubmitted })
+    });
     fail(rejection?.reason || "PROMO_NOT_APPLIED");
   }
   if (!quote) quote = (await customerShippingQuotes(quoteContext)).quote;
@@ -9710,9 +9773,13 @@ app.post("/api/orders", async (req, res, next) => {
     discount_breakdown: applied?.line_discounts || [],
     customer_identity: identities
   });
+  const finalizedPromotionDetails = promotionTrackingDetails(applied, { action:"order_submit" });
+  addOrderEvent(order.id, "promotions_finalized", finalizedPromotionDetails, "promotion_engine");
   if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, {
     customer, items:orderItems, total, payment_provider:requestedPaymentMethod, payment_attempt_id:paymentAttemptId,
-    order_id:order.id, stage:"order_created", status:hostedPayment?"payment_pending":"active", source:"server"
+    order_id:order.id, stage:"order_created", status:hostedPayment?"payment_pending":"active", source:"server",
+    message:(applied.applied_promotions || []).length ? `${applied.applied_promotions.length} promotion(s) finalized for the order.` : "Order created without promotions.",
+    details:finalizedPromotionDetails
   }, "order_created");
   if (requestedPaymentMethod === "tamara") {
     try {
@@ -9947,7 +10014,9 @@ app.post("/api/store/discounts/validate", (req, res) => {
 });
 app.post("/api/store/promotions/evaluate", (req, res) => {
   const guest = guestIdentity(req, res);
-  res.json(ok(evaluatePromotions({ ...(req.body || {}), identity: { ...guest, user_id: req.user?.id }, reserve: req.body?.reserve !== false })));
+  const result = evaluatePromotions({ ...(req.body || {}), identity: { ...guest, user_id: req.user?.id }, reserve: req.body?.reserve !== false });
+  recordPromotionEvaluation(req, result);
+  res.json(ok(result));
 });
 app.post("/api/webhooks/imile/tracking", (req, res) => {
   const settings = normalizeShippingIntegrations();

@@ -958,7 +958,7 @@ function restoreCheckoutFormState(values){
 async function revalidateCartDiscount(){
   let discount=null;try{discount=JSON.parse(localStorage.getItem("slyrah_discount")||"null");}catch{}
   const codes=appliedPromotionCodes(discount);if(!codes.length)return;
-  try{const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:state.cart.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0),items:state.cart})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}
+  try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:state.cart.reduce((sum,item)=>sum+Number(item.price||0)*Number(item.quantity||1),0),items:state.cart,tracking_action:"revalidate",...tracking})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}
   catch{clearDiscount();}
 }
 
@@ -1273,12 +1273,17 @@ function removeCartItem(index,checkout) {
 
 function clearDiscount(){localStorage.removeItem("slyrah_discount");}
 
-async function applyCoupon() {
-  const code=document.getElementById("couponCode").value.trim().toUpperCase();const message=document.getElementById("couponMessage");if(!code)return;message.className="coupon-message";message.textContent="جاري التحقق...";const existing=appliedPromotionCodes(cartTotals().discount);const codes=[...new Set([...existing,code])];
-  try{const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,product_ids:state.cart.map(item=>item.product_id),category_slugs:state.cart.map(item=>item.category_slug),items:state.cart})});const rejected=(result.rejected_promotions||[]).find(item=>item.code===code);if(rejected)throw new Error(rejected.reason);localStorage.setItem("slyrah_discount",JSON.stringify(result));renderCart(location.pathname==="/checkout");}catch(error){message.className="coupon-message error";message.textContent=promotionErrorMessage(error.message);}
+async function promotionTrackingFields(){
+  const recovery=await ensureCheckoutRecovery();
+  return recovery?.session_id&&recovery?.session_token?{checkout_session_id:recovery.session_id,checkout_session_token:recovery.session_token}:{};
 }
 
-async function removePromotionCode(code,checkout){const codes=appliedPromotionCodes(cartTotals().discount).filter(item=>item!==code);if(!codes.length){clearDiscount();renderCart(checkout);return;}try{const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,items:state.cart})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}catch{clearDiscount();}renderCart(checkout);}
+async function applyCoupon() {
+  const code=document.getElementById("couponCode").value.trim().toUpperCase();const message=document.getElementById("couponMessage");if(!code)return;message.className="coupon-message";message.textContent="جاري التحقق...";const existing=appliedPromotionCodes(cartTotals().discount);const codes=[...new Set([...existing,code])];
+  try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,product_ids:state.cart.map(item=>item.product_id),category_slugs:state.cart.map(item=>item.category_slug),items:state.cart,tracking_action:"apply",attempted_code:code,...tracking})});const rejected=(result.rejected_promotions||[]).find(item=>item.code===code);if(rejected)throw new Error(rejected.reason);localStorage.setItem("slyrah_discount",JSON.stringify(result));renderCart(location.pathname==="/checkout");}catch(error){message.className="coupon-message error";message.textContent=promotionErrorMessage(error.message);}
+}
+
+async function removePromotionCode(code,checkout){const codes=appliedPromotionCodes(cartTotals().discount).filter(item=>item!==code);if(!codes.length){clearDiscount();syncCheckoutRecovery("promotion_removed",{promotion_action:"remove",removed_code:code,message:`Promotion code ${code} was removed.`});renderCart(checkout);return;}try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,items:state.cart,tracking_action:"remove",removed_code:code,...tracking})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}catch{clearDiscount();}renderCart(checkout);}
 
 const PAYMENT_ATTEMPT_KEY="siteyfy_payment_attempt";
 
