@@ -7295,7 +7295,7 @@ async function createTamaraCheckout(order, req) {
   const config = normalizePaymentGateways().providers.tamara;
   const currency = order.currency_snapshot?.code || "SAR";
   const country = order.market_snapshot?.country_code || order.customer?.country_code || "SA";
-  if (!config.is_enabled || normalizePaymentGateways().active_provider !== "tamara") fail("TAMARA_NOT_ENABLED", 409);
+  if (!config.is_enabled || !config.show_at_checkout || !decryptIntegrationSecret(config.api_token_encrypted)) fail("TAMARA_NOT_ENABLED", 409);
   if (!config.supported_countries.includes(country) || !config.supported_currencies.includes(currency)) fail("TAMARA_COUNTRY_OR_CURRENCY_NOT_SUPPORTED", 409);
   if (Number(order.total || 0) < Number(config.minimum_amount || 0) || (config.maximum_amount !== null && Number(order.total || 0) > Number(config.maximum_amount))) fail("TAMARA_ORDER_AMOUNT_NOT_SUPPORTED", 409);
   try {

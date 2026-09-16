@@ -710,7 +710,21 @@ function bindReviewInteractions(product) {
   };
 }
 
-function loadExternalScript(src,key){if(document.querySelector(`script[data-payment-widget="${key}"]`))return Promise.resolve();return new Promise((resolve,reject)=>{const script=document.createElement("script");script.src=src;script.async=true;script.dataset.paymentWidget=key;script.onload=resolve;script.onerror=reject;document.head.appendChild(script);});}
+const externalScriptPromises=new Map();
+
+function loadExternalScript(src,key){
+  if(externalScriptPromises.has(key))return externalScriptPromises.get(key);
+  const existing=document.querySelector(`script[data-payment-widget="${key}"]`);
+  const promise=new Promise((resolve,reject)=>{
+    if(existing?.dataset.loaded==="true")return resolve();
+    const script=existing||document.createElement("script");
+    const loaded=()=>{script.dataset.loaded="true";resolve();};
+    const failed=()=>{externalScriptPromises.delete(key);reject(new Error(`${key.toUpperCase()}_WIDGET_LOAD_FAILED`));};
+    script.addEventListener("load",loaded,{once:true});script.addEventListener("error",failed,{once:true});
+    if(!existing){script.src=src;script.async=true;script.dataset.paymentWidget=key;document.head.appendChild(script);}
+  });
+  externalScriptPromises.set(key,promise);return promise;
+}
 
 function paymentWidgetContext() {
   return {
@@ -739,7 +753,7 @@ async function renderTamaraProductWidget(root,tamara,amount,context) {
   const box=document.createElement("div");
   box.className="installment-widget tamara-installment-widget";
   const widget=document.createElement("tamara-widget");
-  widget.id="tamaraProductWidget";
+  widget.id=`${root.id||"product"}-tamara-widget`;
   widget.setAttribute("type","tamara-summary");
   widget.setAttribute("amount",amount.toFixed(2));
   widget.setAttribute("currency",context.currency);
@@ -766,12 +780,17 @@ async function renderInstallmentWidgets(product,price){
   root.hidden=!root.children.length;
 }
 
+let checkoutPaymentWidgetRenderId=0;
 async function renderCheckoutPaymentWidgets(amount){
   const methods=state.paymentMethods?.methods||[],widgets=state.paymentMethods?.widgets||{},context=paymentWidgetContext(),total=Number(amount||0);
+  const signature=[total.toFixed(2),context.currency,context.country,context.language].join(":");
   const tamara=widgets.tamara||methods.find(item=>item.id==="tamara"&&item.public_key),tamaraRoot=document.getElementById("checkout-tamara-widget");
-  if(tamaraRoot){tamaraRoot.innerHTML="";if(paymentAmountAllowed(tamara,total,context))await renderTamaraProductWidget(tamaraRoot,tamara,total,context);}
   const tabby=methods.find(item=>item.id==="tabby"&&item.public_key),tabbyRoot=document.getElementById("checkout-tabby-widget");
-  if(tabbyRoot){tabbyRoot.innerHTML="";if(paymentAmountAllowed(tabby,total,context)){try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");window.TabbyPromo?.({selector:"#checkout-tabby-widget",currency:context.currency,price:total.toFixed(2),lang:context.language,publicKey:tabby.public_key,merchantCode:tabby.merchant_code||context.country});}catch{tabbyRoot.innerHTML="";}}}
+  if(tamaraRoot?.dataset.paymentWidgetSignature===signature&&tabbyRoot?.dataset.paymentWidgetSignature===signature)return;
+  const renderId=++checkoutPaymentWidgetRenderId;
+  if(tamaraRoot){tamaraRoot.innerHTML="";tamaraRoot.dataset.paymentWidgetSignature=signature;if(paymentAmountAllowed(tamara,total,context))await renderTamaraProductWidget(tamaraRoot,tamara,total,context);}
+  if(renderId!==checkoutPaymentWidgetRenderId)return;
+  if(tabbyRoot){tabbyRoot.innerHTML="";tabbyRoot.dataset.paymentWidgetSignature=signature;if(paymentAmountAllowed(tabby,total,context)){try{await loadExternalScript("https://checkout.tabby.ai/tabby-promo.js","tabby");if(renderId===checkoutPaymentWidgetRenderId&&document.getElementById("checkout-tabby-widget")===tabbyRoot)window.TabbyPromo?.({selector:"#checkout-tabby-widget",currency:context.currency,price:total.toFixed(2),lang:context.language,publicKey:tabby.public_key,merchantCode:tabby.merchant_code||context.country});}catch{if(renderId===checkoutPaymentWidgetRenderId)tabbyRoot.innerHTML="";}}}
   observeCheckoutPaymentWidgetHeights();
 }
 
@@ -1130,7 +1149,7 @@ function renderCart(checkout=false) {
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;form.addEventListener("input",()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshCheckoutQuote,500);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
 }
 
 function bindCheckoutPhoneInput(){
@@ -1222,10 +1241,16 @@ function renderCheckoutShippingChoices(quotes=[]){
   box.querySelectorAll('[name="shipping_quote_choice"]').forEach(input=>input.onchange=()=>{state.checkoutQuote=quotes.find(quote=>quote.id===input.value)||state.checkoutQuote;const totals=cartTotals();document.getElementById("checkoutShippingAmount").innerHTML=checkoutShippingPrice(totals.shipping);document.getElementById("checkoutTotalAmount").innerHTML=money(totals.total);});
 }
 
-async function refreshCheckoutQuote(){
+let checkoutQuoteFingerprint="";
+let checkoutQuoteRequestController=null;
+async function refreshCheckoutQuote({force=false}={}){
   const form=document.getElementById("checkoutForm");if(!form)return;const required=[...form.querySelectorAll("[required]")];if(required.some(input=>!input.value.trim()))return;
   const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
-  try{const result=await api("/api/store/shipping/quote",{method:"POST",body:JSON.stringify({customer:values,payment_method,items:state.cart})});state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);renderCheckoutPaymentWidgets(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}
+  const quoteCustomer={country_code:values.country_code,province:values.province,city:values.city,district:values.district,street:values.street,building_number:values.building_number,postal_code:values.postal_code,short_address:values.short_address,latitude:values.latitude,longitude:values.longitude};
+  const fingerprint=JSON.stringify({customer:quoteCustomer,payment_method,items:state.cart.map(item=>[item.key,item.quantity])});
+  if(!force&&fingerprint===checkoutQuoteFingerprint){if(status)status.textContent="تم تحديث تكلفة الشحن";return;}
+  checkoutQuoteRequestController?.abort();const controller=new AbortController();checkoutQuoteRequestController=controller;
+  try{const result=await api("/api/store/shipping/quote",{method:"POST",signal:controller.signal,body:JSON.stringify({customer:values,payment_method,items:state.cart})});if(controller!==checkoutQuoteRequestController)return;checkoutQuoteFingerprint=fingerprint;state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);renderCheckoutPaymentWidgets(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(error.name!=="AbortError"&&status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}finally{if(checkoutQuoteRequestController===controller)checkoutQuoteRequestController=null;}
 }
 
 function changeCartQuantity(index,delta,checkout) {
@@ -1291,7 +1316,8 @@ function continueGatewayPayment(result,attempt,button){
   location.replace(redirectUrl);
 }
 
-async function placeOrder() {
+async function placeOrder(options={}) {
+  const retryClosedAttempt=options?.retryClosedAttempt!==false;
   const initialButton=document.getElementById("placeOrder");if(!initialButton)return;initialButton.disabled=true;initialButton.textContent="جاري التحقق من الأسعار...";
   const cartCurrent=await revalidateVisibleCart({force:true});if(!cartCurrent)return;
   const form=document.getElementById("checkoutForm"),button=document.getElementById("placeOrder");if(!form||!button)return;
@@ -1305,7 +1331,7 @@ async function placeOrder() {
     clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
   }catch(error){
     if(error.code==="CART_REVALIDATION_REQUIRED"&&error.data){state.cart=error.data.items||[];state.cartRevisionToken=error.data.revision_token||"";state.cartVerifiedAt=Date.now();state.checkoutQuote=null;saveLocalCart({invalidateRevision:false});clearPaymentAttempt();await revalidateCartDiscount();renderCart(true);restoreCheckoutFormState(formValues);refreshCheckoutQuote();if(error.data.changes?.length)showCartChanges(error.data.changes);else toast("تم تحديث التحقق من السلة. راجعي الإجمالي ثم أكدي الطلب مرة أخرى.");return;}
-    if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message))clearPaymentAttempt();const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
+    if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message)){clearPaymentAttempt();if(retryClosedAttempt){button.disabled=false;button.textContent="جاري إنشاء جلسة دفع جديدة...";return placeOrder({retryClosedAttempt:false});}}const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(promotionErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
   }
 }
 
