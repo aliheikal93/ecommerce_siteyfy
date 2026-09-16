@@ -5076,6 +5076,148 @@ function storeProductRows() {
   return activeRows("products").map(productForStore);
 }
 
+const smartCategoryRuleTypes = new Set(["best_sellers", "newest", "on_sale"]);
+const smartCategoryFallbacks = new Set(["empty", "latest"]);
+
+function normalizeCategoryPayload(payload = {}, existing = {}) {
+  const merged = { ...(existing || {}), ...(payload || {}) };
+  const rawRule = { ...(existing?.smart_rule || {}), ...(payload?.smart_rule || {}) };
+  const categoryType = merged.category_type === "smart" ? "smart" : "manual";
+  const ruleType = smartCategoryRuleTypes.has(rawRule.type) ? rawRule.type : "best_sellers";
+  const lookbackDays = Math.min(3650, Math.max(0, Math.floor(Number(rawRule.lookback_days ?? 90))));
+  const minimumUnits = Math.min(1000000, Math.max(0, Math.floor(Number(rawRule.minimum_units ?? 1))));
+  const productLimit = Math.min(200, Math.max(1, Math.floor(Number(rawRule.product_limit ?? 12))));
+  const ids = (value) => [...new Set(asArray(value).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  return {
+    ...merged,
+    name_en: String(merged.name_en || "").trim(),
+    name_ar: String(merged.name_ar || "").trim(),
+    slug: String(merged.slug || "").trim(),
+    category_type: categoryType,
+    smart_rule: {
+      type: ruleType,
+      lookback_days: lookbackDays,
+      minimum_units: minimumUnits,
+      product_limit: productLimit,
+      fallback: smartCategoryFallbacks.has(rawRule.fallback) ? rawRule.fallback : "empty",
+      include_verified_legacy: boolValue(rawRule.include_verified_legacy, true),
+      included_product_ids: ids(rawRule.included_product_ids),
+      excluded_product_ids: ids(rawRule.excluded_product_ids)
+    },
+    show_in_category_strip: boolValue(merged.show_in_category_strip, true),
+    show_in_filters: boolValue(merged.show_in_filters, true),
+    show_on_home: boolValue(merged.show_on_home, true),
+    is_active: boolValue(merged.is_active, true)
+  };
+}
+
+function smartCategoryOrderTimestamp(order = {}) {
+  const value = order.payment_completed_at
+    || order.delivered_at
+    || order.legacy_dates?.completed_at
+    || order.legacy_dates?.paid_at
+    || order.submitted_at
+    || order.created_at
+    || order.updated_at;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function smartCategorySalesMap(rule = {}) {
+  const totals = new Map();
+  const cutoff = Number(rule.lookback_days || 0) > 0 ? Date.now() - Number(rule.lookback_days) * 86400000 : 0;
+  const orders = entityRows("orders");
+  const ordersById = new Map(orders.map((order) => [Number(order.id), order]));
+  const add = (productId, quantity) => {
+    const id = Number(productId);
+    const units = Math.max(0, Math.floor(Number(quantity || 0)));
+    if (id && units) totals.set(id, (totals.get(id) || 0) + units);
+  };
+  orders
+    .filter((order) => !boolValue(order.is_test, false) && orderIsPaidOrDelivered(order) && (!cutoff || smartCategoryOrderTimestamp(order) >= cutoff))
+    .forEach((order) => asArray(order.items).forEach((item) => {
+      const lineQuantity = Math.max(0, Math.floor(Number(item.quantity || 0)));
+      if (item.product_id) add(item.product_id, lineQuantity);
+      const components = asArray(item.components);
+      if (components.length) components.forEach((component) => add(component.product_id, component.quantity));
+      else asArray(item.bundle_items).forEach((component) => add(component.product_id, Number(component.quantity || 0) * lineQuantity));
+    }));
+  if (rule.include_verified_legacy === true) {
+    entityRows("legacy_sales_evidence").forEach((row) => {
+      if (row.delivered !== true) return;
+      const evidenceTime = new Date(row.shipment_date || row.created_at || 0).getTime();
+      if (cutoff && (!Number.isFinite(evidenceTime) || evidenceTime < cutoff)) return;
+      if (row.legacy_order_record_id) {
+        const importedOrder = ordersById.get(Number(row.legacy_order_record_id));
+        if (importedOrder && orderIsPaidOrDelivered(importedOrder) && unitsOfProductInOrder(importedOrder, row.product_id) > 0) return;
+      }
+      add(row.product_id, Math.max(1, Number(row.minimum_quantity || 1)));
+    });
+  }
+  return totals;
+}
+
+function smartCategoryMatches(category = {}, products = storeProductRows()) {
+  const normalized = normalizeCategoryPayload(category, category);
+  if (normalized.category_type !== "smart") return [];
+  const rule = normalized.smart_rule;
+  const included = new Set(rule.included_product_ids.map(Number));
+  const excluded = new Set(rule.excluded_product_ids.map(Number));
+  const createdTime = (product) => {
+    const parsed = new Date(product.created_at || product.updated_at || 0).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  let scored;
+  if (rule.type === "best_sellers") {
+    const sales = smartCategorySalesMap(rule);
+    scored = products
+      .map((product) => ({ product, score: Number(sales.get(Number(product.id)) || 0) }))
+      .filter(({ product, score }) => included.has(Number(product.id)) || score >= rule.minimum_units)
+      .sort((a, b) => b.score - a.score || createdTime(b.product) - createdTime(a.product));
+  } else if (rule.type === "on_sale") {
+    scored = products
+      .filter((product) => Number(product.price_before || product.compare_at_price || product.price || 0) > Number(product.sale_price || product.price || 0))
+      .map((product) => ({ product, score: Number(product.price_before || product.compare_at_price || product.price || 0) - Number(product.sale_price || product.price || 0) }))
+      .sort((a, b) => b.score - a.score || createdTime(b.product) - createdTime(a.product));
+  } else {
+    scored = products.map((product) => ({ product, score: createdTime(product) })).sort((a, b) => b.score - a.score);
+  }
+  const found = new Set(scored.map(({ product }) => Number(product.id)));
+  for (const id of included) {
+    const product = products.find((row) => Number(row.id) === id);
+    if (product && !found.has(id)) scored.unshift({ product, score: 0 });
+  }
+  scored = scored.filter(({ product }) => !excluded.has(Number(product.id)));
+  if (!scored.length && rule.fallback === "latest") {
+    scored = products.map((product) => ({ product, score: createdTime(product) })).sort((a, b) => b.score - a.score);
+  }
+  return scored.slice(0, rule.product_limit).map(({ product, score }, index) => ({ id: Number(product.id), score, rank: index + 1 }));
+}
+
+function categoryForStore(category = {}, products = storeProductRows()) {
+  const normalized = normalizeCategoryPayload(category, category);
+  const matches = smartCategoryMatches(normalized, products);
+  return {
+    ...normalized,
+    product_ids: matches.map((match) => match.id),
+    matched_product_count: matches.length
+  };
+}
+
+let storeCategoryCache = { expires_at: 0, rows: [] };
+
+function invalidateStoreCategoryCache() {
+  storeCategoryCache = { expires_at: 0, rows: [] };
+}
+
+function storeCategoryRows() {
+  if (storeCategoryCache.expires_at > Date.now()) return storeCategoryCache.rows;
+  const products = storeProductRows();
+  const rows = activeRows("categories").map((category) => categoryForStore(category, products));
+  storeCategoryCache = { expires_at: Date.now() + 15000, rows };
+  return rows;
+}
+
 const reviewStatuses = new Set(["pending", "published", "hidden", "rejected"]);
 const salesDisplayModes = new Set(["exact", "threshold", "hidden"]);
 const reviewSubmissionWindowMs = 60 * 60 * 1000;
@@ -7469,10 +7611,28 @@ app.post("/api/admin/catalog/reset", (req, res) => {
   res.json(ok({ message: "Catalog reset", removed }));
 });
 
+app.post("/api/admin/categories/preview", (req, res) => {
+  const category = normalizeCategoryPayload(req.body || {});
+  const products = storeProductRows();
+  const byId = new Map(products.map((product) => [Number(product.id), product]));
+  const matches = smartCategoryMatches(category, products);
+  res.json(ok({
+    matched_product_count: matches.length,
+    products: matches.map((match) => {
+      const product = byId.get(match.id) || {};
+      return { ...match, name_ar: product.name_ar || "", name_en: product.name_en || "", image_url: product.main_photo_url || product.image_url || "" };
+    })
+  }));
+});
+
 for (const [route, entity] of Object.entries(entityMap)) {
   app.get(`/api/admin/${route}`, (req, res) => {
     const rows = entityRows(entity);
     if (entity === "products") return res.json(ok({ products: rows, total: rows.length, page: Number(req.query.page || 1), limit: Number(req.query.limit || 20) }));
+    if (entity === "categories") {
+      const products = storeProductRows();
+      return res.json(ok(rows.map((category) => categoryForStore(category, products))));
+    }
     if (entity === "bundles") return res.json(ok({ bundles: rows.map(bundleForStore), total: rows.length }));
     if (entity === "collections") {
       const productsById = new Map(entityRows("products").map((product) => [Number(product.id), product]));
@@ -7549,6 +7709,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
     if (entity === "orders") fail("Orders can only be created through checkout", 405);
     const payload = entity === "products"
       ? normalizeProductPayload(req.body || {})
+      : entity === "categories"
+        ? normalizeCategoryPayload(req.body || {})
       : entity === "bundles"
         ? normalizeBundlePayload(req.body || {})
         : entity === "collections"
@@ -7560,6 +7722,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
               : (req.body || {});
     if (entity === "bundles" && payload.items.length < 2) fail("A bundle must contain at least two products");
     const record = createRecord(entity, payload);
+    if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
       const collection = collectionForAdmin(record);
       return res.json(ok({ collection, ...collection }));
@@ -7572,6 +7735,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
     if (entity === "orders") fail("Use order management endpoints to update orders", 405);
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
+      : entity === "categories"
+        ? updateRecord(entity, req.params.id, normalizeCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
       : entity === "bundles"
         ? updateBundleRecord(req.params.id, req.body || {})
         : entity === "collections"
@@ -7581,6 +7746,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
             : entity === "users"
               ? updateRecord(entity, req.params.id, normalizeUserPayload(req.body || {}, getRecord(entity, req.params.id)))
               : updateRecord(entity, req.params.id, req.body || {});
+    if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
       const collection = collectionForAdmin(record);
       return res.json(ok({ collection, ...collection }));
@@ -7593,6 +7759,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
     if (entity === "orders") fail("Use order management endpoints to update orders", 405);
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
+      : entity === "categories"
+        ? updateRecord(entity, req.params.id, normalizeCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
       : entity === "bundles"
         ? updateBundleRecord(req.params.id, req.body || {})
         : entity === "collections"
@@ -7602,6 +7770,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
             : entity === "users"
               ? updateRecord(entity, req.params.id, normalizeUserPayload(req.body || {}, getRecord(entity, req.params.id)))
               : updateRecord(entity, req.params.id, req.body || {});
+    if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
       const collection = collectionForAdmin(record);
       return res.json(ok({ collection, ...collection }));
@@ -7613,6 +7782,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
   app.delete(`/api/admin/${route}/:id`, (req, res) => {
     if (entity === "orders") fail("Orders cannot be deleted through the generic API", 405);
     softDelete(entity, req.params.id);
+    if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     res.json(ok({ message: "Deleted" }));
   });
 }
@@ -9257,7 +9427,7 @@ app.get("/api/bundles/:id", (req, res) => {
   if (!bundle) return res.status(404).json({ success: false, error: { message: "Bundle not found" } });
   res.json(ok({ bundle, ...bundle }));
 });
-app.get("/api/categories", (_req, res) => res.json(ok({ categories: activeRows("categories") })));
+app.get("/api/categories", (_req, res) => res.json(ok({ categories: storeCategoryRows() })));
 app.get("/api/brands", (_req, res) => res.json(ok({ brands: activeRows("brands") })));
 app.get("/api/company-info", (_req, res) => res.json(ok(getSetting("companyInfo"))));
 app.get("/api/content", (_req, res) => res.json(ok([])));
@@ -9769,7 +9939,7 @@ app.get("/api/store/company-info", (_req, res) => {
   const companyInfo = getSetting("companyInfo") || {};
   res.json(ok({ company_info: companyInfo, ...companyInfo }));
 });
-app.get("/api/store/categories", (_req, res) => res.json(ok({ categories: activeRows("categories") })));
+app.get("/api/store/categories", (_req, res) => res.json(ok({ categories: storeCategoryRows() })));
 app.get("/api/store/brands", (_req, res) => res.json(ok({ brands: activeRows("brands") })));
 app.get("/api/store/bundles", (_req, res) => res.json(ok({ bundles: storeBundleRows() })));
 app.get("/api/store/collections", (_req, res) => {

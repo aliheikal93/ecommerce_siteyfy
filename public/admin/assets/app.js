@@ -712,7 +712,7 @@
     categories: {
       icon: "layers",
       api: "/api/admin/categories",
-      columns: ["id", "image_url", "name_en", "name_ar", "slug", "is_active"],
+      columns: ["id", "image_url", "name_en", "name_ar", "category_type", "matched_product_count", "is_active"],
       fields: [["image_url", "image", "image"], ["name_en", "nameEn", "text", true], ["name_ar", "nameAr", "text", true], ["slug", "slug", "text"], ["description_en", "descriptionEn", "textarea"], ["description_ar", "descriptionAr", "textarea"], ["is_active", "active", "checkbox"]]
     },
     brands: {
@@ -1741,7 +1741,7 @@
   }
 
   function label(key) {
-    const map = { id: "ID", main_photo_url: t("image"), image_url: t("image"), logo_url: t("image"), short_description_en: t("shortDescription"), name_en: t("nameEn"), name_ar: t("nameAr"), title_en: t("titleEn"), title_ar: t("titleAr"), price: t("price"), sale_price: t("salePrice"), cost: t("cost"), stock: t("stock"), is_active: t("status"), isActive: t("status"), created_at: "Date", total: t("orderTotal"), customer_name: t("customer"), role: t("role") };
+    const map = { id: "ID", main_photo_url: t("image"), image_url: t("image"), logo_url: t("image"), short_description_en: t("shortDescription"), name_en: t("nameEn"), name_ar: t("nameAr"), title_en: t("titleEn"), title_ar: t("titleAr"), price: t("price"), sale_price: t("salePrice"), cost: t("cost"), stock: t("stock"), is_active: t("status"), isActive: t("status"), category_type: ui("Type", "النوع"), matched_product_count: ui("Products", "المنتجات"), created_at: "Date", total: t("orderTotal"), customer_name: t("customer"), role: t("role") };
     return map[key] || key.replaceAll("_", " ");
   }
 
@@ -1775,6 +1775,8 @@
       return switchButton({ id: row?.id, field: key, value, disabled: resource?.readOnly });
     }
     if (resourceKey === "products" && key === "stock" && (!Number(value || 0))) return `<span class="status-pill good">${t("unlimitedStock")}</span>`;
+    if (resourceKey === "categories" && key === "category_type") return `<span class="status-pill ${value === "smart" ? "good" : "empty"}">${value === "smart" ? ui("Smart", "ذكي") : ui("Manual", "يدوي")}</span>`;
+    if (resourceKey === "categories" && key === "matched_product_count") return row.category_type === "smart" ? `<strong>${Number(value || 0)}</strong>` : `<span class="muted">${ui("Manual", "يدوي")}</span>`;
     if (isImageKey(key) && value) return `<img class="table-thumb" src="${value}" alt="" loading="lazy" />`;
     if (key?.toLowerCase().includes("color") && String(value || "").startsWith("#")) return `<span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:18px;height:18px;border-radius:50%;background:${value};border:1px solid var(--line-strong);"></span>${value}</span>`;
     if (value === undefined || value === null || value === "") return `<span class="muted">-</span>`;
@@ -1785,11 +1787,89 @@
     return ["main_photo_url", "image_url", "logo_url", "thumbnail_url", "banner_url"].includes(key);
   }
 
+  function categoryRulePayload(form) {
+    const values = Object.fromEntries(new FormData(form));
+    const selectedIds = (name) => [...form.elements[name].selectedOptions].map((option) => Number(option.value)).filter(Boolean);
+    return {
+      image_url: values.image_url,
+      name_en: values.name_en,
+      name_ar: values.name_ar,
+      slug: values.slug,
+      description_en: values.description_en,
+      description_ar: values.description_ar,
+      category_type: values.category_type === "smart" ? "smart" : "manual",
+      smart_rule: {
+        type: values.rule_type,
+        lookback_days: Number(values.lookback_days || 0),
+        minimum_units: Number(values.minimum_units || 0),
+        product_limit: Number(values.product_limit || 12),
+        fallback: values.fallback,
+        include_verified_legacy: values.include_verified_legacy === "true",
+        included_product_ids: selectedIds("included_product_ids"),
+        excluded_product_ids: selectedIds("excluded_product_ids")
+      },
+      show_in_category_strip: values.show_in_category_strip === "true",
+      show_in_filters: values.show_in_filters === "true",
+      show_on_home: values.show_on_home === "true",
+      is_active: values.is_active === "true"
+    };
+  }
+
+  async function openCategoryEditor(row = {}) {
+    const products = state.rows.products?.length ? state.rows.products : await loadResource("products").catch(() => []);
+    const isEdit = Boolean(row.id);
+    const rule = row.smart_rule || {};
+    const type = row.category_type === "smart" ? "smart" : "manual";
+    const selected = (values, id) => (Array.isArray(values) ? values : []).map(Number).includes(Number(id)) ? "selected" : "";
+    const productOptions = (values) => products.filter((product) => product.is_active !== false).map((product) => `<option value="${product.id}" ${selected(values, product.id)}>#${product.id} · ${escapeHtml(state.lang === "ar" ? (product.name_ar || product.name_en) : (product.name_en || product.name_ar))}</option>`).join("");
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="modal-backdrop" id="modal">
+        <form class="modal category-editor-modal" id="categoryEditorForm">
+          <div class="modal-head">
+            <div><span class="section-kicker">CATALOG</span><h2>${isEdit ? ui("Edit category", "تعديل التصنيف") : ui("Create category", "إضافة تصنيف")}</h2><p class="muted">${ui("Use a manual catalog category or let verified store activity build it automatically.", "استخدم تصنيفًا يدويًا أو اجعله يتكوّن تلقائيًا من نشاط المتجر الموثق.")}</p></div>
+            <button class="btn icon-btn" type="button" data-close aria-label="${t("close")}">${i("x")}</button>
+          </div>
+          <div class="modal-body category-editor-body">
+            <section class="catalog-form-section accent">${imageUploadField("image_url", "image", row.image_url || "")}</section>
+            <section class="catalog-form-section">
+              <div class="section-kicker">01</div><h3>${ui("Identity", "بيانات التصنيف")}</h3>
+              <div class="form-grid"><div class="field"><label>${t("nameEn")} *</label><input name="name_en" value="${escapeHtml(row.name_en || "")}" required /></div><div class="field"><label>${t("nameAr")} *</label><input name="name_ar" value="${escapeHtml(row.name_ar || "")}" required dir="rtl" /></div><div class="field full"><label>${t("slug")} *</label><input name="slug" value="${escapeHtml(row.slug || "")}" required dir="ltr" /></div><div class="field full"><label>${t("descriptionEn")}</label><textarea name="description_en">${escapeHtml(row.description_en || "")}</textarea></div><div class="field full"><label>${t("descriptionAr")}</label><textarea name="description_ar" dir="rtl">${escapeHtml(row.description_ar || "")}</textarea></div></div>
+            </section>
+            <section class="catalog-form-section">
+              <div class="section-kicker">02</div><h3>${ui("Category behavior", "طريقة عمل التصنيف")}</h3>
+              <input type="hidden" name="category_type" value="${type}" />
+              <div class="category-type-control" role="group" aria-label="${ui("Category type", "نوع التصنيف")}"><button type="button" data-category-type="manual" class="${type === "manual" ? "active" : ""}">${i("list")}<span><strong>${ui("Manual", "يدوي")}</strong><small>${ui("Products assigned from product records", "المنتجات المربوطة بالتصنيف يدويًا")}</small></span></button><button type="button" data-category-type="smart" class="${type === "smart" ? "active" : ""}">${i("sparkles")}<span><strong>${ui("Smart", "ذكي")}</strong><small>${ui("Products selected automatically by a rule", "اختيار المنتجات تلقائيًا حسب قاعدة")}</small></span></button></div>
+            </section>
+            <section class="catalog-form-section category-smart-settings ${type === "smart" ? "is-visible" : ""}" data-smart-settings>
+              <div class="smart-category-heading"><div><div class="section-kicker">03</div><h3>${ui("Smart rule", "قاعدة التصنيف الذكي")}</h3></div><div class="smart-category-preview" data-category-preview><strong>${Number(row.matched_product_count || 0)}</strong><span>${ui("matching products", "منتج مطابق")}</span></div></div>
+              <div class="form-grid"><div class="field"><label>${ui("Rule", "القاعدة")}</label><select name="rule_type"><option value="best_sellers" ${rule.type === "best_sellers" || !rule.type ? "selected" : ""}>${ui("Best sellers", "الأكثر مبيعًا")}</option><option value="newest" ${rule.type === "newest" ? "selected" : ""}>${ui("Newest products", "أحدث المنتجات")}</option><option value="on_sale" ${rule.type === "on_sale" ? "selected" : ""}>${ui("Products on sale", "المنتجات المخفضة")}</option></select></div><div class="field"><label>${ui("Sales period", "فترة المبيعات")}</label><select name="lookback_days"><option value="0" ${Number(rule.lookback_days) === 0 ? "selected" : ""}>${ui("All time", "كل الوقت")}</option><option value="30" ${Number(rule.lookback_days) === 30 ? "selected" : ""}>${ui("Last 30 days", "آخر 30 يوم")}</option><option value="90" ${Number(rule.lookback_days ?? 90) === 90 ? "selected" : ""}>${ui("Last 90 days", "آخر 90 يوم")}</option><option value="365" ${Number(rule.lookback_days) === 365 ? "selected" : ""}>${ui("Last year", "آخر سنة")}</option></select></div><div class="field"><label>${ui("Minimum verified units", "أقل عدد مبيعات موثقة")}</label><input type="number" name="minimum_units" min="0" value="${Number(rule.minimum_units ?? 1)}" /></div><div class="field"><label>${ui("Maximum products", "أقصى عدد منتجات")}</label><input type="number" name="product_limit" min="1" max="200" value="${Number(rule.product_limit || 12)}" /></div><div class="field"><label>${ui("When there are no matches", "عند عدم وجود نتائج")}</label><select name="fallback"><option value="empty" ${rule.fallback !== "latest" ? "selected" : ""}>${ui("Show empty category", "اعرض التصنيف فارغًا")}</option><option value="latest" ${rule.fallback === "latest" ? "selected" : ""}>${ui("Show latest products", "اعرض أحدث المنتجات")}</option></select></div><div class="field editor-toggle-row"><div><strong>${ui("Verified historical sales", "المبيعات التاريخية الموثقة")}</strong><small>${ui("Excludes manual social-proof numbers", "لا تشمل أرقام Social Proof اليدوية")}</small></div><input type="hidden" name="include_verified_legacy" value="${rule.include_verified_legacy !== false}" />${switchButton({field:"include_verified_legacy",value:rule.include_verified_legacy !== false,label:false})}</div><div class="field"><label>${ui("Always include", "إضافة ثابتة")}</label><select name="included_product_ids" multiple size="6">${productOptions(rule.included_product_ids)}</select><small>${ui("Optional. Hold Ctrl/Cmd to select more than one.", "اختياري. اختر أكثر من منتج عند الحاجة.")}</small></div><div class="field"><label>${ui("Always exclude", "استبعاد ثابت")}</label><select name="excluded_product_ids" multiple size="6">${productOptions(rule.excluded_product_ids)}</select><small>${ui("Excluded products never appear in this category.", "المنتجات المستبعدة لن تظهر في التصنيف.")}</small></div></div>
+              <div class="smart-category-result" data-category-preview-products></div>
+            </section>
+            <section class="catalog-form-section"><div class="section-kicker">04</div><h3>${ui("Visibility", "أماكن الظهور")}</h3><div class="category-visibility-grid">${[["show_in_category_strip",ui("Category strip", "شريط التصنيفات"),row.show_in_category_strip !== false],["show_in_filters",ui("Product filters", "فلاتر المنتجات"),row.show_in_filters !== false],["show_on_home",ui("Homepage categories", "تصنيفات الرئيسية"),row.show_on_home !== false],["is_active",ui("Category active", "التصنيف نشط"),row.is_active !== false]].map(([name,label,value])=>`<div class="editor-toggle-row"><div><strong>${label}</strong></div><input type="hidden" name="${name}" value="${value}" />${switchButton({field:name,value,label:false})}</div>`).join("")}</div></section>
+          </div>
+          <div class="modal-foot"><button class="btn" type="button" data-close>${t("cancel")}</button><button class="btn primary" type="submit">${i("check")}${t("save")}</button></div>
+        </form>
+      </div>`);
+    const modal = document.getElementById("modal");
+    const form = document.getElementById("categoryEditorForm");
+    modal.querySelectorAll("[data-close]").forEach((button) => button.onclick = closeModal);
+    modal.querySelectorAll("[data-form-switch]").forEach((button) => button.onclick = () => { updateFormSwitch(button); schedulePreview(); });
+    bindImageUploadFields();
+    const syncType = (nextType) => { form.elements.category_type.value = nextType; modal.querySelectorAll("[data-category-type]").forEach((button) => button.classList.toggle("active", button.dataset.categoryType === nextType)); modal.querySelector("[data-smart-settings]").classList.toggle("is-visible", nextType === "smart"); schedulePreview(); };
+    modal.querySelectorAll("[data-category-type]").forEach((button) => button.onclick = () => syncType(button.dataset.categoryType));
+    let previewTimer;
+    const schedulePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(async () => { if (form.elements.category_type.value !== "smart") return; const target = modal.querySelector("[data-category-preview]"); const productTarget = modal.querySelector("[data-category-preview-products]"); target.classList.add("is-loading"); try { const result = await api("/api/admin/categories/preview", {method:"POST",body:JSON.stringify(categoryRulePayload(form))}); target.querySelector("strong").textContent = Number(result.matched_product_count || 0); productTarget.innerHTML = (result.products || []).slice(0,6).map((product) => `<span>${product.image_url ? `<img src="${escapeHtml(product.image_url)}" alt="" />` : ""}<b>#${product.rank}</b>${escapeHtml(state.lang === "ar" ? (product.name_ar || product.name_en) : (product.name_en || product.name_ar))}</span>`).join("") || `<small>${ui("No products match this rule yet.", "لا توجد منتجات مطابقة لهذه القاعدة حاليًا.")}</small>`; } catch (error) { productTarget.innerHTML = `<small>${escapeHtml(error.message)}</small>`; } finally { target.classList.remove("is-loading"); } }, 280); };
+    form.querySelectorAll("select,input[type='number']").forEach((input) => input.addEventListener("change", schedulePreview));
+    form.onsubmit = async (event) => { event.preventDefault(); const button = form.querySelector('[type="submit"]'); button.disabled = true; try { await api(isEdit ? `/api/admin/categories/${row.id}` : "/api/admin/categories", {method:isEdit?"PUT":"POST",body:JSON.stringify(categoryRulePayload(form))}); closeModal(); toast(isEdit ? t("updated") : t("created")); renderResource(document.getElementById("page"), "categories"); } catch (error) { toast(error.message,"error"); button.disabled=false; } };
+    if (type === "smart") schedulePreview();
+  }
+
   async function openEditor(key, row = {}) {
     const resource = resources[key];
     const isEdit = Boolean(row.id);
     if (key === "products") return renderProductEditorPage(row);
     if (key === "bundles") return openBundleEditor(row);
+    if (key === "categories") return openCategoryEditor(row);
     const formGroups = groupedFields(key, resource.fields, row);
     document.body.insertAdjacentHTML("beforeend", `
       <div class="modal-backdrop" id="modal">

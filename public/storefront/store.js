@@ -287,7 +287,9 @@ function headerHtml() {
 }
 
 function categoryStripHtml() {
-  return `<div class="category-strip"><div class="container category-strip-inner" data-drag-scroll>${state.categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
+  const categories=state.categories.filter(category=>category.show_in_category_strip!==false);
+  if(!categories.length)return "";
+  return `<div class="category-strip"><div class="container category-strip-inner" data-drag-scroll>${categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
 }
 
 function footerLinkUrl(value = "") {
@@ -490,7 +492,8 @@ function renderHome() {
   const slides=(state.builder?.slides||[]).filter(slide=>slide.is_active!==false);
   const saleProducts=state.products.filter(product=>comparePrice(product)>productPrice(product)).slice(0,8);
   const categoryOrder=["شراشف صلاة","سجاد صلاة","اطقم سجاد وشراشف","الأكثر مبيعأ"];
-  const categoryRows=[...state.categories].sort((a,b)=>categoryOrder.indexOf(a.name_ar)-categoryOrder.indexOf(b.name_ar));
+  const categoryRank=(category)=>{const index=categoryOrder.indexOf(category.name_ar);return index<0?categoryOrder.length:index;};
+  const categoryRows=state.categories.filter(category=>category.show_on_home!==false).sort((a,b)=>categoryRank(a)-categoryRank(b));
   const eidProducts=state.products.slice(0,8);
   const fixed = {
     offers:`<section class="section home-offers"><div class="container"><div class="section-head"><h2>أفضل عروض رداء الحشمة</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${homeRail(saleProducts.length?saleProducts:state.products.slice(0,8),"offersRail")}</div></section>`,
@@ -567,7 +570,11 @@ function bindHero(count) {
 
 function filteredProducts() {
   let rows=[...state.products];
-  if(state.category) rows=rows.filter(product=>String(product.category_slug||product.category?.slug)===state.category || (product.categories||[]).some(item=>String(item.slug)===state.category));
+  const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
+  if(state.category&&selectedCategory?.category_type==="smart"){
+    const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));
+    rows=rows.filter(product=>ranks.has(Number(product.id))).sort((a,b)=>ranks.get(Number(a.id))-ranks.get(Number(b.id)));
+  } else if(state.category) rows=rows.filter(product=>String(product.category_slug||product.category?.slug)===state.category || (product.categories||[]).some(item=>String(item.slug)===state.category));
   if(Number.isFinite(state.maxPrice)) rows=rows.filter(product=>productPrice(product)<=state.maxPrice);
   if(state.sort==="price-asc") rows.sort((a,b)=>productPrice(a)-productPrice(b));
   if(state.sort==="price-desc") rows.sort((a,b)=>productPrice(b)-productPrice(a));
@@ -585,7 +592,9 @@ function renderProducts() {
   state.page=Math.min(state.page,pages);
   const visible=rows.slice((state.page-1)*perPage,state.page*perPage);
   const visibleBundles=state.page===1&&!state.category?state.bundles:[];
-  shell(`${breadcrumbs("المتجر")}<section class="container"><div class="shop-head"><h1>المتجر</h1></div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div>${visibleBundles.length?`<div class="bundle-shop-heading"><span>وفر أكثر</span><h2>بندلز مختارة لك</h2></div>`:""}<div class="product-grid shop-grid">${visibleBundles.map(bundleCard).join("")}${visible.map(productCard).join("")}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد منتجات</h2><p>جرّبي اختيار تصنيف أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
+  const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
+  const pageTitle=selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
+  shell(`${breadcrumbs(pageTitle)}<section class="container"><div class="shop-head"><h1>${esc(pageTitle)}</h1>${selectedCategory?.description_ar?`<p>${esc(selectedCategory.description_ar)}</p>`:""}</div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div>${visibleBundles.length?`<div class="bundle-shop-heading"><span>وفر أكثر</span><h2>بندلز مختارة لك</h2></div>`:""}<div class="product-grid shop-grid">${visibleBundles.map(bundleCard).join("")}${visible.map(productCard).join("")}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد منتجات</h2><p>جرّبي اختيار تصنيف أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
   document.getElementById("sortProducts").value=state.sort;
   document.getElementById("sortProducts").onchange=event=>{state.sort=event.target.value;state.page=1;renderProducts();};
   document.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>{state.page=Number(button.dataset.page);renderProducts();scrollTo({top:0,behavior:"smooth"});});
@@ -593,7 +602,8 @@ function renderProducts() {
 }
 
 function filterHtml(maxCatalog) {
-  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><section class="filter-panel"><h2 class="filter-title">تصنيفات المنتج</h2><div class="filter-list"><button class="${!state.category?"active":""}" data-category="">كل المنتجات</button>${state.categories.map(category=>`<button class="${state.category===category.slug?"active":""}" data-category="${esc(category.slug)}">${esc(category.name_ar)}</button>`).join("")}</div></section><section class="filter-panel"><h2 class="filter-title">الفرز بالسعر</h2><input class="price-range" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${state.maxPrice}" /><div class="price-filter-copy"><span>السعر: 0 - <b id="maxPriceCopy">${money(state.maxPrice)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
+  const categories=state.categories.filter(category=>category.show_in_filters!==false);
+  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><section class="filter-panel"><h2 class="filter-title">تصنيفات المنتج</h2><div class="filter-list"><button class="${!state.category?"active":""}" data-category="">كل المنتجات</button>${categories.map(category=>`<button class="${state.category===category.slug?"active":""}" data-category="${esc(category.slug)}">${esc(category.name_ar)}</button>`).join("")}</div></section><section class="filter-panel"><h2 class="filter-title">الفرز بالسعر</h2><input class="price-range" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${state.maxPrice}" /><div class="price-filter-copy"><span>السعر: 0 - <b id="maxPriceCopy">${money(state.maxPrice)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
 }
 
 function bindFilters() {
