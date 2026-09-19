@@ -2189,9 +2189,14 @@
       ...parseJsonArray(row.gallery),
       ...parseJsonArray(row.images)
     ].map((entry) => typeof entry === "string" ? entry : entry?.url).filter(Boolean)));
+    const savedMedia = parseJsonArray(row.media_gallery).map((item, index) => typeof item === "string"
+      ? { id:`legacy-${index}`, type:/\.(mp4|webm|ogg|mov)(?:[?#].*)?$/i.test(item)?"video":"image", url:item, sort_order:index }
+      : { ...item, type:item.type === "video" ? "video" : "image", sort_order:Number(item.sort_order ?? index) }).filter(item => item.url);
+    const media = savedMedia.length ? savedMedia : side.map((url, index) => ({ id:`legacy-${index}`, type:"image", url, sort_order:index }));
     return {
       main:String(row.main_photo_url || row.image_url || ""),
       side,
+      media,
       generated:parseJsonArray(row.generated_images)
     };
   }
@@ -2201,8 +2206,9 @@
     return `<div class="product-media-editor" data-product-media-editor>
       <input type="hidden" name="main_photo_url" value="${escapeHtml(media.main)}" data-product-main-image />
       <input type="hidden" name="side_photos" value="${escapeHtml(JSON.stringify(media.side))}" data-product-side-images />
+      <input type="hidden" name="media_gallery" value="${escapeHtml(JSON.stringify(media.media))}" data-product-media-gallery />
       <input type="hidden" name="generated_images" value="${escapeHtml(JSON.stringify(media.generated))}" data-generated-images-value />
-      <div class="product-media-toolbar"><label class="btn primary">${i("upload")}${ui("Upload images", "رفع صور")}<input type="file" accept="image/*" multiple data-product-gallery-upload /></label><span>${ui("Choose a main image, inspect usage, or unlink an image. Nothing is attached until Save.", "اختر الصورة الرئيسية أو راجع ارتباطاتها أو أزل ربطها. لن يعتمد شيء قبل الحفظ.")}</span></div>
+      <div class="product-media-toolbar"><label class="btn primary">${i("upload")}${ui("Upload images or videos", "رفع صور أو فيديوهات")}<input type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" multiple data-product-gallery-upload /></label><span>${ui("Arrange product media with the arrow controls. MP4 and WebM give the widest browser support. Changes remain a draft until Save.", "رتب وسائط المنتج بالأسهم. ملفات MP4 وWebM هي الأفضل للمتصفحات، وتظل التغييرات مسودة حتى الحفظ.")}</span></div>
       <div class="product-media-grid" id="productMediaGrid"></div>
     </div>`;
   }
@@ -2528,19 +2534,22 @@
   function productMediaEntries() {
     const main = document.querySelector("[data-product-main-image]")?.value || "";
     const side = parseJsonArray(document.querySelector("[data-product-side-images]")?.value);
+    const media = parseJsonArray(document.querySelector("[data-product-media-gallery]")?.value);
     const generated = parseJsonArray(document.querySelector("[data-generated-images-value]")?.value);
     const variantRows = [...document.querySelectorAll(".variant-row")];
     const map = new Map();
-    const add = (url, source, detail = "") => {
+    const add = (url, source, detail = "", type = "image", order = 0) => {
       if (!url) return;
-      if (!map.has(url)) map.set(url, { url, sources:[] });
+      if (!map.has(url)) map.set(url, { url, type, order, sources:[] });
+      if (type === "video") map.get(url).type = "video";
       map.get(url).sources.push({ source, detail });
     };
     add(main, "main", ui("Main storefront image", "الصورة الرئيسية في المتجر"));
-    side.forEach((url, index) => add(url, "gallery", `${ui("Gallery image", "صورة معرض")} ${index + 1}`));
+    media.forEach((item, index) => add(item?.url || item, "gallery", `${item?.type === "video" ? ui("Gallery video", "فيديو معرض") : ui("Gallery image", "صورة معرض")} ${index + 1}`, item?.type || "image", Number(item?.sort_order ?? index)));
+    side.forEach((url, index) => add(url, "gallery", `${ui("Gallery image", "صورة معرض")} ${index + 1}`, "image", index));
     generated.forEach((url, index) => add(url, "generated", `${ui("AI generated archive", "أرشيف الصور المولدة")} ${index + 1}`));
     variantRows.forEach((variant, index) => { const url = variant.querySelector("[data-variant-field='image_url']")?.value; const color = variant.querySelector("[data-variant-field='color']")?.value; const option = variant.querySelector("[data-variant-field='option']")?.value; const value = variant.querySelector("[data-variant-field='value']")?.value; add(url, "variant", [ui("Variant", "متغير"), color, option, value].filter(Boolean).join(" · ") || `#${index + 1}`); });
-    return [...map.values()];
+    return [...map.values()].sort((a,b) => a.sources.some(item=>item.source === "main") ? -1 : b.sources.some(item=>item.source === "main") ? 1 : a.order-b.order);
   }
 
   function renderProductGallery() {
@@ -2549,10 +2558,12 @@
     const entries = productMediaEntries();
     grid.innerHTML = entries.length ? entries.map(entry => {
       const isMain = entry.sources.some(item => item.source === "main");
+      const isGallery = entry.sources.some(item => item.source === "gallery");
       const libraryUsage = state.productGalleryUsage?.[entry.url]?.usage || [];
       const labels = [...new Set(entry.sources.map(item => ({ main:ui("Main", "رئيسية"), gallery:ui("Gallery", "معرض"), generated:ui("Generated", "مولدة"), variant:ui("Variant", "متغير") }[item.source])))];
-      return `<article class="product-media-card" data-product-media-url="${escapeHtml(entry.url)}"><button class="product-media-preview" type="button" data-view-product-media><img src="${escapeHtml(entry.url)}" alt="" loading="lazy" />${isMain ? `<span>${ui("Main image", "الصورة الرئيسية")}</span>` : ""}</button><div class="product-media-meta"><div>${labels.map(label => `<span>${label}</span>`).join("")}${libraryUsage.length ? `<span>${libraryUsage.length} ${ui("system links", "ارتباط بالنظام")}</span>` : ""}</div><small>${escapeHtml(entry.url.split("/").pop() || entry.url)}</small></div><div class="product-media-actions"><button class="btn icon-btn" type="button" data-media-info title="${ui("Image information", "معلومات الصورة")}">${i("info")}</button>${isMain ? "" : `<button class="btn" type="button" data-set-main-media>${ui("Set as main", "تعيين رئيسية")}</button>`}<button class="btn icon-btn danger" type="button" data-unlink-media title="${ui("Unlink from product", "إزالة الربط بالمنتج")}">${i("trash")}</button></div></article>`;
-    }).join("") : `<div class="product-media-empty">${i("image")}<strong>${ui("No product images yet", "لا توجد صور للمنتج")}</strong><p>${ui("Upload one or more images. The first image becomes the main image.", "ارفع صورة أو أكثر، وستصبح الأولى هي الصورة الرئيسية.")}</p></div>`;
+      const preview = entry.type === "video" ? `<video src="${escapeHtml(entry.url)}" muted preload="metadata" playsinline></video><span class="product-media-play">${i("play")}</span>` : `<img src="${escapeHtml(entry.url)}" alt="" loading="lazy" />`;
+      return `<article class="product-media-card ${entry.type === "video" ? "is-video" : ""}" data-product-media-url="${escapeHtml(entry.url)}"><button class="product-media-preview" type="button" data-view-product-media>${preview}${isMain ? `<span>${ui("Main image", "الصورة الرئيسية")}</span>` : ""}</button><div class="product-media-meta"><div>${labels.map(label => `<span>${label}</span>`).join("")}<span>${entry.type === "video" ? ui("Video", "فيديو") : ui("Image", "صورة")}</span>${libraryUsage.length ? `<span>${libraryUsage.length} ${ui("system links", "ارتباط بالنظام")}</span>` : ""}</div><small>${escapeHtml(entry.url.split("/").pop() || entry.url)}</small></div><div class="product-media-actions"><button class="btn icon-btn" type="button" data-media-info title="${ui("Media information", "معلومات الوسائط")}">${i("info")}</button>${isMain || entry.type === "video" ? "" : `<button class="btn" type="button" data-set-main-media>${ui("Set as main", "تعيين رئيسية")}</button>`}${isMain || !isGallery ? "" : `<button class="btn icon-btn" type="button" data-move-media="-1" title="${ui("Move earlier", "تحريك للخلف")}">${i("arrow-left")}</button><button class="btn icon-btn" type="button" data-move-media="1" title="${ui("Move later", "تحريك للأمام")}">${i("arrow-right")}</button>`}<button class="btn icon-btn danger" type="button" data-unlink-media title="${ui("Unlink from product", "إزالة الربط بالمنتج")}">${i("trash")}</button></div></article>`;
+    }).join("") : `<div class="product-media-empty">${i("image")}<strong>${ui("No product media yet", "لا توجد وسائط للمنتج")}</strong><p>${ui("Upload images or videos. The first uploaded image becomes the main image.", "ارفع صورًا أو فيديوهات، وستصبح أول صورة مرفوعة هي الصورة الرئيسية.")}</p></div>`;
     grid.querySelectorAll("[data-product-media-url]").forEach(card => {
       const url = card.dataset.productMediaUrl;
       const entry = entries.find(item => item.url === url);
@@ -2561,16 +2572,32 @@
       card.querySelector("[data-view-product-media]").onclick = () => openProductMediaViewer(url, [...localUsage, ...systemUsage]);
       card.querySelector("[data-media-info]").onclick = () => openProductMediaViewer(url, [...localUsage, ...systemUsage]);
       card.querySelector("[data-set-main-media]")?.addEventListener("click", () => { const hidden = document.querySelector("[data-product-main-image]"); hidden.value = url; hidden.dispatchEvent(new Event("input", { bubbles:true })); renderProductGallery(); });
+      card.querySelectorAll("[data-move-media]").forEach(button => button.onclick = () => moveProductMedia(url, Number(button.dataset.moveMedia)));
       card.querySelector("[data-unlink-media]").onclick = () => unlinkProductMedia(url);
     });
+  }
+
+  function moveProductMedia(url, direction) {
+    const hidden = document.querySelector("[data-product-media-gallery]");
+    if (!hidden) return;
+    const media = parseJsonArray(hidden.value);
+    const index = media.findIndex(item => (item?.url || item) === url);
+    const next = Math.max(0, Math.min(media.length - 1, index + direction));
+    if (index < 0 || index === next) return;
+    [media[index], media[next]] = [media[next], media[index]];
+    hidden.value = JSON.stringify(media.map((item, order) => ({ ...(typeof item === "string" ? { type:"image", url:item } : item), sort_order:order })));
+    hidden.dispatchEvent(new Event("input", { bubbles:true }));
+    renderProductGallery();
   }
 
   function unlinkProductMedia(url) {
     const main = document.querySelector("[data-product-main-image]");
     const side = document.querySelector("[data-product-side-images]");
+    const media = document.querySelector("[data-product-media-gallery]");
     const generated = document.querySelector("[data-generated-images-value]");
     if (main?.value === url) main.value = "";
     if (side) side.value = JSON.stringify(parseJsonArray(side.value).filter(item => item !== url));
+    if (media) media.value = JSON.stringify(parseJsonArray(media.value).filter(item => (item?.url || item) !== url).map((item, index) => ({ ...(typeof item === "string" ? { type:"image", url:item } : item), sort_order:index })));
     if (generated) generated.value = JSON.stringify(parseJsonArray(generated.value).filter(item => item !== url));
     document.querySelectorAll(".variant-row").forEach(row => { const hidden = row.querySelector("[data-variant-field='image_url']"); if (hidden?.value === url) { hidden.value = ""; const preview = row.querySelector(".variant-image-preview"); if (preview) { preview.innerHTML = i("image"); preview.disabled = true; } row.querySelector("[data-remove-variant-image]").disabled = true; } });
     main?.dispatchEvent(new Event("input", { bubbles:true }));
@@ -2579,7 +2606,9 @@
   }
 
   function openProductMediaViewer(url, usage = []) {
-    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop product-media-viewer-backdrop"><div class="modal product-media-viewer" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>${ui("Image details", "تفاصيل الصورة")}</h2><p class="muted">${escapeHtml(url)}</p></div><button class="btn icon-btn" type="button" data-close-media-viewer aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><img src="${escapeHtml(url)}" alt="" /><div class="product-media-usage"><h3>${ui("Linked inside this product", "مرتبطة داخل المنتج بـ")}</h3>${usage.length ? usage.map(item => `<div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail || "")}</span></div>`).join("") : `<p>${ui("No active link in this draft.", "لا يوجد ارتباط نشط في هذه المسودة.")}</p>`}</div></div><div class="modal-foot"><button class="btn" type="button" data-close-media-viewer>${t("close")}</button></div></div></div>`);
+    const isVideo = /\.(mp4|webm|ogg|mov)(?:[?#].*)?$/i.test(url);
+    const preview = isVideo ? `<video src="${escapeHtml(url)}" controls preload="metadata" playsinline></video>` : `<img src="${escapeHtml(url)}" alt="" />`;
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop product-media-viewer-backdrop"><div class="modal product-media-viewer" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>${isVideo ? ui("Video details", "تفاصيل الفيديو") : ui("Image details", "تفاصيل الصورة")}</h2><p class="muted">${escapeHtml(url)}</p></div><button class="btn icon-btn" type="button" data-close-media-viewer aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><div class="product-media-viewer-stage">${preview}</div><div class="product-media-usage"><h3>${ui("Linked inside this product", "مرتبطة داخل المنتج بـ")}</h3>${usage.length ? usage.map(item => `<div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail || "")}</span></div>`).join("") : `<p>${ui("No active link in this draft.", "لا يوجد ارتباط نشط في هذه المسودة.")}</p>`}</div></div><div class="modal-foot"><button class="btn" type="button" data-close-media-viewer>${t("close")}</button></div></div></div>`);
     const backdrop = document.querySelector(".product-media-viewer-backdrop");
     backdrop.querySelectorAll("[data-close-media-viewer]").forEach(button => button.onclick = () => backdrop.remove());
   }
@@ -2593,16 +2622,24 @@
       [...input.files].forEach(file => form.append("files", file));
       input.disabled = true;
       try {
-        const data = await api("/api/admin/image-gallery/upload", { method:"POST", body:form });
-        const urls = (data.images || []).map(image => image.url || image.fileUrl || image.path).filter(Boolean);
+        const data = await api("/api/admin/product-media/upload", { method:"POST", body:form });
+        const uploadedMedia = (data.media || data.images || []).map((item, index) => ({ ...item, type:item.type === "video" ? "video" : "image", url:item.url || item.fileUrl || item.path, sort_order:index })).filter(item => item.url);
+        const urls = uploadedMedia.filter(item => item.type === "image").map(item => item.url);
         const main = document.querySelector("[data-product-main-image]");
         const side = document.querySelector("[data-product-side-images]");
+        const gallery = document.querySelector("[data-product-media-gallery]");
         const currentSide = parseJsonArray(side.value);
-        urls.forEach(url => { if (!main.value) main.value = url; else if (!currentSide.includes(url) && main.value !== url) currentSide.push(url); });
+        const currentMedia = parseJsonArray(gallery.value);
+        uploadedMedia.forEach(item => {
+          if (item.type === "image" && !main.value) main.value = item.url;
+          else if (!currentMedia.some(existing => (existing?.url || existing) === item.url) && main.value !== item.url) currentMedia.push({ ...item, sort_order:currentMedia.length });
+          if (item.type === "image" && !currentSide.includes(item.url) && main.value !== item.url) currentSide.push(item.url);
+        });
         side.value = JSON.stringify(currentSide);
+        gallery.value = JSON.stringify(currentMedia);
         main.dispatchEvent(new Event("input", { bubbles:true }));
         renderProductGallery();
-        toast(ui(`${urls.length} image(s) added to the draft`, `تمت إضافة ${urls.length} صورة للمسودة`));
+        toast(ui(`${uploadedMedia.length} media item(s) added to the draft`, `تمت إضافة ${uploadedMedia.length} عنصر وسائط للمسودة`));
       } catch (error) { toast(error.message, "error"); } finally { input.disabled = false; input.value = ""; }
     };
     renderProductGallery();
@@ -2755,7 +2792,7 @@
     new FormData(event.currentTarget).forEach((value, name) => {
       if (value === "true") payload[name] = true;
       else if (value === "false") payload[name] = false;
-      else if (["variants", "generated_images", "side_photos"].includes(name)) payload[name] = parseJsonArray(value);
+      else if (["variants", "generated_images", "side_photos", "media_gallery"].includes(name)) payload[name] = parseJsonArray(value);
       else if (event.currentTarget.elements[name]?.type === "number") payload[name] = Number(value || 0);
       else payload[name] = value;
     });

@@ -592,14 +592,23 @@ app.use(express.text({ type: "text/plain", limit: "2mb", verify: captureRawBody 
 app.use(express.json({ limit: "20mb", verify: captureRawBody }));
 app.use(express.urlencoded({ extended: true, verify: captureRawBody }));
 
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: path.join(__dirname, "public", "uploads"),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname || "");
-      cb(null, `upload-${Date.now()}-${crypto.randomInt(100000000, 999999999)}${ext}`);
-    }
-  })
+const uploadStorage = multer.diskStorage({
+  destination: path.join(__dirname, "public", "uploads"),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    cb(null, `upload-${Date.now()}-${crypto.randomInt(100000000, 999999999)}${ext}`);
+  }
+});
+const upload = multer({ storage: uploadStorage });
+const productMediaUpload = multer({
+  storage: uploadStorage,
+  limits: { files: 40, fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const image = String(file.mimetype || "").startsWith("image/") && [".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"].includes(extension);
+    const video = String(file.mimetype || "").startsWith("video/") && [".mp4", ".webm", ".ogg", ".mov"].includes(extension);
+    cb(image || video ? null : new Error("Only image, MP4, WebM, OGG, or MOV files are allowed"), image || video);
+  }
 });
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"]);
@@ -4965,8 +4974,31 @@ function normalizedProductVariant(variant = {}, index = 0) {
   };
 }
 
+function normalizedProductMediaItem(item = {}, index = 0) {
+  const source = typeof item === "string" ? { url: item } : (item || {});
+  const url = String(source.url || source.src || "").trim();
+  const extension = path.extname(url.split(/[?#]/)[0]).toLowerCase();
+  const type = source.type === "video" || [".mp4", ".webm", ".ogg", ".mov"].includes(extension) ? "video" : "image";
+  return {
+    id: String(source.id || `media-${crypto.createHash("sha1").update(`${url}:${index}`).digest("hex").slice(0, 12)}`),
+    type,
+    url,
+    poster_url: type === "video" ? String(source.poster_url || source.poster || "").trim() : "",
+    alt_ar: String(source.alt_ar || source.alt || "").trim(),
+    alt_en: String(source.alt_en || "").trim(),
+    sort_order: Number(source.sort_order ?? index)
+  };
+}
+
 function normalizeProductPayload(payload = {}) {
   const variants = asArray(payload.variants).map(normalizedProductVariant).filter((variant) => variant.color || variant.option || variant.value);
+  const legacySidePhotos = asArray(payload.side_photos || payload.gallery || payload.images).filter(Boolean);
+  const explicitMedia = payload.media_gallery !== undefined ? asArray(payload.media_gallery) : legacySidePhotos;
+  const mediaGallery = explicitMedia
+    .map(normalizedProductMediaItem)
+    .filter((item) => item.url)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((item, index) => ({ ...item, sort_order: index }));
   const nullableNumber = (value) => value === "" || value === null || value === undefined || Number(value) <= 0 ? null : Number(value);
   const requestedInventoryMode = String(payload.inventory_mode || "").toLowerCase();
   const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(requestedInventoryMode)
@@ -4994,7 +5026,8 @@ function normalizeProductPayload(payload = {}) {
     variants,
     active_variants: variants.filter((variant) => variant.is_active !== false),
     generated_images: asArray(payload.generated_images),
-    side_photos: asArray(payload.side_photos || payload.gallery || payload.images).filter(Boolean),
+    media_gallery: mediaGallery,
+    side_photos: mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
     gallery: payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
     images: payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
     image_url: payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim()
@@ -6439,6 +6472,7 @@ function productForNextStore(product = {}) {
     descriptionAr: product.description_ar || product.descriptionAr || "",
     mainPhotoUrl: product.main_photo_url || product.mainPhotoUrl || product.image_url || "",
     sidePhotos: asArray(product.side_photos || product.sidePhotos || product.gallery || product.images),
+    mediaGallery: asArray(product.media_gallery),
     category: {
       ...(product.category || {}),
       id: Number(product.category?.id || product.category_id || 0),
@@ -10105,6 +10139,22 @@ app.post("/api/admin/image-gallery/upload", upload.array("files", 40), (req, res
     return { url, fileUrl: url, path: url };
   });
   res.json(ok({ images: uploaded, count: uploaded.length }));
+});
+app.post("/api/admin/product-media/upload", productMediaUpload.array("files", 40), (req, res) => {
+  const media = (req.files || []).map((file, index) => {
+    const url = `/uploads/${file.filename}`;
+    const type = String(file.mimetype || "").startsWith("video/") ? "video" : "image";
+    createRecord("product_media_uploads", {
+      url,
+      type,
+      filename: file.originalname || file.filename,
+      mimetype: file.mimetype,
+      size: file.size,
+      uploaded_at: new Date().toISOString()
+    });
+    return normalizedProductMediaItem({ type, url, sort_order: index }, index);
+  });
+  res.json(ok({ media, images: media, count: media.length }));
 });
 app.get("/api/admin/image-gallery/trash", (_req, res) => res.json(ok({ images: entityRows("image_gallery_deleted", true) })));
 app.post("/api/admin/image-gallery/sync", (_req, res) => {
