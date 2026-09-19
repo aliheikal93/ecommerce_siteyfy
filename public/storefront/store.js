@@ -1033,6 +1033,7 @@ function promotionErrorMessage(message="") {
   if(normalized.includes("TAMARA_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر تمارا";
   if(normalized.includes("TAMARA"))return "تعذر بدء الدفع عبر تمارا الآن. حاولي مرة أخرى أو اختاري الدفع عند الاستلام";
   if(normalized.includes("EDFAPAY_EMAIL_REQUIRED"))return "البريد الإلكتروني مطلوب للدفع عبر ادفع باي";
+  if(normalized.includes("EDFAPAY_CALLBACK_UPDATE_REQUIRED"))return "ادفع باي متوقفة مؤقتًا لحين تحديث رابط إشعارات الدفع";
   if(normalized.includes("EDFAPAY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED"))return "ادفع باي غير متاحة لدولة أو عملة هذا الطلب";
   if(normalized.includes("EDFAPAY_ORDER_AMOUNT_NOT_SUPPORTED"))return "قيمة الطلب خارج الحدود المسموحة للدفع عبر ادفع باي";
   if(normalized.includes("EDFAPAY"))return "تعذر بدء الدفع عبر ادفع باي الآن. حاولي مرة أخرى أو اختاري طريقة دفع أخرى";

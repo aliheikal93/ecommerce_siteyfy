@@ -3268,6 +3268,12 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .payment-webhook-panel h2 { margin-top:4px;font-size:16px; }
 .payment-webhook-panel p { margin-top:4px;color:var(--muted);font-size:10px;line-height:1.6; }
 .payment-webhook-panel code { min-width:0;padding:10px 12px;border-radius:5px;background:var(--panel-soft);color:var(--ink);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.payment-webhook-panel.requires-action { padding:14px;border:1px solid #efb8b8;border-inline-start:3px solid var(--danger);border-radius:6px;background:#fffafa; }
+.payment-callback-actions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap; }
+.payment-callback-warning,.domain-integration-note { display:flex;align-items:flex-start;gap:12px;margin-top:14px;padding:13px 14px;border:1px solid #efd8a4;border-radius:6px;background:#fffaf0;color:var(--ink); }
+.payment-callback-warning .icon,.domain-integration-note .icon { flex:0 0 auto;width:18px;height:18px;color:#a86600; }
+.payment-callback-warning strong,.domain-integration-note strong { display:block;font-size:12px; }
+.payment-callback-warning p,.domain-integration-note p { margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.65; }
 .payment-activity-card { margin-top:16px;overflow:hidden; }
 .payment-activity-head { padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line); }
 .payment-activity-head h2,.payment-activity-head p { margin:0; }

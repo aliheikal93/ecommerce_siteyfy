@@ -265,6 +265,8 @@ const defaultPaymentGatewaySettings = {
       merchant_password_encrypted: "",
       webhook_secret_encrypted: "",
       callback_path_secret_encrypted: "",
+      callback_registered_url: "",
+      callback_confirmed_at: null,
       supported_countries: ["SA"],
       supported_currencies: ["SAR"],
       minimum_amount: 0,
@@ -1268,6 +1270,8 @@ function normalizePaymentGateways(payload = {}, preserveSecrets = true) {
         merchant_password_encrypted: merchantPasswordEncrypted,
         webhook_secret_encrypted: webhookSecretEncrypted,
         callback_path_secret_encrypted: callbackPathSecretEncrypted,
+        callback_registered_url: String(requestedEdfaPay.callback_registered_url || "").slice(0, 500),
+        callback_confirmed_at: requestedEdfaPay.callback_confirmed_at || null,
         supported_countries: [...new Set(asArray(requestedEdfaPay.supported_countries).map((value) => String(value || "").toUpperCase()).filter((value) => ["SA", "AE", "BH", "KW", "OM", "QA"].includes(value)))].slice(0, 10).length
           ? [...new Set(asArray(requestedEdfaPay.supported_countries).map((value) => String(value || "").toUpperCase()).filter((value) => ["SA", "AE", "BH", "KW", "OM", "QA"].includes(value)))].slice(0, 10)
           : ["SA"],
@@ -1325,6 +1329,8 @@ function publicPaymentGateways({ storefront = false } = {}) {
   const edfapayCallbackSecret = decryptIntegrationSecret(edfapay.callback_path_secret_encrypted);
   const tabbyPublicKey = decryptIntegrationSecret(tabby.public_key_encrypted);
   const tabbySecretKey = decryptIntegrationSecret(tabby.secret_key_encrypted);
+  const edfapayCallbackUrl = edfapayCallbackSecret ? publicStoreUrl(`/api/webhooks/edfapay/${edfapayCallbackSecret}`) : "";
+  const edfapayCallbackCurrent = Boolean(edfapayCallbackUrl && edfapay.callback_registered_url === edfapayCallbackUrl);
   if (storefront) {
     const methods = [];
     if (settings.cash_on_delivery.is_enabled) methods.push({
@@ -1352,7 +1358,7 @@ function publicPaymentGateways({ storefront = false } = {}) {
       public_key: publicKey,
       sort_order: 20
     });
-    if (edfapay.show_at_checkout && edfapay.is_enabled && edfapayMerchantId && edfapayMerchantPassword) methods.push({
+    if (edfapay.show_at_checkout && edfapay.is_enabled && edfapayMerchantId && edfapayMerchantPassword && edfapayCallbackCurrent) methods.push({
       id: "edfapay",
       provider: "edfapay",
       type: "hosted_card_checkout",
@@ -1410,7 +1416,9 @@ function publicPaymentGateways({ storefront = false } = {}) {
         has_webhook_secret: Boolean(edfapayWebhookSecret),
         is_configured: Boolean(edfapayMerchantId && edfapayMerchantPassword),
         customer_return_url: publicStoreUrl("/payment/edfapay/return"),
-        callback_url: edfapayCallbackSecret ? publicStoreUrl(`/api/webhooks/edfapay/${edfapayCallbackSecret}`) : ""
+        callback_url: edfapayCallbackUrl,
+        callback_is_current: edfapayCallbackCurrent,
+        callback_update_required: Boolean(edfapay.is_enabled && !edfapayCallbackCurrent)
       },
       tabby: {
         ...tabby,
@@ -3545,9 +3553,10 @@ function shipmentReportItem(row) {
 }
 
 function normalizeSettingsPayload(payload = {}) {
+  const websiteDomain = normalizeWebsiteDomain(payload.website_domain || defaultPublicDomain).replace(/\/+$/, "");
   return {
     ...payload,
-    website_domain: payload.website_domain || defaultPublicDomain,
+    website_domain: websiteDomain,
     shipping_active: payload.shipping_active === true || payload.shipping_active === "true" || payload.shippingActive === true,
     default_shipping_cost: Number(payload.default_shipping_cost || payload.defaultShippingCost || 0),
     free_shipping_threshold: Number(payload.free_shipping_threshold || payload.freeShippingThreshold || 0),
@@ -7679,6 +7688,9 @@ async function createEdfaPayCheckout(order, req) {
   const currency = String(order.currency_snapshot?.code || "SAR").toUpperCase();
   const country = String(order.market_snapshot?.country_code || order.customer?.country_code || "SA").toUpperCase();
   if (!config.is_enabled || !config.show_at_checkout || !merchantId || !merchantPassword) fail("EDFAPAY_NOT_ENABLED", 409);
+  const callbackSecret = decryptIntegrationSecret(config.callback_path_secret_encrypted);
+  const currentCallbackUrl = callbackSecret ? publicStoreUrl(`/api/webhooks/edfapay/${callbackSecret}`) : "";
+  if (!currentCallbackUrl || config.callback_registered_url !== currentCallbackUrl) fail("EDFAPAY_CALLBACK_UPDATE_REQUIRED", 409);
   if (!config.supported_countries.includes(country) || !config.supported_currencies.includes(currency)) fail("EDFAPAY_COUNTRY_OR_CURRENCY_NOT_SUPPORTED", 409);
   if (Number(order.total || 0) < Number(config.minimum_amount || 0) || (config.maximum_amount !== null && Number(order.total || 0) > Number(config.maximum_amount))) fail("EDFAPAY_ORDER_AMOUNT_NOT_SUPPORTED", 409);
   if (!String(order.customer?.email || "").trim()) fail("EDFAPAY_EMAIL_REQUIRED", 409);
@@ -8312,7 +8324,18 @@ app.put("/api/admin/company-info", (req, res) => res.json(ok(setSetting("company
 app.get("/api/admin/settings/home-sections", (_req, res) => res.json(ok(getSetting("homeSections"))));
 app.put("/api/admin/settings/home-sections", (req, res) => res.json(ok(setSetting("homeSections", req.body))));
 app.get("/api/admin/settings", (_req, res) => res.json(ok(currentSettings())));
-app.put("/api/admin/settings", (req, res) => res.json(ok(setSetting("settings", normalizeSettingsPayload({ ...getSetting("settings"), ...req.body })))));
+app.put("/api/admin/settings", (req, res) => {
+  const previous = currentSettings();
+  const next = normalizeSettingsPayload({ ...getSetting("settings"), ...req.body });
+  if (previous.website_domain !== next.website_domain) next.domain_changed_at = new Date().toISOString();
+  setSetting("settings", next);
+  res.json(ok({
+    ...next,
+    domain_changed: previous.website_domain !== next.website_domain,
+    integration_review_required: previous.website_domain !== next.website_domain,
+    payment_gateways: publicPaymentGateways()
+  }));
+});
 app.get("/api/admin/shipping/integrations", (req, res) => {
   if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
   res.json(ok({ settings: publicShippingIntegrations(), connection: { connected: false, tested_at: null } }));
@@ -8375,7 +8398,7 @@ app.post("/api/admin/shipping/integrations/oto/webhook", async (req, res, next) 
   try {
     if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
     const current = normalizeShippingIntegrations();
-    const baseUrl = `https://${process.env.PUBLIC_DOMAIN || "ecommerce.siteyfy.com"}/api/webhooks/oto`;
+    const baseUrl = publicStoreUrl("/api/webhooks/oto").replace(/\/$/, "");
     const registered = await otoRequest("/rest/v2/webhook", { method: "GET" });
     const existingWebhooks = Array.isArray(registered.webhooks) ? registered.webhooks : [];
     const existingStatus = existingWebhooks.find((row) => row.url === baseUrl || row.url === `${baseUrl}/order-status`);
@@ -8524,6 +8547,31 @@ app.post("/api/admin/payment-gateways/edfapay/test", async (_req, res, next) => 
     setSetting("paymentGateways", updated);
     next(error);
   }
+});
+app.post("/api/admin/payment-gateways/edfapay/confirm-callback", (req, res) => {
+  const current = normalizePaymentGateways();
+  const callbackSecret = decryptIntegrationSecret(current.providers.edfapay.callback_path_secret_encrypted);
+  if (!callbackSecret) fail("EDFAPAY_CALLBACK_NOT_CONFIGURED", 409);
+  const callbackUrl = publicStoreUrl(`/api/webhooks/edfapay/${callbackSecret}`);
+  const confirmedAt = new Date().toISOString();
+  const updated = normalizePaymentGateways({
+    providers: {
+      edfapay: {
+        ...current.providers.edfapay,
+        callback_registered_url: callbackUrl,
+        callback_confirmed_at: confirmedAt
+      }
+    },
+    updated_at: confirmedAt
+  });
+  setSetting("paymentGateways", updated);
+  paymentTransaction({
+    provider: "edfapay",
+    type: "callback_confirmed",
+    status: "completed",
+    details: { callback_url: callbackUrl, confirmed_by: req.user?.email || "admin" }
+  });
+  res.json(ok({ callback_url: callbackUrl, confirmed_at: confirmedAt, settings: publicPaymentGateways() }));
 });
 app.post("/api/admin/payment-gateways/tabby/test", async (_req, res, next) => {
   try {
@@ -10094,10 +10142,21 @@ app.post("/api/webhooks/tabby", async (req, res) => {
   }
 });
 
-app.post("/payment/edfapay/return", async (req, res) => {
+app.post("/payment/edfapay/return", edfapayMultipartBody, async (req, res) => {
   const orderId = Number(req.query.order_id || 0);
   const token = String(req.query.token || "");
-  if (!verifyEdfaPayReturnToken(token, orderId)) console.error("EdfaPay customer return failed INVALID_PAYMENT_RETURN");
+  if (!verifyEdfaPayReturnToken(token, orderId)) {
+    console.error("EdfaPay customer return failed INVALID_PAYMENT_RETURN");
+  } else {
+    const payload = { ...edfapayCallbackPayload(req), order_id: orderId };
+    if (payload.status || payload.result || payload.trans_id || payload.transactionId) {
+      try {
+        await applyEdfaPayEvent(payload, "customer_return");
+      } catch (error) {
+        console.error("EdfaPay customer return event failed", String(error.message || error));
+      }
+    }
+  }
   res.redirect(303, `/payment/edfapay/return?order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(token)}`);
 });
 app.get("/api/addresses", (_req, res) => res.json(ok({ addresses: [] })));

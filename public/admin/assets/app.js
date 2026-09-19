@@ -3937,7 +3937,8 @@
     const tabbyActive = tabby.show_at_checkout !== false && tabby.is_enabled;
     const testGood = tamara.last_test_status === "connected";
     const edfapayTestGood = edfapay.last_test_status === "connected";
-    const webhookReady = Boolean(tamara.webhook_id && tamara.webhook_registered_at);
+    const webhookReady = Boolean(tamara.webhook_id && tamara.webhook_registered_at && tamara.webhook_url === result.webhook_endpoint);
+    const edfapayCallbackCurrent = Boolean(edfapay.callback_is_current);
     const countryOptions = [["SA","Saudi Arabia","السعودية"],["AE","United Arab Emirates","الإمارات"],["BH","Bahrain","البحرين"],["KW","Kuwait","الكويت"],["OM","Oman","عُمان"]];
     const currencyOptions = ["SAR","AED","BHD","KWD","OMR"];
     const secretField = (name, labelEn, labelAr, hasValue) => `<div class="field"><label>${ui(labelEn,labelAr)}</label><div class="secret-input-wrap"><input name="${name}" type="password" value="" placeholder="${hasValue ? "••••••••••••" : ui("Enter credential","أدخل المفتاح")}" autocomplete="new-password" /><button class="btn icon-btn" type="button" data-toggle-payment-secret="${name}" title="${ui("Show typed value","إظهار القيمة المكتوبة")}">${i("eye")}</button></div><small>${hasValue ? ui("Saved encrypted. Leave empty to keep it.","محفوظ ومشفّر. اتركه فارغًا للاحتفاظ به.") : ui("Required before activation.","مطلوب قبل التفعيل.")}</small></div>`;
@@ -3990,7 +3991,8 @@
           <div class="payment-choice-group"><label>${ui("Countries","الدول")}</label><div>${countryOptions.map(([code,en,ar])=>`<label class="payment-choice-chip"><input type="checkbox" name="edfapay_supported_countries" value="${code}" ${edfapay.supported_countries?.includes(code)?"checked":""}/><span>${code}</span><b>${ui(en,ar)}</b></label>`).join("")}</div></div>
           <div class="payment-choice-group"><label>${ui("Currencies","العملات")}</label><div>${currencyOptions.map(code=>`<label class="payment-choice-chip compact"><input type="checkbox" name="edfapay_supported_currencies" value="${code}" ${edfapay.supported_currencies?.includes(code)?"checked":""}/><b>${code}</b></label>`).join("")}</div></div>
           <div class="payment-webhook-panel"><div><span class="section-kicker">RETURN URL</span><h3>${ui("Customer return","عودة العميل")}</h3><p>${ui("Generated from the current store domain.","يُولد من دومين المتجر الحالي.")}</p></div><code dir="ltr">${escapeHtml(edfapay.customer_return_url||"")}</code><button class="btn icon-btn" type="button" data-copy-payment-url="${escapeHtml(edfapay.customer_return_url||"")}" title="${ui("Copy","نسخ")}">${i("copy")}</button></div>
-          <div class="payment-webhook-panel"><div><span class="section-kicker">CALLBACK URL</span><h3>${ui("Server callback","إشعار السيرفر")}</h3><p>${ui("Copy this URL into EdfaPay. Update it there whenever the store domain changes.","انسخ الرابط إلى EdfaPay وحدّثه هناك عند تغيير دومين المتجر.")}</p></div><code dir="ltr">${escapeHtml(edfapay.callback_url||"")}</code><button class="btn icon-btn" type="button" data-copy-payment-url="${escapeHtml(edfapay.callback_url||"")}" title="${ui("Copy","نسخ")}">${i("copy")}</button></div>
+          <div class="payment-webhook-panel ${edfapayCallbackCurrent?"":"requires-action"}"><div><span class="section-kicker">CALLBACK URL</span><h3>${ui("Server callback","إشعار السيرفر")}</h3><p>${edfapayCallbackCurrent?ui("This exact URL is confirmed in EdfaPay.","تم تأكيد تسجيل هذا الرابط نفسه داخل EdfaPay."):ui("Copy this exact URL into EdfaPay Settings > Callback URL, save it there, then confirm below.","انسخ هذا الرابط بالكامل إلى إعدادات EdfaPay > Callback URL واحفظه هناك، ثم أكد التحديث بالزر أدناه.")}</p></div><code dir="ltr">${escapeHtml(edfapay.callback_url||"")}</code><div class="payment-callback-actions"><span class="status-pill ${edfapayCallbackCurrent?"good":"bad"}">${edfapayCallbackCurrent?ui("Current","محدّث"):ui("Update required","يحتاج تحديث")}</span><button class="btn icon-btn" type="button" data-copy-payment-url="${escapeHtml(edfapay.callback_url||"")}" title="${ui("Copy","نسخ")}">${i("copy")}</button>${edfapayCallbackCurrent?"":`<button class="btn primary" type="button" id="confirmEdfaPayCallback">${i("check")}${ui("I saved it in EdfaPay","حفظت الرابط في EdfaPay")}</button>`}</div></div>
+          ${edfapay.callback_update_required?`<div class="payment-callback-warning">${i("alert-triangle")}<div><strong>${ui("EdfaPay is hidden from checkout until the callback is updated","تم إخفاء ادفع باي من صفحة الدفع حتى تحديث رابط Callback")}</strong><p>${ui("This prevents a customer payment from becoming disconnected from its store order.","هذا يمنع تنفيذ دفعة لا تصل نتيجتها إلى طلب المتجر.")}</p></div></div>`:""}
           <div class="payment-rule-toggle"><div><strong>${ui("Connection check","فحص الاتصال")}</strong><small>${escapeHtml(edfapay.last_test_message||ui("Not tested yet. Credentials are authenticated on the first checkout.","لم يتم الفحص بعد. يتم التحقق من بيانات الدخول في أول عملية دفع."))}</small></div><span class="status-pill ${edfapayTestGood?"good":"warn"}">${edfapayTestGood?ui("Endpoint reachable","النقطة متاحة"):ui("Not tested","غير مختبر")}</span></div>
         </section>
         <section class="card card-pad full-span payment-credentials-card">
@@ -4019,6 +4021,8 @@
     document.getElementById("testTabby").onclick=async event=>{event.currentTarget.disabled=true;try{await save();await api("/api/admin/payment-gateways/tabby/test",{method:"POST",body:"{}"});toast(ui("Tabby connection is working","اتصال تابي يعمل بنجاح"));renderPaymentGateways(page);}catch(error){toast(error.message,"error");renderPaymentGateways(page);}};
     document.getElementById("registerTabbyWebhook").onclick=async event=>{event.currentTarget.disabled=true;try{await save();await api("/api/admin/payment-gateways/tabby/register-webhook",{method:"POST",body:"{}"});toast(ui("Tabby webhook updated","تم تحديث Webhook تابي"));renderPaymentGateways(page);}catch(error){toast(error.message,"error");event.currentTarget.disabled=false;}};
     document.querySelectorAll("[data-copy-payment-url]").forEach(button=>button.onclick=async()=>{try{await navigator.clipboard.writeText(button.dataset.copyPaymentUrl||"");toast(ui("URL copied","تم نسخ الرابط"));}catch{toast(ui("Could not copy URL","تعذر نسخ الرابط"),"error");}});
+    const confirmEdfaPayCallback=document.getElementById("confirmEdfaPayCallback");
+    if(confirmEdfaPayCallback)confirmEdfaPayCallback.onclick=async event=>{event.currentTarget.disabled=true;try{await api("/api/admin/payment-gateways/edfapay/confirm-callback",{method:"POST",body:"{}"});toast(ui("EdfaPay callback confirmed","تم تأكيد رابط EdfaPay"));renderPaymentGateways(page);}catch(error){toast(error.message,"error");event.currentTarget.disabled=false;}};
     document.getElementById("registerTamaraWebhook").onclick=async event=>{event.currentTarget.disabled=true;try{await save();await api("/api/admin/payment-gateways/tamara/register-webhook",{method:"POST",body:"{}"});toast(ui("Tamara webhook registered","تم تسجيل Webhook الخاص بـTamara"));renderPaymentGateways(page);}catch(error){toast(error.message,"error");event.currentTarget.disabled=false;}};
   }
 
@@ -4573,6 +4577,9 @@
       <form class="card card-pad" id="settingsForm">
         <div class="studio-card-head"><span class="section-kicker">${ui("SYSTEM", "النظام")}</span><div><h2>${ui("Store operation", "تشغيل المتجر")}</h2><p>${ui("Domain and operational services live here. Brand details are managed in Brand Studio.", "الدومين وخدمات التشغيل موجودة هنا، وبيانات الهوية تُدار من استوديو الهوية.")}</p></div></div>
         <div class="form-grid">${field("website_domain", "websiteDomain", "text", settings.website_domain || "ecommerce.siteyfy.com")}</div>
+        <div class="domain-integration-note">
+          ${i("globe")}<div><strong>${ui("Changing the domain updates generated URLs immediately","تغيير الدومين يجدّد الروابط المولّدة فورًا")}</strong><p>${ui("Return URLs update automatically. EdfaPay must be updated manually in its dashboard; Tamara, Tabby and OTO must have their webhooks updated from Integrations.","روابط العودة تتحدث تلقائيًا. يجب تحديث EdfaPay يدويًا من منصته، ثم إعادة تسجيل Webhook الخاص بـTamara وTabby وOTO من التكاملات.")}</p></div>
+        </div>
         <div class="card soft-panel" style="margin-top:18px;">
           <div class="switch-row">
             <div>
@@ -4621,14 +4628,15 @@
       const data = Object.fromEntries(new FormData(event.currentTarget));
       const { website_domain, shipping_active, default_shipping_cost, free_shipping_threshold } = data;
       const free_shipping_rules=[...event.currentTarget.querySelectorAll("[data-shipping-rule]")].map(row=>{const values=namedValues(row);return {id:row.dataset.id,name_en:values.name_en,name_ar:values.name_ar,condition_type:values.condition_type,minimum_quantity:Number(values.minimum_quantity||2),minimum_subtotal:Number(values.minimum_subtotal||0),action_type:values.action_type||"free_shipping",action_value:Number(values.action_value||0),product_ids:readShippingTarget(row,"products"),category_slugs:readShippingTarget(row,"categories"),is_active:values.is_active==="true"};});
-      await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({
+      const saved = await api("/api/admin/settings", { method: "PUT", body: JSON.stringify({
         website_domain,
         shipping_active: shipping_active === "true",
         default_shipping_cost: Number(default_shipping_cost || 0),
         free_shipping_threshold: Number(free_shipping_threshold || 0),
         free_shipping_rules
       }) });
-      toast(t("saved"));
+      if(saved.domain_changed)toast(ui("Domain saved. Review payment and shipping callbacks now.","تم حفظ الدومين. راجع الآن روابط بوابات الدفع والشحن."),"warning");
+      else toast(t("saved"));
     };
     document.querySelector("[data-open-brand-studio]").onclick = () => { state.view="brandStudio";location.hash="brandStudio";render(); };
     document.getElementById("robotsForm").onsubmit = async (event) => {
