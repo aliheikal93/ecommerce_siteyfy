@@ -171,6 +171,34 @@ const defaultShippingIntegrationSettings = {
     last_test_status: "not_tested",
     last_test_message: ""
   },
+  smartship: {
+    is_enabled: false,
+    show_at_checkout: false,
+    checkout_label_en: "SmartShip delivery",
+    checkout_label_ar: "توصيل SmartShip",
+    sort_order: 30,
+    environment: "production",
+    live_base_url: "https://iapp.smartship.com",
+    sandbox_base_url: "",
+    token_path: "/api/token",
+    countries_path: "/ar/api/get-all/countries",
+    create_order_path: "/ar/api/create-order",
+    order_details_path: "/ar/api/order-details/{order_id}",
+    client_id_encrypted: "",
+    client_secret_encrypted: "",
+    access_token_encrypted: "",
+    access_token_expires_at: null,
+    auto_create_orders: false,
+    order_prefix: "SFY-",
+    default_service_code: "",
+    default_package_type: "parcel",
+    fallback_amount: 0,
+    timeout_ms: 15000,
+    last_test_at: null,
+    last_test_status: "not_tested",
+    last_test_message: "",
+    last_test_http_status: null
+  },
   oms_connector: {
     is_enabled: false,
     environment: "production",
@@ -939,6 +967,7 @@ function shippingQuote(items = [], subtotal = 0, shipping = shippingSettings()) 
 
 const imileTokenCache = new Map();
 const otoTokenCache = new Map();
+const smartshipTokenCache = new Map();
 const imileOmsTokenCache = new Map();
 let imileOmsSyncPromise = null;
 let imileTrackingSyncPromise = null;
@@ -975,6 +1004,7 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
   const current = { ...defaultShippingIntegrationSettings, ...saved };
   const requestedImile = { ...defaultShippingIntegrationSettings.imile, ...(current.imile || {}), ...(payload.imile || {}) };
   const requestedOto = { ...defaultShippingIntegrationSettings.oto, ...(current.oto || {}), ...(payload.oto || {}) };
+  const requestedSmartship = { ...defaultShippingIntegrationSettings.smartship, ...(current.smartship || {}), ...(payload.smartship || {}) };
   const requestedOms = { ...defaultShippingIntegrationSettings.oms_connector, ...(current.oms_connector || {}), ...(payload.oms_connector || {}) };
   const requestedPricing = { ...defaultShippingIntegrationSettings.customer_pricing, ...(current.customer_pricing || {}), ...(payload.customer_pricing || {}) };
   const requestedSpl = { ...defaultShippingIntegrationSettings.spl_address, ...(current.spl_address || {}), ...(payload.spl_address || {}) };
@@ -985,6 +1015,9 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
   const incomingOtoRefreshToken = String(payload.oto?.refresh_token || "").trim();
   const incomingOtoWebhookSecret = String(payload.oto?.webhook_secret || "").trim();
   const incomingOtoWebhookAuthorization = String(payload.oto?.webhook_authorization || "").trim();
+  const incomingSmartshipClientId = String(payload.smartship?.client_id || "").trim();
+  const incomingSmartshipClientSecret = String(payload.smartship?.client_secret || "").trim();
+  const incomingSmartshipAccessToken = String(payload.smartship?.access_token || "").trim();
   const secretKeyEncrypted = incomingSecret
     ? encryptIntegrationSecret(incomingSecret)
     : preserveSecrets ? String(current.imile?.secret_key_encrypted || "") : "";
@@ -1006,18 +1039,30 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
   const otoWebhookAuthorizationEncrypted = incomingOtoWebhookAuthorization
     ? encryptIntegrationSecret(incomingOtoWebhookAuthorization)
     : preserveSecrets ? String(current.oto?.webhook_authorization_encrypted || "") : "";
+  const smartshipClientIdEncrypted = incomingSmartshipClientId
+    ? encryptIntegrationSecret(incomingSmartshipClientId)
+    : preserveSecrets ? String(current.smartship?.client_id_encrypted || "") : "";
+  const smartshipClientSecretEncrypted = incomingSmartshipClientSecret
+    ? encryptIntegrationSecret(incomingSmartshipClientSecret)
+    : preserveSecrets ? String(current.smartship?.client_secret_encrypted || "") : "";
+  const smartshipAccessTokenEncrypted = incomingSmartshipAccessToken
+    ? encryptIntegrationSecret(incomingSmartshipAccessToken)
+    : preserveSecrets ? String(current.smartship?.access_token_encrypted || "") : "";
   const strategy = shippingPricingStrategies.has(requestedPricing.strategy) ? requestedPricing.strategy : "internal_rules";
   const numberOrNull = (value) => value === "" || value === null || value === undefined ? null : Math.max(0, Number(value || 0));
   const isEnabled = requestedImile.is_enabled === true || requestedImile.is_enabled === "true";
   const otoEnabled = requestedOto.is_enabled === true || requestedOto.is_enabled === "true";
+  const smartshipEnabled = requestedSmartship.is_enabled === true || requestedSmartship.is_enabled === "true";
   const customerId = String(requestedImile.customer_id || "").trim();
   const requestedProvider = payload.default_provider ?? payload.active_provider ?? current.default_provider ?? current.active_provider;
   const providerReady = requestedProvider === "oto"
     ? otoEnabled && Boolean(otoRefreshTokenEncrypted)
+    : requestedProvider === "smartship"
+      ? smartshipEnabled && Boolean(smartshipClientIdEncrypted) && Boolean(smartshipClientSecretEncrypted)
     : requestedProvider === "imile"
       ? isEnabled && Boolean(customerId) && Boolean(secretKeyEncrypted)
       : true;
-  const defaultProvider = providerReady && ["internal", "imile", "oto"].includes(requestedProvider) ? requestedProvider : "internal";
+  const defaultProvider = providerReady && ["internal", "imile", "oto", "smartship"].includes(requestedProvider) ? requestedProvider : "internal";
   const estimateProfiles = (Array.isArray(requestedPricing.estimate_profiles) && requestedPricing.estimate_profiles.length
     ? requestedPricing.estimate_profiles
     : defaultShippingIntegrationSettings.customer_pricing.estimate_profiles).slice(0, 50).map((profile, index) => ({
@@ -1102,6 +1147,33 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
       webhook_secret_encrypted: otoWebhookSecretEncrypted,
       webhook_authorization_encrypted: otoWebhookAuthorizationEncrypted
     },
+    smartship: {
+      ...requestedSmartship,
+      client_id: undefined,
+      client_secret: undefined,
+      access_token: undefined,
+      is_enabled: smartshipEnabled,
+      show_at_checkout: requestedSmartship.show_at_checkout === true || requestedSmartship.show_at_checkout === "true",
+      checkout_label_en: String(requestedSmartship.checkout_label_en || "SmartShip delivery").slice(0, 80),
+      checkout_label_ar: String(requestedSmartship.checkout_label_ar || "توصيل SmartShip").slice(0, 80),
+      sort_order: Number(requestedSmartship.sort_order || 30),
+      environment: requestedSmartship.environment === "sandbox" ? "sandbox" : "production",
+      live_base_url: String(requestedSmartship.live_base_url || defaultShippingIntegrationSettings.smartship.live_base_url).replace(/\/$/, ""),
+      sandbox_base_url: String(requestedSmartship.sandbox_base_url || "").replace(/\/$/, ""),
+      token_path: `/${String(requestedSmartship.token_path || defaultShippingIntegrationSettings.smartship.token_path).replace(/^\/+/, "")}`,
+      countries_path: `/${String(requestedSmartship.countries_path || defaultShippingIntegrationSettings.smartship.countries_path).replace(/^\/+/, "")}`,
+      create_order_path: `/${String(requestedSmartship.create_order_path || defaultShippingIntegrationSettings.smartship.create_order_path).replace(/^\/+/, "")}`,
+      order_details_path: `/${String(requestedSmartship.order_details_path || defaultShippingIntegrationSettings.smartship.order_details_path).replace(/^\/+/, "")}`,
+      client_id_encrypted: smartshipClientIdEncrypted,
+      client_secret_encrypted: smartshipClientSecretEncrypted,
+      access_token_encrypted: smartshipAccessTokenEncrypted,
+      auto_create_orders: requestedSmartship.auto_create_orders === true || requestedSmartship.auto_create_orders === "true",
+      order_prefix: String(requestedSmartship.order_prefix || "SFY-").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 20),
+      default_service_code: String(requestedSmartship.default_service_code || "").trim().slice(0, 100),
+      default_package_type: String(requestedSmartship.default_package_type || "parcel").trim().slice(0, 50),
+      fallback_amount: Math.max(0, Number(requestedSmartship.fallback_amount || 0)),
+      timeout_ms: Math.min(30000, Math.max(3000, Number(requestedSmartship.timeout_ms || 15000)))
+    },
     oms_connector: {
       ...requestedOms,
       password: undefined,
@@ -1154,6 +1226,16 @@ function publicShippingIntegrations() {
       refresh_token_encrypted: undefined,
       webhook_secret_encrypted: undefined,
       webhook_authorization_encrypted: undefined
+    },
+    smartship: {
+      ...settings.smartship,
+      has_client_id: Boolean(decryptIntegrationSecret(settings.smartship.client_id_encrypted)),
+      has_client_secret: Boolean(decryptIntegrationSecret(settings.smartship.client_secret_encrypted)),
+      has_access_token: Boolean(decryptIntegrationSecret(settings.smartship.access_token_encrypted)),
+      is_configured: Boolean(decryptIntegrationSecret(settings.smartship.client_id_encrypted) && decryptIntegrationSecret(settings.smartship.client_secret_encrypted)),
+      client_id_encrypted: undefined,
+      client_secret_encrypted: undefined,
+      access_token_encrypted: undefined
     },
     oms_connector: {
       ...settings.oms_connector,
@@ -2629,6 +2711,66 @@ async function otoRequest(pathname, { method = "POST", body, query } = {}) {
   return result.data ?? result;
 }
 
+function smartshipBaseUrl(settings = normalizeShippingIntegrations()) {
+  const configured = settings.smartship.environment === "sandbox" ? settings.smartship.sandbox_base_url : settings.smartship.live_base_url;
+  return String(configured || settings.smartship.live_base_url).replace(/\/$/, "");
+}
+
+async function smartshipAccessToken(settings = normalizeShippingIntegrations(), { force = false, allowDisabled = false } = {}) {
+  if (!allowDisabled && !settings.smartship.is_enabled) fail("SMARTSHIP_PROVIDER_NOT_ACTIVE", 409);
+  const clientId = decryptIntegrationSecret(settings.smartship.client_id_encrypted);
+  const clientSecret = decryptIntegrationSecret(settings.smartship.client_secret_encrypted);
+  if (!clientId || !clientSecret) fail("SMARTSHIP_CREDENTIALS_REQUIRED", 409);
+  const cacheKey = `${settings.smartship.environment}:${crypto.createHash("sha256").update(clientId).digest("hex").slice(0, 12)}`;
+  const cached = smartshipTokenCache.get(cacheKey);
+  if (!force && cached?.expires_at > Date.now() + 60000) return cached.token;
+  const savedToken = decryptIntegrationSecret(settings.smartship.access_token_encrypted);
+  const savedExpiry = new Date(settings.smartship.access_token_expires_at || 0).getTime();
+  if (!force && savedToken && savedExpiry > Date.now() + 60000) return savedToken;
+  const response = await fetch(`${smartshipBaseUrl(settings)}${settings.smartship.token_path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }),
+    signal: AbortSignal.timeout(settings.smartship.timeout_ms)
+  });
+  const responseText = await response.text();
+  let result = {};
+  try { result = responseText ? JSON.parse(responseText) : {}; }
+  catch { result = { message: responseText || `HTTP ${response.status}` }; }
+  const token = result.access_token || result.accessToken || result.data?.access_token || result.data?.accessToken;
+  if (!response.ok || !token) {
+    const reason = String(result.error_description || result.message || result.error || response.status).slice(0, 300);
+    const error = new Error(`SMARTSHIP_AUTH_FAILED: ${reason}`);
+    error.status = 502;
+    error.providerStatus = response.status;
+    throw error;
+  }
+  const expiresIn = Math.max(300, Number(result.expires_in || result.expiresIn || 3600));
+  smartshipTokenCache.set(cacheKey, { token, expires_at: Date.now() + expiresIn * 1000 });
+  return token;
+}
+
+async function smartshipRequest(pathname, { method = "GET", body, query, allowDisabled = false } = {}) {
+  const settings = normalizeShippingIntegrations();
+  const token = await smartshipAccessToken(settings, { allowDisabled });
+  const url = new URL(`${smartshipBaseUrl(settings)}${pathname}`);
+  Object.entries(query || {}).forEach(([key, value]) => value !== "" && value !== null && value !== undefined && url.searchParams.set(key, value));
+  const response = await fetch(url, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(settings.smartship.timeout_ms)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.status === false || result.success === false) {
+    const error = new Error(`SMARTSHIP_API_ERROR: ${String(result.message || result.error || response.status).slice(0, 300)}`);
+    error.status = 502;
+    error.providerStatus = response.status;
+    throw error;
+  }
+  return result.data ?? result.result ?? result;
+}
+
 function otoDeliveryOptions(result) {
   const candidates = [result?.deliveryCompany, result, result?.deliveryOptions, result?.options, result?.rates, result?.data, result?.data?.deliveryCompany, result?.data?.deliveryOptions, result?.result];
   return candidates.find(Array.isArray) || [];
@@ -2858,6 +3000,11 @@ async function customerShippingQuotes(context) {
   } else try { quotes.push(...await otoShippingQuotes({ ...context, integration, currency })); } catch (error) {
     if (!quotes.length && integration.oto.fallback_amount > 0) quotes.push({ id: "oto:fallback", provider: "oto", carrier_code: "oto", carrier_name_en: integration.oto.checkout_label_en, carrier_name_ar: integration.oto.checkout_label_ar, customer_amount: integration.oto.fallback_amount, carrier_estimated_cost: null, currency, source: "fallback", fallback_used: true, error_code: String(error.message || "OTO_QUOTE_FAILED").split(":")[0] });
   }
+  if (integration.smartship.is_enabled && integration.smartship.show_at_checkout) {
+    const priced = await customerShippingQuote(context);
+    const amount = integration.smartship.fallback_amount > 0 ? integration.smartship.fallback_amount : priced.customer_amount;
+    quotes.push({ ...priced, id: "smartship:configured", provider: "smartship", carrier_code: "smartship", carrier_name_en: integration.smartship.checkout_label_en, carrier_name_ar: integration.smartship.checkout_label_ar, customer_amount: Number(amount || 0), carrier_estimated_cost: null, source: "configured", fallback_used: false });
+  }
   const filtered = quotes.filter((quote, index, all) => {
     if (quote.provider === "oto" && integration.oto.exclude_imile_when_direct && integration.imile.is_enabled && quote.carrier_code.includes("imile")) return false;
     return all.findIndex((candidate) => `${candidate.carrier_code}:${candidate.customer_amount}` === `${quote.carrier_code}:${quote.customer_amount}`) === index;
@@ -2866,7 +3013,7 @@ async function customerShippingQuotes(context) {
     const quote = await customerShippingQuote(context);
     filtered.push({ ...quote, id: "internal:rules", provider: "internal", carrier_code: "internal", carrier_name_en: "Store delivery", carrier_name_ar: "توصيل المتجر" });
   }
-  const providerOrder = { imile: integration.imile.sort_order, oto: integration.oto.sort_order, internal: 99 };
+  const providerOrder = { imile: integration.imile.sort_order, oto: integration.oto.sort_order, smartship: integration.smartship.sort_order, internal: 99 };
   filtered.sort((a, b) => Number(providerOrder[a.provider] || 99) - Number(providerOrder[b.provider] || 99) || Number(a.customer_amount || 0) - Number(b.customer_amount || 0));
   let selected = filtered.find((quote) => quote.provider === integration.default_provider) || filtered[0];
   const signed = filtered.map((quote) => ({ ...quote, is_default: quote.id === selected.id, quote_token: signShippingQuote(quote, context) }));
@@ -3027,6 +3174,119 @@ async function updateOtoOrder(order, shipment) {
     last_attempted_at: new Date().toISOString(),
     last_order_update_at: new Date().toISOString(),
     sync_state: "order_created"
+  });
+}
+
+function smartshipOrderPayload(order, settings = normalizeShippingIntegrations()) {
+  const customer = order.shipping_address || order.customer || {};
+  const company = getSetting("companyInfo") || {};
+  const sender = settings.imile.sender || {};
+  const packageTotals = shippingPackageTotals(order.items || []);
+  const fullName = [customer.first_name, customer.last_name].filter(Boolean).join(" ") || customer.full_name || customer.name || "Customer";
+  const prepaid = normalizePaymentMethod(order.payment?.method) === "prepaid";
+  const orderId = `${settings.smartship.order_prefix || "SFY-"}${order.id}`;
+  const addressLine = [customer.building_number, customer.street, customer.additional_number, customer.district].filter(Boolean).join(", ");
+  return {
+    order_id: orderId,
+    reference_id: String(order.id),
+    store_name: company.site_name_en || company.site_name_ar || "SITEYFY",
+    sender: {
+      name: sender.contacts || company.site_name_en || company.site_name_ar || "SITEYFY",
+      phone: sender.phone || company.phone || undefined,
+      address: sender.address || undefined,
+      district: sender.area || undefined,
+      city: sender.city || undefined,
+      province: sender.province || undefined,
+      postal_code: sender.zip_code || undefined,
+      country: sender.country === "KSA" ? "SA" : sender.country || "SA"
+    },
+    customer: {
+      customer_id: String(order.customer_identity?.user_id || order.id),
+      first_name: customer.first_name || undefined,
+      last_name: customer.last_name || undefined,
+      name: fullName,
+      email: customer.email || undefined,
+      phone: customer.phone,
+      address: {
+        street: customer.street || addressLine,
+        address_line: addressLine,
+        building_number: customer.building_number || undefined,
+        additional_number: customer.additional_number || undefined,
+        short_address: customer.short_address || undefined,
+        district: customer.district || undefined,
+        city: customer.city,
+        province: customer.province || undefined,
+        postal_code: customer.postal_code || undefined,
+        country: customer.country_code || "SA",
+        notes: customer.address_notes || undefined,
+        longitude: Number.isFinite(Number(customer.longitude)) ? Number(customer.longitude) : undefined,
+        latitude: Number.isFinite(Number(customer.latitude)) ? Number(customer.latitude) : undefined
+      }
+    },
+    items: (order.items || []).map((item, index) => ({
+      item_id: String(item.id || item.key || `${order.id}-${index + 1}`),
+      product_id: String(item.product_id || item.sku || ""),
+      name: item.name_en || item.name_ar || item.sku || "Product",
+      name_ar: item.name_ar || undefined,
+      description: item.description_en || item.description_ar || undefined,
+      sku: String(item.sku || item.product_id || ""),
+      quantity: Math.max(1, Number(item.quantity || 1)),
+      unit_price: Number(item.unit_price || 0),
+      total_price: Number(item.subtotal || Number(item.unit_price || 0) * Number(item.quantity || 1)),
+      weight: Number(item.shipping?.weight || 0),
+      length: Number(item.shipping?.length || 0),
+      width: Number(item.shipping?.width || 0),
+      height: Number(item.shipping?.height || 0),
+      hs_code: item.shipping?.hs_code || undefined,
+      images: [item.image_url || item.main_photo_url].filter(Boolean),
+      options: { variant_id: item.variant_id || undefined, variant_label: item.variant_label || undefined, color: item.color || undefined }
+    })),
+    package: {
+      type: settings.smartship.default_package_type || "parcel",
+      pieces: Math.max(1, Number(order.shipping_package?.total_count || (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0))),
+      weight: Math.max(0.1, Number(packageTotals.weight.toFixed(3))),
+      volume: Number(packageTotals.volume.toFixed(3)),
+      length: Number(order.shipping_package?.length || 0),
+      width: Number(order.shipping_package?.width || 0),
+      height: Number(order.shipping_package?.height || 0)
+    },
+    subtotal: Number(order.subtotal || 0),
+    shipping_amount: Number(order.shipping_amount || 0),
+    discount_amount: Number(order.discount_amount || 0),
+    total: Number(order.total || 0),
+    cod_amount: prepaid ? 0 : Number(order.payment?.cod_amount ?? order.total ?? 0),
+    currency: order.currency_snapshot?.code || "SAR",
+    payment_method: prepaid ? "prepaid" : "cash_on_delivery",
+    shipping_company: settings.smartship.default_service_code || "SmartShip",
+    service_code: settings.smartship.default_service_code || undefined,
+    status: "pending",
+    created_date: new Date(order.created_at || Date.now()).toISOString()
+  };
+}
+
+async function createSmartshipShipment(order, shipment) {
+  const settings = normalizeShippingIntegrations();
+  if (!settings.smartship.is_enabled) fail("SMARTSHIP_PROVIDER_NOT_ACTIVE", 409);
+  const customer = order.shipping_address || order.customer || {};
+  const requiredAddress = ["phone", "city", "street", "building_number", "short_address"];
+  const missingAddress = requiredAddress.filter((field) => !String(customer[field] || "").trim());
+  if (missingAddress.length) fail(`SMARTSHIP_ADDRESS_FIELDS_REQUIRED: ${missingAddress.join(", ")}`, 409);
+  const payload = smartshipOrderPayload(order, settings);
+  const result = await smartshipRequest(settings.smartship.create_order_path, { method: "POST", body: payload });
+  const externalOrderNo = result.order_id || result.orderId || result.id || result.reference_id || payload.order_id;
+  const waybillNo = result.waybill_no || result.waybillNo || result.awb || result.tracking_number || result.trackingNumber || null;
+  return upsertShippingShipment({
+    ...shipment,
+    provider: "smartship",
+    external_order_no: String(externalOrderNo),
+    waybill_no: waybillNo ? String(waybillNo) : null,
+    carrier_code: result.carrier_code || result.carrierCode || "smartship",
+    status_code: result.status || "orderCreated",
+    sync_state: waybillNo ? "created" : "order_created",
+    request_snapshot: payload,
+    provider_response_snapshot: result,
+    integration_error: null,
+    created_with_api_at: new Date().toISOString()
   });
 }
 
@@ -7255,9 +7515,9 @@ function addOrderEvent(orderId, type, data = {}, actor = "admin") {
 
 function orderFulfillmentProvider(order, integration = normalizeShippingIntegrations()) {
   const selected = String(order.shipping_selection?.provider || order.shipping_provider || "").toLowerCase();
-  if (["imile", "oto"].includes(selected) && integration[selected]?.is_enabled) return selected;
+  if (["imile", "oto", "smartship"].includes(selected) && integration[selected]?.is_enabled) return selected;
   const preferred = String(integration.default_provider || integration.active_provider || "").toLowerCase();
-  if (["imile", "oto"].includes(preferred) && integration[preferred]?.is_enabled) return preferred;
+  if (["imile", "oto", "smartship"].includes(preferred) && integration[preferred]?.is_enabled) return preferred;
   return selected;
 }
 
@@ -7265,7 +7525,7 @@ async function dispatchOrderToShippingProvider(order, requestedProvider = "") {
   if (order.is_historical || order.suppress_side_effects) fail("HISTORICAL_ORDER_CANNOT_BE_DISPATCHED", 409);
   const integration = normalizeShippingIntegrations();
   const provider = String(requestedProvider || orderFulfillmentProvider(order, integration)).toLowerCase();
-  if (!["imile", "oto"].includes(provider)) fail("SHIPPING_PROVIDER_NOT_SELECTED", 409);
+  if (!["imile", "oto", "smartship"].includes(provider)) fail("SHIPPING_PROVIDER_NOT_SELECTED", 409);
   if (!integration[provider]?.is_enabled) fail(`${provider.toUpperCase()}_PROVIDER_NOT_ACTIVE`, 409);
   if (!order.shipping_package?.requires_shipping) fail("ORDER_DOES_NOT_REQUIRE_SHIPPING", 409);
   let shipment = orderShipment(order);
@@ -7278,7 +7538,7 @@ async function dispatchOrderToShippingProvider(order, requestedProvider = "") {
     shipment = upsertShippingShipment({
       store_order_id: order.id,
       provider,
-      client_order_no: provider === "oto" ? `${integration.oto.order_prefix || "SFY-"}${order.id}` : `SITEYFY-${order.id}`,
+      client_order_no: provider === "oto" ? `${integration.oto.order_prefix || "SFY-"}${order.id}` : provider === "smartship" ? `${integration.smartship.order_prefix || "SFY-"}${order.id}` : `SITEYFY-${order.id}`,
       status_code: "awaiting_api_creation",
       customer_name: customer.full_name,
       customer_phone: customer.phone,
@@ -7300,7 +7560,7 @@ async function dispatchOrderToShippingProvider(order, requestedProvider = "") {
   }
   try {
     shipment = upsertShippingShipment({ ...shipment, provider, sync_state: "creation_pending", integration_error: null, last_attempted_at: new Date().toISOString() });
-    const created = provider === "oto" ? await createOtoShipment(order, shipment) : await createImileShipment(order, shipment);
+    const created = provider === "oto" ? await createOtoShipment(order, shipment) : provider === "smartship" ? await createSmartshipShipment(order, shipment) : await createImileShipment(order, shipment);
     updateRecord("orders", order.id, { shipping_shipment_id: created.id, shipping_provider: provider, status: order.status === "pending" ? "ready_to_ship" : order.status });
     return created;
   } catch (error) {
@@ -7577,7 +7837,7 @@ function releaseOrderPromotionReservations(order, reason = "payment_cancelled") 
 async function initializeOrderShipping(order) {
   const integration = normalizeShippingIntegrations();
   const provider = orderFulfillmentProvider(order, integration);
-  if (!order.shipping_package?.requires_shipping || !["imile", "oto"].includes(provider)) return null;
+  if (!order.shipping_package?.requires_shipping || !["imile", "oto", "smartship"].includes(provider)) return null;
   const providerSettings = integration[provider];
   if (!providerSettings?.is_enabled) return null;
   const autoCreate = provider === "imile" ? providerSettings.auto_create_orders : providerSettings.auto_create_orders;
@@ -7587,7 +7847,7 @@ async function initializeOrderShipping(order) {
     shipment = upsertShippingShipment({
       store_order_id: order.id,
       provider,
-      client_order_no: provider === "oto" ? `${integration.oto.order_prefix || "SFY-"}${order.id}` : `SITEYFY-${order.id}`,
+      client_order_no: provider === "oto" ? `${integration.oto.order_prefix || "SFY-"}${order.id}` : provider === "smartship" ? `${integration.smartship.order_prefix || "SFY-"}${order.id}` : `SITEYFY-${order.id}`,
       external_order_no: null,
       waybill_no: null,
       status_code: autoCreate ? "awaiting_api_creation" : "awaiting_dispatch",
@@ -8578,19 +8838,20 @@ app.put("/api/admin/shipping/integrations", (req, res) => {
   const estimatesUpdated = refreshConfiguredShippingEstimates({ overwriteConfigured: true });
   imileTokenCache.clear();
   otoTokenCache.clear();
+  smartshipTokenCache.clear();
   imileOmsTokenCache.clear();
   res.json(ok({ settings: publicShippingIntegrations(), estimates_updated: estimatesUpdated }));
 });
 app.patch("/api/admin/shipping/integrations/:provider/state", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
-  if (!["imile", "oto"].includes(provider)) fail("SHIPPING_PROVIDER_NOT_SUPPORTED", 404);
+  if (!["imile", "oto", "smartship"].includes(provider)) fail("SHIPPING_PROVIDER_NOT_SUPPORTED", 404);
   const current = normalizeShippingIntegrations();
   const providerSettings = current[provider];
   const isEnabled = req.body?.is_enabled === true;
   const showAtCheckout = req.body?.show_at_checkout === undefined ? providerSettings.show_at_checkout : req.body.show_at_checkout === true;
   let defaultProvider = current.default_provider;
   if (req.body?.is_default === true && isEnabled) defaultProvider = provider;
-  if (!isEnabled && defaultProvider === provider) defaultProvider = provider === "oto" && current.imile.is_enabled ? "imile" : provider === "imile" && current.oto.is_enabled ? "oto" : "internal";
+  if (!isEnabled && defaultProvider === provider) defaultProvider = ["oto", "imile", "smartship"].find((candidate) => candidate !== provider && current[candidate]?.is_enabled) || "internal";
   const settings = normalizeShippingIntegrations({
     default_provider: defaultProvider,
     active_provider: defaultProvider,
@@ -8600,6 +8861,7 @@ app.patch("/api/admin/shipping/integrations/:provider/state", (req, res) => {
   setSetting("shippingIntegrations", settings);
   if (provider === "imile") imileTokenCache.clear();
   if (provider === "oto") otoTokenCache.clear();
+  if (provider === "smartship") smartshipTokenCache.clear();
   res.json(ok({ settings: publicShippingIntegrations() }));
 });
 app.post("/api/admin/shipping/integrations/imile/test", async (req, res, next) => {
@@ -8622,6 +8884,26 @@ app.post("/api/admin/shipping/integrations/oto/test", async (req, res, next) => 
     setSetting("shippingIntegrations", saved);
     res.json(ok({ connected: Boolean(token), environment: settings.oto.environment, tested_at: testedAt }));
   } catch (error) {
+    next(error);
+  }
+});
+app.post("/api/admin/shipping/integrations/smartship/test", async (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  const testedAt = new Date().toISOString();
+  const current = normalizeShippingIntegrations();
+  try {
+    smartshipTokenCache.clear();
+    await smartshipAccessToken(current, { force: true, allowDisabled: true });
+    const countries = await smartshipRequest(current.smartship.countries_path, { method: "GET", query: { page: 1 }, allowDisabled: true });
+    const countryCount = Array.isArray(countries) ? countries.length : Array.isArray(countries?.data) ? countries.data.length : Number(countries?.total || countries?.count || 0);
+    const saved = normalizeShippingIntegrations({ smartship: { ...current.smartship, last_test_at: testedAt, last_test_status: "connected", last_test_message: `Authentication successful; ${countryCount} countries received`, last_test_http_status: 200 }, updated_at: testedAt });
+    setSetting("shippingIntegrations", saved);
+    res.json(ok({ connected: true, environment: current.smartship.environment, tested_at: testedAt, country_count: countryCount }));
+  } catch (error) {
+    const message = String(error.message || "SMARTSHIP_CONNECTION_FAILED").slice(0, 400);
+    const saved = normalizeShippingIntegrations({ smartship: { ...current.smartship, last_test_at: testedAt, last_test_status: "failed", last_test_message: message, last_test_http_status: error.providerStatus || error.status || null }, updated_at: testedAt });
+    setSetting("shippingIntegrations", saved);
+    error.status = error.status || 502;
     next(error);
   }
 });
