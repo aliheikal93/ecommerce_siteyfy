@@ -472,7 +472,7 @@ img { max-width: 100%; display: block; }
 .review-stars { display:inline-flex; direction:ltr; color:#d7d1d8; font-size:17px; line-height:1; letter-spacing:0; white-space:nowrap; }
 .review-stars .filled { color:#d5a52c; }
 .review-stars .half { background:linear-gradient(90deg,#d5a52c 50%,#d7d1d8 50%); color:transparent; background-clip:text; -webkit-background-clip:text; }
-.product-sales-proof { width:max-content;max-width:100%;margin:16px 0 0;padding:11px 15px;display:flex;align-items:center;gap:9px;border:1px solid #d9c9e5;border-inline-start:4px solid var(--primary);border-radius:5px;background:#f7f2fa;color:#4f2d68;font-size:14px;font-weight:800; }
+.product-sales-proof { width:max-content;max-width:100%;margin:0 0 16px;padding:11px 15px;display:flex;align-items:center;gap:9px;border:1px solid #d9c9e5;border-inline-start:4px solid var(--primary);border-radius:5px;background:#f7f2fa;color:#4f2d68;font-size:14px;font-weight:800; }
 .product-sales-proof svg { width:20px;height:20px; }
 .product-reviews-root { scroll-margin-top:150px; margin-top:55px; padding-top:45px; border-top:1px solid var(--line); }
 .reviews-loading { min-height:180px; display:flex; align-items:center; justify-content:center; gap:7px; }
