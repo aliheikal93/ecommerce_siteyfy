@@ -302,6 +302,15 @@ const defaultPaymentGatewaySettings = {
   updated_at: null
 };
 
+const defaultMarketingPixelsSettings = {
+  meta: { is_enabled: false, pixel_id: "" },
+  google: { is_enabled: false, measurement_id: "", ads_id: "", purchase_conversion_label: "" },
+  tiktok: { is_enabled: false, pixel_id: "" },
+  content_id_source: "product_id",
+  debug_mode: false,
+  updated_at: null
+};
+
 const defaultShippingAuditSettings = {
   enabled: true,
   auto_run_after_sync: true,
@@ -1436,6 +1445,72 @@ function publicPaymentGateways({ storefront = false } = {}) {
         callback_url: publicStoreUrl("/api/webhooks/tabby")
       }
     }
+  };
+}
+
+function normalizeMarketingPixels(payload = {}) {
+  const current = { ...defaultMarketingPixelsSettings, ...(getSetting("marketingPixels") || {}) };
+  const meta = { ...defaultMarketingPixelsSettings.meta, ...(current.meta || {}), ...(payload.meta || {}) };
+  const google = { ...defaultMarketingPixelsSettings.google, ...(current.google || {}), ...(payload.google || {}) };
+  const tiktok = { ...defaultMarketingPixelsSettings.tiktok, ...(current.tiktok || {}), ...(payload.tiktok || {}) };
+  const clean = (value, max = 100) => String(value || "").trim().slice(0, max);
+  return {
+    meta: {
+      is_enabled: meta.is_enabled === true || meta.is_enabled === "true",
+      pixel_id: clean(meta.pixel_id).replace(/\s+/g, "")
+    },
+    google: {
+      is_enabled: google.is_enabled === true || google.is_enabled === "true",
+      measurement_id: clean(google.measurement_id).toUpperCase().replace(/\s+/g, ""),
+      ads_id: clean(google.ads_id).toUpperCase().replace(/\s+/g, ""),
+      purchase_conversion_label: clean(google.purchase_conversion_label).replace(/\s+/g, "")
+    },
+    tiktok: {
+      is_enabled: tiktok.is_enabled === true || tiktok.is_enabled === "true",
+      pixel_id: clean(tiktok.pixel_id).toUpperCase().replace(/\s+/g, "")
+    },
+    content_id_source: payload.content_id_source === "sku" || (payload.content_id_source === undefined && current.content_id_source === "sku") ? "sku" : "product_id",
+    debug_mode: payload.debug_mode === undefined ? current.debug_mode === true : payload.debug_mode === true || payload.debug_mode === "true",
+    updated_at: payload.updated_at || current.updated_at || null
+  };
+}
+
+function marketingPixelValidation(settings = normalizeMarketingPixels()) {
+  const googleHasId = Boolean(settings.google.measurement_id || settings.google.ads_id);
+  const googleMeasurementValid = !settings.google.measurement_id || /^G-[A-Z0-9]+$/i.test(settings.google.measurement_id);
+  const googleAdsValid = !settings.google.ads_id || /^AW-\d+$/i.test(settings.google.ads_id);
+  const checks = {
+    meta: !settings.meta.is_enabled || /^\d{5,30}$/.test(settings.meta.pixel_id),
+    google: !settings.google.is_enabled || (googleHasId && googleMeasurementValid && googleAdsValid),
+    tiktok: !settings.tiktok.is_enabled || /^[A-Z0-9]{10,32}$/.test(settings.tiktok.pixel_id)
+  };
+  return { checks, valid: Object.values(checks).every(Boolean) };
+}
+
+function publicMarketingPixels() {
+  const settings = normalizeMarketingPixels();
+  return { ...settings, validation: marketingPixelValidation(settings) };
+}
+
+function trackingOrderView(order = {}) {
+  return {
+    id: order.id,
+    total: Number(order.total || 0),
+    subtotal: Number(order.subtotal || order.items_subtotal || 0),
+    discount: Number(order.discount_total || order.discount_amount || 0),
+    shipping: Number(order.shipping_cost || order.shipping_total || 0),
+    currency: order.currency_snapshot?.code || order.currency || "SAR",
+    items: Array.isArray(order.items) ? order.items.map((item) => ({
+      product_id: item.product_id || null,
+      variant_id: item.variant_id || null,
+      sku: item.sku || "",
+      name_ar: item.name_ar || "",
+      name_en: item.name_en || "",
+      category_slug: item.category_slug || "",
+      variant_label: item.variant_label || "",
+      price: Number(item.price || item.unit_price || 0),
+      quantity: Number(item.quantity || 1)
+    })) : []
   };
 }
 
@@ -8452,6 +8527,21 @@ app.put("/api/admin/payment-gateways", (req, res) => {
   setSetting("paymentGateways", settings);
   res.json(ok({ settings: publicPaymentGateways(), webhook_endpoint: publicStoreUrl("/api/webhooks/tamara") }));
 });
+app.get("/api/admin/marketing-pixels", (_req, res) => {
+  const events = entityRows("marketing_pixel_events").sort((a, b) => recentTimestamp(b) - recentTimestamp(a)).slice(0, 100);
+  res.json(ok({ settings: publicMarketingPixels(), events }));
+});
+app.put("/api/admin/marketing-pixels", (req, res) => {
+  const settings = normalizeMarketingPixels({ ...(req.body || {}), updated_at: new Date().toISOString() });
+  const validation = marketingPixelValidation(settings);
+  if (!validation.valid) fail("PIXEL_ID_FORMAT_INVALID", 422);
+  setSetting("marketingPixels", settings);
+  res.json(ok({ settings: publicMarketingPixels() }));
+});
+app.delete("/api/admin/marketing-pixels/events", (_req, res) => {
+  entityRows("marketing_pixel_events").forEach((event) => softDelete("marketing_pixel_events", event.id));
+  res.json(ok({ cleared: true }));
+});
 app.patch("/api/admin/payment-gateways/:provider/state", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
   const current = normalizePaymentGateways();
@@ -10013,13 +10103,55 @@ app.post("/api/orders", async (req, res, next) => {
  }
 });
 app.get("/api/store/payment-methods", (_req, res) => res.json(ok(publicPaymentGateways({ storefront: true }))));
+app.get("/api/store/marketing-pixels", (_req, res) => res.json(ok(publicMarketingPixels())));
+app.post("/api/store/marketing-pixels/events", (req, res) => {
+  const settings = normalizeMarketingPixels();
+  const allowedEvents = new Set(["page_view", "view_item", "view_cart", "add_to_cart", "remove_from_cart", "begin_checkout", "add_payment_info", "purchase", "search"]);
+  const eventName = String(req.body?.event_name || "").trim().toLowerCase();
+  if (!allowedEvents.has(eventName)) fail("TRACKING_EVENT_INVALID", 422);
+  const eventId = String(req.body?.event_id || "").trim().slice(0, 100);
+  if (!eventId) fail("TRACKING_EVENT_ID_REQUIRED", 422);
+  const existing = entityRows("marketing_pixel_events").find((event) => event.event_id === eventId);
+  if (existing) return res.json(ok({ event: existing, duplicate: true }));
+  const items = asArray(req.body?.items).slice(0, 100).map((item) => ({
+    content_id: String(item?.content_id || item?.item_id || "").slice(0, 100),
+    product_id: Number(item?.product_id || 0) || null,
+    variant_id: item?.variant_id ? String(item.variant_id).slice(0, 100) : null,
+    name: String(item?.name || item?.item_name || "").slice(0, 200),
+    category: String(item?.category || item?.item_category || "").slice(0, 100),
+    price: Math.max(0, Number(item?.price || 0)),
+    quantity: Math.max(1, Number(item?.quantity || 1))
+  })).filter((item) => item.content_id);
+  const enabledPlatforms = [settings.meta.is_enabled && "meta", settings.google.is_enabled && "google", settings.tiktok.is_enabled && "tiktok"].filter(Boolean);
+  const event = createRecord("marketing_pixel_events", {
+    event_id: eventId,
+    event_name: eventName,
+    page_url: String(req.body?.page_url || "").slice(0, 500),
+    value: Math.max(0, Number(req.body?.value || 0)),
+    currency: String(req.body?.currency || "SAR").toUpperCase().slice(0, 3),
+    transaction_id: String(req.body?.transaction_id || "").slice(0, 100),
+    item_count: items.length,
+    items,
+    platforms: enabledPlatforms,
+    validation: {
+      content_ids_present: !["view_item", "add_to_cart", "begin_checkout", "purchase"].includes(eventName) || (items.length > 0 && items.every((item) => Boolean(item.content_id))),
+      currency_present: Boolean(req.body?.currency || "SAR"),
+      transaction_id_present: eventName !== "purchase" || Boolean(req.body?.transaction_id)
+    },
+    user_agent: String(req.headers["user-agent"] || "").slice(0, 250),
+    occurred_at: new Date().toISOString()
+  });
+  const allEvents = entityRows("marketing_pixel_events").sort((a, b) => recentTimestamp(b) - recentTimestamp(a));
+  allEvents.slice(500).forEach((row) => softDelete("marketing_pixel_events", row.id));
+  res.json(ok({ event }));
+});
 app.get("/api/store/payments/edfapay/status", (req, res, next) => {
   try {
     const orderId = Number(req.query.order_id || 0);
     if (!verifyEdfaPayReturnToken(req.query.token, orderId)) fail("INVALID_PAYMENT_RETURN", 401);
     const order = getRecord("orders", orderId);
     if (!order || order.payment?.provider !== "edfapay") fail("PAYMENT_ORDER_NOT_FOUND", 404);
-    res.json(ok({ order: { id: order.id, status: order.status, total: order.total, currency: order.currency_snapshot?.code || "SAR", payment_status: order.payment?.status || "pending", provider_status: order.payment?.provider_status || null, provider: "edfapay" } }));
+    res.json(ok({ order: { ...trackingOrderView(order), status: order.status, payment_status: order.payment?.status || "pending", provider_status: order.payment?.provider_status || null, provider: "edfapay" } }));
   } catch (error) {
     next(error);
   }
@@ -10038,7 +10170,7 @@ app.get("/api/store/payments/tabby/status", async (req, res, next) => {
       if (outcome === "cancel" || outcome === "failure") updated = await completeTabbyPayment(order, { id: order.payment?.provider_order_id, status: outcome === "cancel" ? "EXPIRED" : "REJECTED" });
       else throw error;
     }
-    res.json(ok({ order: { id: updated.id, status: updated.status, total: updated.total, currency: updated.currency_snapshot?.code || "SAR", payment_status: updated.payment?.status || "pending", provider_status: updated.payment?.provider_status || null, provider: "tabby" } }));
+    res.json(ok({ order: { ...trackingOrderView(updated), status: updated.status, payment_status: updated.payment?.status || "pending", provider_status: updated.payment?.provider_status || null, provider: "tabby" } }));
   } catch (error) { next(error); }
 });
 app.get("/api/store/payments/tamara/status", async (req, res, next) => {
@@ -10053,10 +10185,8 @@ app.get("/api/store/payments/tamara/status", async (req, res, next) => {
     const updated = await syncTamaraOrder(order, { outcome });
     res.json(ok({
       order: {
-        id: updated.id,
+        ...trackingOrderView(updated),
         status: updated.status,
-        total: updated.total,
-        currency: updated.currency_snapshot?.code || "SAR",
         payment_status: updated.payment?.status || "pending",
         provider_status: updated.payment?.provider_status || null,
         provider: "tamara"

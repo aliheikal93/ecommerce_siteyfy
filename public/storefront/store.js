@@ -20,6 +20,7 @@ const state = {
   ,checkoutQuote:null,checkoutQuotes:[],
   addressConfig:{ enabled:false, format:"AAAA0000" },
   paymentMethods:{ methods:[] },
+  marketingPixels:null,
   customer:null,
   checkoutRecovery:null,
   checkoutRecoveryPromise:null,
@@ -28,7 +29,8 @@ const state = {
   cartReconcilePromise:null,
   pendingCartChanges:[],
   cartValidationError:null,
-  helpfulReviews:new Set()
+  helpfulReviews:new Set(),
+  trackedEvents:new Set()
 };
 
 function customerAuthToken() {
@@ -52,6 +54,56 @@ async function api(endpoint, options = {}) {
   if (!response.ok || payload?.success === false) { const error=new Error(payload?.error?.message || "تعذر تنفيذ الطلب");error.code=payload?.error?.code||payload?.error?.message||"REQUEST_FAILED";error.status=response.status;error.data=payload?.data||payload?.error?.data||null;throw error; }
   return payload?.data ?? payload;
 }
+
+function trackingCurrency(){return String(state.currencies?.base_currency||state.market?.currency?.base_currency||"SAR").toUpperCase();}
+function trackingContentId(item={}){
+  const productId=item.product_id||item.id||item.bundle_id||item.key||"";
+  return String(state.marketingPixels?.content_id_source==="sku"?(item.sku||productId):(productId||item.sku));
+}
+function trackingItem(item={},product=null){
+  const source=product||state.products.find(row=>String(row.id)===String(item.product_id))||{};
+  return {content_id:trackingContentId({...source,...item}),product_id:Number(item.product_id||source.id||0)||null,variant_id:item.variant_id||null,name:item.name_ar||item.name_en||source.name_ar||source.name_en||"",category:item.category_slug||source.category_slug||source.category_name_en||"",price:Number(item.price??source.sale_price??source.price??0),quantity:Number(item.quantity||1),variant:item.variant_label||""};
+}
+function loadTrackingScript(src,key){
+  if(document.querySelector(`script[data-tracking-script="${key}"]`))return;
+  const script=document.createElement("script");script.async=true;script.src=src;script.dataset.trackingScript=key;document.head.appendChild(script);
+}
+function initializeMarketingPixels(settings={}){
+  state.marketingPixels=settings;
+  if(settings.meta?.is_enabled&&settings.meta.pixel_id){
+    if(!window.fbq){const fbq=window.fbq=function(){fbq.callMethod?fbq.callMethod.apply(fbq,arguments):fbq.queue.push(arguments);};fbq.push=fbq;fbq.loaded=true;fbq.version="2.0";fbq.queue=[];window._fbq=fbq;loadTrackingScript("https://connect.facebook.net/en_US/fbevents.js","meta");}
+    window.fbq("init",settings.meta.pixel_id);
+  }
+  const googleId=settings.google?.measurement_id||settings.google?.ads_id;
+  if(settings.google?.is_enabled&&googleId){
+    window.dataLayer=window.dataLayer||[];window.gtag=window.gtag||function(){window.dataLayer.push(arguments);};
+    window.gtag("js",new Date());
+    if(settings.google.measurement_id)window.gtag("config",settings.google.measurement_id,{send_page_view:false,debug_mode:settings.debug_mode===true});
+    if(settings.google.ads_id)window.gtag("config",settings.google.ads_id,{send_page_view:false});
+    loadTrackingScript(`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(googleId)}`,"google");
+  }
+  if(settings.tiktok?.is_enabled&&settings.tiktok.pixel_id){
+    if(!window.ttq){const ttq=window.ttq=[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"];ttq.setAndDefer=(target,method)=>{target[method]=function(){target.push([method].concat([].slice.call(arguments)));};};ttq.methods.forEach(method=>ttq.setAndDefer(ttq,method));ttq.instance=id=>{const instance=ttq._i?.[id]||[];ttq.methods.forEach(method=>ttq.setAndDefer(instance,method));return instance;};ttq.load=id=>{ttq._i=ttq._i||{};ttq._i[id]=[];ttq._i[id]._u="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._t=ttq._t||{};ttq._t[id]=Date.now();ttq._o=ttq._o||{};ttq._o[id]={};loadTrackingScript(`${ttq._i[id]._u}?sdkid=${encodeURIComponent(id)}&lib=ttq`,"tiktok");};}
+    window.ttq.load(settings.tiktok.pixel_id);
+  }
+}
+function trackingPayload(items=[],extra={}){
+  const normalized=items.map(item=>trackingItem(item)).filter(item=>item.content_id);
+  return {currency:extra.currency||trackingCurrency(),value:Number(extra.value??normalized.reduce((sum,item)=>sum+item.price*item.quantity,0)),transaction_id:extra.transaction_id||"",items:normalized};
+}
+function trackCommerceEvent(eventName,items=[],extra={}){
+  const settings=state.marketingPixels;if(!settings)return;
+  const eventId=extra.event_id||(globalThis.crypto?.randomUUID?.()||`evt-${Date.now()}-${Math.random().toString(36).slice(2)}`),payload=trackingPayload(items,extra),contentIds=payload.items.map(item=>item.content_id);
+  const metaNames={page_view:"PageView",view_item:"ViewContent",view_cart:"ViewCart",add_to_cart:"AddToCart",remove_from_cart:"RemoveFromCart",begin_checkout:"InitiateCheckout",add_payment_info:"AddPaymentInfo",purchase:"Purchase",search:"Search"};
+  const googleNames={page_view:"page_view",view_item:"view_item",view_cart:"view_cart",add_to_cart:"add_to_cart",remove_from_cart:"remove_from_cart",begin_checkout:"begin_checkout",add_payment_info:"add_payment_info",purchase:"purchase",search:"search"};
+  const tiktokNames={page_view:"PageView",view_item:"ViewContent",view_cart:"ViewContent",add_to_cart:"AddToCart",remove_from_cart:"RemoveFromCart",begin_checkout:"InitiateCheckout",add_payment_info:"AddPaymentInfo",purchase:"CompletePayment",search:"Search"};
+  if(settings.meta?.is_enabled&&window.fbq){const data={content_ids:contentIds,contents:payload.items.map(item=>({id:item.content_id,quantity:item.quantity,item_price:item.price})),content_type:"product",value:payload.value,currency:payload.currency};if(eventName==="search")data.search_string=extra.search_term||"";window.fbq("track",metaNames[eventName]||eventName,data,{eventID:eventId});}
+  if(settings.google?.is_enabled&&window.gtag){const data={currency:payload.currency,value:payload.value,transaction_id:payload.transaction_id||undefined,search_term:extra.search_term||undefined,items:payload.items.map(item=>({item_id:item.content_id,item_name:item.name,item_category:item.category,item_variant:item.variant,price:item.price,quantity:item.quantity}))};window.gtag("event",googleNames[eventName]||eventName,data);if(eventName==="purchase"&&settings.google.ads_id&&settings.google.purchase_conversion_label)window.gtag("event","conversion",{send_to:`${settings.google.ads_id}/${settings.google.purchase_conversion_label}`,value:payload.value,currency:payload.currency,transaction_id:payload.transaction_id});}
+  if(settings.tiktok?.is_enabled&&window.ttq){const data={content_id:contentIds[0]||undefined,content_type:"product",contents:payload.items.map(item=>({content_id:item.content_id,content_name:item.name,content_category:item.category,quantity:item.quantity,price:item.price})),quantity:payload.items.reduce((sum,item)=>sum+item.quantity,0),value:payload.value,currency:payload.currency,description:payload.items.map(item=>item.name).filter(Boolean).join(", ").slice(0,200)};if(eventName==="search")data.query=extra.search_term||"";if(eventName==="page_view")window.ttq.page();else window.ttq.track(tiktokNames[eventName]||eventName,data);}
+  fetch("/api/store/marketing-pixels/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_id:eventId,event_name:eventName,page_url:location.href,value:payload.value,currency:payload.currency,transaction_id:payload.transaction_id,items:payload.items}),keepalive:true}).catch(()=>{});
+}
+function trackCommerceEventOnce(key,eventName,items=[],extra={}){if(state.trackedEvents.has(key))return;state.trackedEvents.add(key);trackCommerceEvent(eventName,items,extra);}
+function trackPurchase(order={}){const id=String(order.id||order.transaction_id||"");if(!id||localStorage.getItem(`siteyfy_pixel_purchase_${id}`))return;trackCommerceEvent("purchase",order.items||state.cart,{value:Number(order.total||0),currency:order.currency||trackingCurrency(),transaction_id:id});localStorage.setItem(`siteyfy_pixel_purchase_${id}`,new Date().toISOString());}
 
 function esc(value = "") {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -864,6 +916,7 @@ function renderProduct(product) {
     hydrateIcons();
   };
   update();
+  trackCommerceEventOnce(`view_item:${product.id}:${currentVariant()?.id||"default"}`,"view_item",[{...product,product_id:product.id,price:variantPrice(product,currentVariant()),quantity:1,variant_id:currentVariant()?.id||null,variant_label:variantLabel(currentVariant()||{})}],{value:variantPrice(product,currentVariant())});
   document.querySelectorAll("[data-gallery-src]").forEach(button=>button.onclick=()=>{document.getElementById("mainProductImage").src=button.dataset.gallerySrc;document.querySelectorAll(".gallery-thumb").forEach(item=>item.classList.toggle("active",item===button));});
   document.getElementById("zoomProduct").onclick=()=>openOverlay(`<div class="lightbox"><button class="close-button" data-overlay-close>${icon("x")}</button><img src="${esc(document.getElementById("mainProductImage").src)}" alt="" /></div>`);
   document.getElementById("qtyPlus").onclick=()=>{quantity+=1;document.getElementById("qtyValue").textContent=quantity;};
@@ -884,6 +937,7 @@ function renderCollection(collection) {
 
 function renderStoreRoute() {
   const path=location.pathname.replace(/\/$/,"")||"/";
+  trackCommerceEventOnce(`page_view:${location.pathname}${location.search}`,"page_view",[],{value:0});
   if(path==="/")renderHome();
   else if(path==="/products"||path==="/shop")renderProducts();
   else if(path.startsWith("/product/")){const id=decodeURIComponent(path.split("/").pop());const product=state.products.find(item=>String(item.id)===id||item.slug===id);product?renderProduct(product):renderNotFound();}
@@ -913,7 +967,7 @@ function addBundleToCart(bundle, quantity=1, notify=true) {
   const key=`bundle:${bundle.id}`;
   const item={key,item_type:"bundle",bundle_id:bundle.id,product_id:0,name_ar:bundle.name_ar,name_en:bundle.name_en,image_url:bundle.main_photo_url||bundle.items?.[0]?.image_url||"",bundle_main_photo_url:bundle.main_photo_url||"",variant_label:`${bundle.item_count||bundle.items?.length||0} منتجات`,price:Number(bundle.price||0),quantity:Number(quantity||1),bundle_items:bundle.items||[]};
   const existing=state.cart.find(entry=>entry.key===key);if(existing)existing.quantity+=item.quantity;else state.cart.push(item);
-  saveLocalCart();api("/api/cart",{method:"POST",body:JSON.stringify(item)}).catch(()=>{});if(notify)toast("تمت إضافة البندل إلى السلة");
+  saveLocalCart();api("/api/cart",{method:"POST",body:JSON.stringify(item)}).catch(()=>{});trackCommerceEvent("add_to_cart",[item],{value:item.price*item.quantity});if(notify)toast("تمت إضافة البندل إلى السلة");
 }
 
 async function addToCart(product, variant, quantity = 1, notify = true) {
@@ -925,6 +979,7 @@ async function addToCart(product, variant, quantity = 1, notify = true) {
   if(existing)existing.quantity+=item.quantity;else state.cart.push(item);
   saveLocalCart();
   api("/api/cart",{method:"POST",body:JSON.stringify(item)}).catch(()=>{});
+  trackCommerceEvent("add_to_cart",[item],{value:item.price*item.quantity});
   if(notify)toast("تمت إضافة المنتج إلى السلة");
   return true;
 }
@@ -1162,13 +1217,14 @@ function renderCart(checkout=false) {
   const countries=state.market?.countries||[];
   const defaultCountry=state.market?.settings?.default_country_code||"SA";
   shell(`${breadcrumbs(checkout?"إتمام الطلب":"سلة التسوق")}<section class="container cart-page">${checkout?`<h1>إتمام الطلب</h1>${checkoutFormMarkup(countries,defaultCountry)}`:"<h1>سلة التسوق</h1>"}<div class="cart-layout"><div class="cart-items">${state.cart.map(cartItemHtml).join("")}</div><aside class="cart-summary"><h2>ملخص الطلب</h2><div class="summary-row"><span>المجموع الفرعي</span><strong>${money(totals.subtotal)}</strong></div>${totals.discountAmount?`<div class="summary-row discount"><span>الخصم</span><strong>− ${money(totals.discountAmount)}</strong></div>`:""}${totals.shipping.active?`<div class="summary-row shipping" id="checkoutShippingRow"><span>الشحن${totals.shipping.rule?`<small>${esc(totals.shipping.rule.name_ar||"")}</small>`:""}</span><strong id="checkoutShippingAmount">${checkoutShippingPrice(totals.shipping)}</strong></div>`:""}<div class="coupon-box"><label for="couponCode">هل لديك كود خصم؟</label>${promoCodes.length?`<div class="applied-promo-list">${promoCodes.map(code=>`<button type="button" data-remove-promo="${esc(code)}"><span>${esc(code)}</span>${icon("x",13)}</button>`).join("")}</div>`:""}<div class="coupon-row"><input id="couponCode" value="" placeholder="أدخلي كودًا آخر" /><button id="applyCoupon" type="button">تطبيق</button></div><div class="coupon-message ${totals.discount?"success":""}" id="couponMessage">${totals.discount?`تم تطبيق ${promoCodes.length} كود خصم`:""}</div></div><div class="summary-total"><span>الإجمالي</span><strong id="checkoutTotalAmount">${money(totals.total)}</strong></div>${checkout?`<small class="muted" id="shippingQuoteState"></small><button class="primary-button" style="width:100%" id="placeOrder">تأكيد الطلب</button>`:`<a class="primary-button" style="width:100%" href="/checkout">إتمام الطلب</a>`}</aside></div></section>`);
+  trackCommerceEventOnce(checkout?"begin_checkout":"view_cart",checkout?"begin_checkout":"view_cart",state.cart,{value:totals.total});
   document.querySelectorAll("[data-cart-plus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartPlus),1,checkout));
   document.querySelectorAll("[data-cart-minus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartMinus),-1,checkout));
   document.querySelectorAll("[data-cart-remove]").forEach(button=>button.onclick=()=>removeCartItem(Number(button.dataset.cartRemove),checkout));
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",syncEmailRequirement));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackCommerceEvent("add_payment_info",state.cart,{value:cartTotals().total});}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
 }
 
 function bindCheckoutPhoneInput(){
@@ -1277,7 +1333,7 @@ function changeCartQuantity(index,delta,checkout) {
 }
 
 function removeCartItem(index,checkout) {
-  const [item]=state.cart.splice(index,1);saveLocalCart();if(item)api(`/api/cart/${encodeURIComponent(item.key)}`,{method:"DELETE"}).catch(()=>{});clearDiscount();renderCart(checkout);
+  const [item]=state.cart.splice(index,1);saveLocalCart();if(item){api(`/api/cart/${encodeURIComponent(item.key)}`,{method:"DELETE"}).catch(()=>{});trackCommerceEvent("remove_from_cart",[item],{value:Number(item.price||0)*Number(item.quantity||1)});}clearDiscount();renderCart(checkout);
 }
 
 function clearDiscount(){localStorage.removeItem("slyrah_discount");}
@@ -1352,7 +1408,7 @@ async function placeOrder(options={}) {
     const recovery=await ensureCheckoutRecovery();await syncCheckoutRecovery("checkout_submitted",{stage:"ready_to_submit",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id});
     const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,cart_revision_token:state.cartRevisionToken,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});
     if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}
-    clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
+    trackPurchase(result.order||{});clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
   }catch(error){
     if(error.code==="CART_REVALIDATION_REQUIRED"&&error.data){state.cart=error.data.items||[];state.cartRevisionToken=error.data.revision_token||"";state.cartVerifiedAt=Date.now();state.checkoutQuote=null;saveLocalCart({invalidateRevision:false});clearPaymentAttempt();await revalidateCartDiscount();renderCart(true);restoreCheckoutFormState(formValues);refreshCheckoutQuote();if(error.data.changes?.length)showCartChanges(error.data.changes);else toast("تم تحديث التحقق من السلة. راجعي الإجمالي ثم أكدي الطلب مرة أخرى.");return;}
     if(["PAYMENT_ATTEMPT_EXPIRED","PAYMENT_ATTEMPT_CLOSED"].includes(error.message)){clearPaymentAttempt();if(retryClosedAttempt){button.disabled=false;button.textContent="جاري إنشاء جلسة دفع جديدة...";return placeOrder({retryClosedAttempt:false});}}const gatewayError=/(PAYMENT|TAMARA|TABBY|EDFAPAY|GATEWAY|REDIRECT)/i.test(String(error.message||""));syncCheckoutRecovery("client_error",{stage:gatewayError?"payment_failed":"checkout_failed",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id,reason_code:String(error.message||"CHECKOUT_FAILED").split(":")[0],message:error.message});toast(checkoutErrorMessage(error.message));button.disabled=false;button.textContent="تأكيد الطلب";
@@ -1362,7 +1418,7 @@ async function placeOrder(options={}) {
 async function renderTamaraReturn(outcome="success"){
   const params=new URLSearchParams(location.search),orderId=params.get("order_id"),token=params.get("token");
   shell(`${breadcrumbs("حالة الدفع")}<section class="container payment-return"><div class="payment-return-state is-loading">${icon("loader-circle",54)}<span>تمارا</span><h1>جاري تأكيد حالة الدفع</h1><p>نراجع العملية مباشرة مع تمارا، انتظري لحظة.</p></div></section>`);
-  try{const result=await api(`/api/store/payments/tamara/status?order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome)}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);if(paid){clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span>تمارا</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية Tamara.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}const cancelled=["cancelled","failed","expired"].includes(order.payment_status)||outcome!=="success";if(cancelled){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}shell(`${breadcrumbs(cancelled?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${cancelled?"is-failed":"is-pending"}">${icon(cancelled?"circle-x":"clock",58)}<span>تمارا</span><h1>${cancelled?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${cancelled?"لم يتم خصم الطلب ويمكنك العودة لإتمامه بطريقة أخرى.":"استلمنا العملية وننتظر تأكيد Tamara النهائي. سيتم تحديث الطلب تلقائيًا."}</p><a class="primary-button" href="/checkout">${cancelled?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);}catch(error){shell(`${breadcrumbs("تعذر التحقق")}<section class="container payment-return"><div class="payment-return-state is-failed">${icon("circle-x",58)}<span>تمارا</span><h1>تعذر التحقق من العملية</h1><p>${esc(promotionErrorMessage(error.message))}</p><a class="primary-button" href="/checkout">العودة لإتمام الطلب</a></div></section>`);}
+  try{const result=await api(`/api/store/payments/tamara/status?order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome)}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);if(paid){trackPurchase(order);clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span>تمارا</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية Tamara.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}const cancelled=["cancelled","failed","expired"].includes(order.payment_status)||outcome!=="success";if(cancelled){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}shell(`${breadcrumbs(cancelled?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${cancelled?"is-failed":"is-pending"}">${icon(cancelled?"circle-x":"clock",58)}<span>تمارا</span><h1>${cancelled?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${cancelled?"لم يتم خصم الطلب ويمكنك العودة لإتمامه بطريقة أخرى.":"استلمنا العملية وننتظر تأكيد Tamara النهائي. سيتم تحديث الطلب تلقائيًا."}</p><a class="primary-button" href="/checkout">${cancelled?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);}catch(error){shell(`${breadcrumbs("تعذر التحقق")}<section class="container payment-return"><div class="payment-return-state is-failed">${icon("circle-x",58)}<span>تمارا</span><h1>تعذر التحقق من العملية</h1><p>${esc(promotionErrorMessage(error.message))}</p><a class="primary-button" href="/checkout">العودة لإتمام الطلب</a></div></section>`);}
   hydrateIcons();
 }
 
@@ -1373,7 +1429,7 @@ async function renderHostedPaymentReturn(provider,outcome="success"){
   try{
     const query=`order_id=${encodeURIComponent(orderId||"")}&token=${encodeURIComponent(token||"")}&outcome=${encodeURIComponent(outcome||"")}`;
     const result=await api(`/api/store/payments/${provider}/status?${query}`),order=result.order||{},paid=["authorised","captured","partially_captured"].includes(order.payment_status);
-    if(paid){clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية ${esc(label)}.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}
+    if(paid){trackPurchase(order);clearPaymentAttempt(order.id||orderId);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();localStorage.removeItem("siteyfy_pending_payment");shell(`${breadcrumbs("تم الدفع")}<section class="container payment-return"><div class="payment-return-state is-success">${icon("circle-check-big",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>تم تأكيد الدفع بنجاح</h1><p>تم استلام طلبك رقم <b>#${esc(order.id||orderId||"")}</b> وربطه بعملية ${esc(label)}.</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);return;}
     const failed=["cancelled","failed","expired","rejected"].includes(order.payment_status)||order.status==="cancelled"||["cancel","failure"].includes(outcome);
     if(failed){clearPaymentAttempt(order.id||orderId);localStorage.removeItem("siteyfy_pending_payment");}
     shell(`${breadcrumbs(failed?"لم يكتمل الدفع":"الدفع قيد التأكيد")}<section class="container payment-return"><div class="payment-return-state ${failed?"is-failed":"is-pending"}">${icon(failed?"circle-x":"clock",58)}<span class="${provider}-return-mark">${esc(label)}</span><h1>${failed?"لم تكتمل عملية الدفع":"الدفع قيد التأكيد"}</h1><p>${failed?"لم يتم تأكيد الدفع ويمكنك العودة لإتمام الطلب بطريقة أخرى.":`لم يصل التأكيد النهائي من ${esc(label)} بعد. سيُحدّث الطلب تلقائيًا عند وصول الإشعار.`}</p><a class="primary-button" href="/checkout">${failed?"العودة لإتمام الطلب":"مراجعة الطلب"}</a></div></section>`);
@@ -1388,10 +1444,10 @@ function renderNotFound(){shell(`<section class="container empty-cart"><div><h1>
 
 async function init() {
   try {
-    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,addressConfig,paymentMethods,profile] = await Promise.all([
-      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
+    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,addressConfig,paymentMethods,marketingPixels,profile] = await Promise.all([
+      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
     ]);
-    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;
+    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
     if(["/cart","/checkout"].includes(location.pathname)&&state.cart.length){try{await reconcileCart({page:cartPageName(),force:true});}catch(error){state.cartValidationError=error;}}
     applyTheme();
     renderStoreRoute();
