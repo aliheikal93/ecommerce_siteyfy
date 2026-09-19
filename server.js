@@ -11079,11 +11079,39 @@ app.get(["/admin", "/admin/", "/admin/index.html"], (_req, res) => {
   res.sendFile(adminHtml);
 });
 const storefrontHtml = path.join(__dirname, "public", "storefront", "index.html");
+function storefrontProductDocument(product) {
+  const company = getSetting("companyInfo") || {};
+  const title = String(product.meta_title_ar || product.name_ar || product.name_en || company.site_name_ar || "رداء الحشمة").trim();
+  const rawDescription = product.meta_description_ar || product.short_description_ar || product.description_ar || company.description_ar || "";
+  const description = String(rawDescription).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220);
+  const imagePath = product.main_photo_url || product.image_url || company.logo_url || "/favicon.ico";
+  const productUrl = publicStoreUrl(`/product/${product.id}`);
+  const imageUrl = /^https?:\/\//i.test(String(imagePath)) ? String(imagePath) : publicStoreUrl(String(imagePath).startsWith("/") ? String(imagePath) : `/${imagePath}`);
+  const meta = [
+    `<link rel="canonical" href="${escapeHtml(productUrl)}" />`,
+    `<meta property="og:type" content="product" />`,
+    `<meta property="og:site_name" content="${escapeHtml(company.site_name_ar || "رداء الحشمة")}" />`,
+    `<meta property="og:title" content="${escapeHtml(title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(description)}" />`,
+    `<meta property="og:url" content="${escapeHtml(productUrl)}" />`,
+    `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:alt" content="${escapeHtml(product.name_ar || product.name_en || title)}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(description)}" />`,
+    `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`
+  ].join("\n    ");
+  return fs.readFileSync(storefrontHtml, "utf8")
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`)
+    .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
+    .replace("</head>", `    ${meta}\n  </head>`);
+}
 app.get(["/", "/products", "/shop", "/cart", "/checkout", "/payment/tamara/success", "/payment/tamara/failure", "/payment/tamara/cancel", "/payment/edfapay/return", "/payment/tabby/success", "/payment/tabby/failure", "/payment/tabby/cancel"], (_req, res) => res.sendFile(storefrontHtml));
 app.get("/product/:id", (req, res) => {
   const product = findProduct(req.params.id);
   if (!product) return res.status(404).send("Product not found");
-  res.sendFile(storefrontHtml);
+  res.set("Cache-Control", "no-cache");
+  res.type("html").send(storefrontProductDocument(product));
 });
 app.get("/bundle/:id", (req, res) => {
   const bundle = findBundle(req.params.id);
