@@ -4228,6 +4228,156 @@ function slugify(value) {
     .replace(/^-|-$/g, "");
 }
 
+function normalizeDynamicPagePayload(payload = {}, existing = null) {
+  const merged = { ...(existing || {}), ...(payload || {}) };
+  const titleEn = String(merged.title_en || "").trim().slice(0, 180);
+  const titleAr = String(merged.title_ar || "").trim().slice(0, 180);
+  const slug = slugify(merged.slug || titleEn || titleAr).slice(0, 160);
+  if (!titleEn || !titleAr) fail("Page titles are required in Arabic and English");
+  if (!slug) fail("Page slug is required");
+  const duplicate = entityRows("pages").find((page) => page.slug === slug && Number(page.id) !== Number(existing?.id));
+  if (duplicate) fail("A page with this slug already exists", 409);
+  return {
+    ...merged,
+    title_en: titleEn,
+    title_ar: titleAr,
+    footer_title_en: String(merged.footer_title_en || titleEn).trim().slice(0, 180),
+    footer_title_ar: String(merged.footer_title_ar || titleAr).trim().slice(0, 180),
+    slug,
+    content_en: String(merged.content_en || "").trim().slice(0, 50000),
+    content_ar: String(merged.content_ar || "").trim().slice(0, 50000),
+    meta_description_en: String(merged.meta_description_en || "").trim().slice(0, 320),
+    meta_description_ar: String(merged.meta_description_ar || "").trim().slice(0, 320),
+    show_in_footer: merged.show_in_footer !== false && merged.show_in_footer !== "false",
+    sort_order: Math.max(0, Number(merged.sort_order || 0)),
+    is_active: merged.is_active !== false && merged.is_active !== "false"
+  };
+}
+
+const coreDynamicPages = [
+  {
+    slug: "about-us",
+    title_ar: "من نحن",
+    title_en: "About us",
+    footer_title_ar: "من نحن",
+    footer_title_en: "About us",
+    sort_order: 10,
+    meta_description_ar: "تعرفي على رداء الحشمة ورؤيتنا ورسالتنا في تقديم منتجات الصلاة والاحتشام النسائي.",
+    meta_description_en: "Learn about Redaa Alhishma, our vision, and our mission for women's prayer and modest-wear products.",
+    content_ar: `مرحبًا بكِ في رداء الحشمة، وجهتكِ المميزة لاختيار منتجات تجمع بين الاحتشام، الأناقة، الجودة، والراحة في مكان واحد. نحن متجر متخصص في تقديم تشكيلة مختارة من شراشف الصلاة، ملابس الصلاة، وسجاد الصلاة بتصاميم عملية وخامات مريحة تناسب الاستخدام اليومي وتلائم احتياجات المرأة الباحثة عن الجودة والستر في آنٍ واحد.
+
+في رداء الحشمة نؤمن أن منتجات الصلاة والاحتشام يجب أن تكون مريحة، أنيقة، وعملية، لذلك نحرص على اختيار منتجاتنا بعناية من حيث الخامة، التصميم، التشطيب، وسهولة الاستخدام. هدفنا هو توفير تجربة تسوق سهلة وآمنة لكل عميلة تبحث عن شرشف صلاة أنيق، ملابس صلاة نسائية، أو سجاد صلاة عالي الجودة بأسعار مناسبة وخدمة موثوقة.
+
+نعمل على تقديم منتجات تناسب الذوق الهادئ والراقي، مع الاهتمام بالتفاصيل التي تصنع الفارق، بداية من جودة المنتج وحتى تجربة الطلب وخدمة العملاء. كما نسعى دائمًا إلى تطوير تشكيلتنا لتشمل خيارات متنوعة تلبي احتياجات العميلات في المملكة العربية السعودية وتمنحهن تجربة تسوق مريحة وواضحة.
+
+يقع رداء الحشمة في طريق محمد بن عبدالرحمن اليمامة، الرياض، ونعمل على خدمة عميلاتنا بكل اهتمام من خلال توفير تجربة شراء موثوقة ومنتجات تلبي احتياجات المرأة الباحثة عن الاحتشام والجودة والأناقة.
+
+## رؤيتنا
+
+أن يكون رداء الحشمة من الأسماء الموثوقة في عالم منتجات الصلاة والاحتشام النسائي، من خلال تقديم جودة عالية، تصاميم مميزة، وخدمة تحترم احتياج العميلة وتمنحها الثقة في كل طلب.
+
+## رسالتنا
+
+توفير شراشف صلاة وملابس صلاة وسجاد صلاة تجمع بين الاحتشام والجمال والراحة، مع تقديم تجربة تسوق إلكترونية سهلة، آمنة، واحترافية.
+
+## لماذا رداء الحشمة؟
+
+- منتجات مختارة بعناية
+- خامات مريحة وعملية
+- تصاميم أنيقة تناسب الاستخدام اليومي والإهداء
+- اهتمام بالجودة والتفاصيل
+- تجربة تسوق واضحة وخدمة موثوقة
+
+إذا كنتِ تبحثين عن شرشف صلاة، ملابس صلاة نسائية، أو سجاد صلاة بتصميم أنيق وجودة مناسبة، فإن رداء الحشمة هنا ليقدم لكِ منتجات تجمع بين البساطة، الجمال، والعملية في كل تفصيلة.`,
+    content_en: `Welcome to Redaa Alhishma, your destination for products that bring modesty, elegance, quality, and comfort together in one place. We specialize in a curated selection of prayer garments, women's prayer wear, and prayer rugs with practical designs and comfortable fabrics suited to everyday use and to women seeking both quality and modest coverage.
+
+At Redaa Alhishma, we believe prayer and modest-wear products should be comfortable, elegant, and practical. We therefore select our products carefully for their fabric, design, finishing, and ease of use. Our goal is to provide an easy and secure shopping experience for every customer looking for an elegant prayer garment, women's prayer wear, or a high-quality prayer rug at a suitable price with dependable service.
+
+We offer products for refined, understated tastes and pay attention to the details that make a difference, from product quality to ordering and customer service. We continually develop our collection with varied choices that meet the needs of customers across Saudi Arabia and provide a clear, comfortable shopping experience.
+
+Redaa Alhishma is located on Mohammed Bin Abdulrahman Al Yamamah Road in Riyadh. We serve our customers with care through a trusted shopping experience and products that meet women's needs for modesty, quality, and elegance.
+
+## Our vision
+
+To make Redaa Alhishma a trusted name in women's prayer and modest-wear products by offering high quality, distinctive designs, and service that respects each customer's needs and gives her confidence in every order.
+
+## Our mission
+
+To provide prayer garments, women's prayer wear, and prayer rugs that combine modesty, beauty, and comfort, supported by an easy, secure, and professional online shopping experience.
+
+## Why Redaa Alhishma?
+
+- Carefully selected products
+- Comfortable, practical fabrics
+- Elegant designs for everyday use and gifting
+- Attention to quality and detail
+- A clear shopping experience and dependable service
+
+If you are looking for an elegant, well-made prayer garment, women's prayer wear, or prayer rug, Redaa Alhishma offers products that combine simplicity, beauty, and practicality in every detail.`
+  },
+  {
+    slug: "store-policy",
+    title_ar: "سياسة المتجر",
+    title_en: "Store policy",
+    footer_title_ar: "سياسة المتجر",
+    footer_title_en: "Store policy",
+    sort_order: 20,
+    meta_description_ar: "سياسة الاستبدال والاسترجاع لدى متجر رداء الحشمة.",
+    meta_description_en: "Redaa Alhishma exchange and return policy.",
+    content_ar: `عند الرغبة في استبدال أو استرجاع المنتج عليك الاتصال بنا أولاً. يحق للعميل استرجاع المنتج خلال 5 أيام من تاريخ الاستلام، بشرط أن يكون المنتج سليماً ولم يطرأ عليه أي تغيير، ويتحمل العميل تكاليف الشحن كاملاً. كما يتم دفع مبلغ 25 ريال رسوم معالجة عند استرجاع السلعة ويتحملها العميل. ويتم إرجاع تكلفة المنتج للعميل خلال 5 أيام عمل.
+
+يحق للعميل استبدال المنتج بمنتج آخر، وذلك قبل إرسال الشحنة. وبعد إرسال الشحنة يحق له الاستبدال خلال 5 أيام عمل، وعليه تحمل تكلفة الشحن كاملاً وفرق تكلفة المنتج إن وجد.
+
+إذا كان المنتج معيباً أو غير مطابق للمواصفات التي تم تحديدها وقت الشراء، يحق للعميل استبدال المنتج أو استرجاعه خلال 5 أيام، وعلى العميل في هذه الحالة إرسال ما يثبت تكاليف الشحن موضحاً فيه: رقم الإرسالية - شركة الشحن - والتكلفة. فيحق للعميل عندئذ استرجاع المبلغ كاملاً.
+
+المنتجات المشمولة في الخصومات والعروض لا تُستبدل ولا تُسترجع، ويستثنى من ذلك وجود عيب في المنتج.
+
+## الحالات التي لا يقبل فيها الاسترجاع أو الاستبدال
+
+- لا يقبل الاسترجاع بعد مضي 5 أيام من تاريخ الاستلام، ولا يقبل الاستبدال بعد 5 أيام.
+- عند تغير المنتج عن حالته الأصلية لأي سبب من الأسباب.
+- عند الاستعمال بما يتعدى غرض التجربة.
+- المنتجات التي تم تصنيعها بطلب من العميل وفقاً لمواصفات حددها.`,
+    content_en: `To exchange or return a product, please contact us first. Customers may return a product within 5 days of delivery, provided it is intact and unchanged. The customer bears the full shipping cost. A SAR 25 processing fee is also charged to the customer when an item is returned. The product price will be refunded within 5 business days.
+
+A customer may exchange a product for another before the shipment is dispatched. After dispatch, the customer may request an exchange within 5 business days and must bear the full shipping cost and any difference in product price.
+
+If a product is defective or does not match the specifications stated at the time of purchase, the customer may exchange or return it within 5 days. In this case, the customer must provide evidence of the shipping cost showing the shipment number, shipping company, and cost, after which the customer is entitled to a full refund.
+
+Products included in discounts and promotions cannot be exchanged or returned unless the product is defective.
+
+## Returns or exchanges are not accepted in these cases
+
+- A return is requested more than 5 days after delivery, or an exchange is requested after 5 days.
+- The product has changed from its original condition for any reason.
+- The product has been used beyond what is necessary for inspection.
+- The product was made to order according to specifications chosen by the customer.`
+  },
+  {
+    slug: "privacy-policy",
+    title_ar: "سياسة الخصوصية",
+    title_en: "Privacy policy",
+    footer_title_ar: "سياسة الشحن والتوصيل",
+    footer_title_en: "Shipping & delivery policy",
+    sort_order: 30,
+    meta_description_ar: "سياسة خصوصية البيانات في متجر رداء الحشمة.",
+    meta_description_en: "Redaa Alhishma customer data privacy policy.",
+    content_ar: `سنحافظ في كافة الأوقات على خصوصية وسرية كافة البيانات الشخصية التي نتحصل عليها. ولن يتم إفشاء هذه المعلومات إلا إذا كان ذلك مطلوباً بموجب أي قانون أو عندما نعتقد بحسن نية أن مثل هذا الإجراء سيكون مطلوباً أو مرغوباً فيه للتمشي مع القانون، أو للدفاع عن أو حماية حقوق الملكية الخاصة بهذا الموقع أو الجهات المستفيدة منه.
+
+عندما نحتاج إلى أية بيانات خاصة بك، فإننا سنطلب منك تقديمها بمحض إرادتك. حيث ستساعدنا هذه المعلومات في الاتصال بك وتنفيذ طلباتك حيثما كان ذلك ممكناً. لن يتم إطلاقاً بيع البيانات المقدمة من قبلك إلى أي طرف ثالث بغرض تسويقها لمصلحته الخاصة دون الحصول على موافقتك المسبقة والمكتوبة، ما لم يتم ذلك على أساس أنها ضمن بيانات جماعية تستخدم للأغراض الإحصائية والأبحاث دون اشتمالها على أية بيانات من الممكن استخدامها للتعريف بك.`,
+    content_en: `We will maintain the privacy and confidentiality of all personal information we obtain at all times. This information will not be disclosed unless required by law, or when we believe in good faith that such action is required or desirable to comply with the law or to defend or protect the property rights of this website or its beneficiaries.
+
+When we need personal information from you, we will ask you to provide it voluntarily. This information helps us contact you and fulfil your requests wherever possible. Information you provide will never be sold to a third party for its own marketing purposes without your prior written consent, unless it is included only within aggregated data used for statistics and research and contains no information that can be used to identify you.`
+  }
+];
+
+function ensureCoreDynamicPages() {
+  const existingSlugs = new Set(entityRows("pages").map((page) => page.slug));
+  coreDynamicPages.forEach((page) => {
+    if (!existingSlugs.has(page.slug)) createRecord("pages", normalizeDynamicPagePayload({ ...page, show_in_footer:true, is_active:true }));
+  });
+}
+
 function createCatalogSuggestion(type, payload = {}) {
   const map = {
     category: { entity: "categories", imageField: "image_url" },
@@ -7972,6 +8122,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
             ? normalizeDiscountPayload(req.body || {})
             : entity === "users"
               ? normalizeUserPayload(req.body || {})
+              : entity === "pages"
+                ? normalizeDynamicPagePayload(req.body || {})
               : (req.body || {});
     if (entity === "bundles" && payload.items.length < 2) fail("A bundle must contain at least two products");
     const record = createRecord(entity, payload);
@@ -7998,6 +8150,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
             ? updateRecord(entity, req.params.id, normalizeDiscountPayload(req.body || {}))
             : entity === "users"
               ? updateRecord(entity, req.params.id, normalizeUserPayload(req.body || {}, getRecord(entity, req.params.id)))
+              : entity === "pages"
+                ? updateRecord(entity, req.params.id, normalizeDynamicPagePayload(req.body || {}, getRecord(entity, req.params.id)))
               : updateRecord(entity, req.params.id, req.body || {});
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
@@ -8022,6 +8176,8 @@ for (const [route, entity] of Object.entries(entityMap)) {
             ? updateRecord(entity, req.params.id, normalizeDiscountPayload({ ...(getRecord(entity, req.params.id) || {}), ...(req.body || {}) }))
             : entity === "users"
               ? updateRecord(entity, req.params.id, normalizeUserPayload(req.body || {}, getRecord(entity, req.params.id)))
+              : entity === "pages"
+                ? updateRecord(entity, req.params.id, normalizeDynamicPagePayload(req.body || {}, getRecord(entity, req.params.id)))
               : updateRecord(entity, req.params.id, req.body || {});
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
@@ -9739,7 +9895,10 @@ app.get("/api/categories", (_req, res) => res.json(ok({ categories: storeCategor
 app.get("/api/brands", (_req, res) => res.json(ok({ brands: activeRows("brands") })));
 app.get("/api/company-info", (_req, res) => res.json(ok(getSetting("companyInfo"))));
 app.get("/api/content", (_req, res) => res.json(ok([])));
-app.get("/api/pages", (_req, res) => res.json(ok([])));
+app.get("/api/pages", (_req, res) => {
+  const pages = entityRows("pages").filter((page) => page.is_active !== false).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+  res.json(ok({ pages }));
+});
 app.get("/api/wishlist", (_req, res) => res.json(ok({ items: [] })));
 app.post("/api/wishlist", (_req, res) => res.json(ok({ message: "Wishlist disabled until user setup" })));
 app.delete("/api/wishlist/:id", (_req, res) => res.json(ok({ message: "Removed" })));
@@ -10501,7 +10660,12 @@ app.get("/api/store/products/:id", (req, res) => {
   const storefrontProduct = productForNextStore(product);
   res.json(ok({ product: storefrontProduct, ...storefrontProduct }));
 });
-app.get("/api/public/pages/:slug", (_req, res) => res.json(ok({ page: null })));
+app.get("/api/public/pages/:slug", (req, res) => {
+  const slug = slugify(decodeURIComponent(String(req.params.slug || "")));
+  const page = entityRows("pages").find((row) => row.slug === slug && row.is_active !== false);
+  if (!page) fail("Page not found", 404);
+  res.json(ok({ page }));
+});
 
 async function serveNextImage(req, res, next, sourceUrl, requestedWidth, requestedQuality) {
   try {
@@ -10599,6 +10763,12 @@ app.get("/collection/:slug", (req, res) => {
   if (!collection) return res.status(404).send("Collection not found");
   res.sendFile(storefrontHtml);
 });
+app.get("/page/:slug", (req, res) => {
+  const slug = slugify(decodeURIComponent(String(req.params.slug || "")));
+  const page = entityRows("pages").find((row) => row.slug === slug && row.is_active !== false);
+  if (!page) return res.status(404).send("Page not found");
+  res.sendFile(storefrontHtml);
+});
 app.use("/uploads", express.static(path.join(__dirname, "public", "uploads"), { maxAge: "30d", immutable: true }));
 app.use("/_next/static", express.static(path.join(__dirname, "public", "_next", "static"), { maxAge: "30d", immutable: true }));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
@@ -10612,6 +10782,8 @@ app.use((err, _req, res, _next) => {
   const status = err.status || 500;
   res.status(status).json({ success: false, error: { message: err.message || "Server error" } });
 });
+
+ensureCoreDynamicPages();
 
 app.listen(port, () => {
   refreshConfiguredShippingEstimates({ overwriteConfigured: false });

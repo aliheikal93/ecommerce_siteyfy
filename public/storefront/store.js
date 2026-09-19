@@ -11,6 +11,7 @@ const state = {
   products:[],
   bundles:[],
   collections:[],
+  pages:[],
   cart:readLocalCart(),
   page:1,
   category:new URLSearchParams(location.search).get("category") || "",
@@ -331,7 +332,7 @@ function headerHtml() {
   const pathname = location.pathname;
   return `${announcementHtml()}<header class="store-header ${layout.sticky ? "is-sticky" : ""}"><div class="container header-main">
     <a class="header-logo" href="/"><img src="${esc(company.logo_url)}" alt="${esc(company.site_name_ar || "رداء الحشمة")}" /></a>
-    <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a><a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المتجر</a><a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="#about">من نحن</a></nav>
+    <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a><a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المتجر</a><a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="/page/about-us" class="${pathname==="/page/about-us"?"active":""}">من نحن</a></nav>
     <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<button class="round-action" aria-label="المفضلة">${icon("heart")}</button>`:""}<button class="login-button" type="button"><span>تسجيل الدخول</span>${icon("user-round",18)}</button></div>
     <button class="round-action mobile-only" type="button" data-menu-open aria-label="القائمة">${icon("menu")}</button>
     <div class="header-actions mobile-only"><button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button><a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a></div>
@@ -362,11 +363,14 @@ function footerHtml() {
   const phoneHref=phone.replace(/[^+\d]/g,"");
   const whatsapp=String(company.whatsapp||company.phone||"").replace(/\D/g,"");
   const email=String(company.email||"").trim();
-  const policies=[
+  const configuredPolicies=[
     [footer.store_policy_url,label("سياسة المتجر","Store policy")],
     [footer.shipping_policy_url,label("الشحن والتوصيل","Shipping & delivery")],
     [footer.privacy_policy_url,label("سياسة الخصوصية","Privacy policy")]
   ].map(([url,title])=>({url:footerLinkUrl(url),title})).filter(item=>item.url);
+  const dynamicPages=state.pages.filter(page=>page.is_active!==false&&page.show_in_footer!==false).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)).map(page=>({url:`/page/${encodeURIComponent(page.slug)}`,title:(english?page.footer_title_en:page.footer_title_ar)||(english?page.title_en:page.title_ar)||page.title_ar||page.title_en}));
+  const policies=dynamicPages.length?dynamicPages:configuredPolicies;
+  const aboutPage=state.pages.find(page=>page.slug==="about-us"&&page.is_active!==false);
   const social=[
     [company.facebook_url,"Facebook",'<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M14 22v-9h3l.5-4H14V7c0-1.2.4-2 2-2h2V1.4c-.4-.1-1.6-.2-3-.2-3 0-5 1.8-5 5.2V9H7v4h3v9Z"/></svg>'],
     [company.instagram_url,"Instagram",'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>'],
@@ -379,7 +383,7 @@ function footerHtml() {
       ${footer.show_description!==false&&description?`<p>${esc(description)}</p>`:""}
       ${footer.show_social!==false&&social.length?`<nav class="socials" aria-label="${label("تابعينا","Follow us")}">${social.map(item=>`<a class="social-link" href="${esc(item.url)}" target="_blank" rel="noopener noreferrer" aria-label="${item.title}">${item.mark}</a>`).join("")}</nav>`:""}
     </section>
-    <section class="footer-column footer-navigation"><h3>${label("روابط تهمك","Explore")}</h3><nav aria-label="${label("روابط الفوتر","Footer navigation")}"><a href="/products">${label("تسوقي المنتجات","Shop all")}</a><a href="/cart">${label("سلة التسوق","Shopping bag")}</a>${footer.show_description!==false&&description?`<a href="#about">${label("من نحن","About us")}</a>`:""}${footer.show_policies!==false?policies.map(item=>`<a href="${esc(item.url)}">${esc(item.title)}</a>`).join(""):""}</nav></section>
+    <section class="footer-column footer-navigation"><h3>${label("روابط تهمك","Explore")}</h3><nav aria-label="${label("روابط الفوتر","Footer navigation")}"><a href="/products">${label("تسوقي المنتجات","Shop all")}</a><a href="/cart">${label("سلة التسوق","Shopping bag")}</a>${footer.show_policies!==false?policies.map(item=>`<a href="${esc(item.url)}">${esc(item.title)}</a>`).join(""):aboutPage?`<a href="/page/about-us">${label("من نحن","About us")}</a>`:""}</nav></section>
     ${footer.show_contact!==false&&(address||phoneHref||email)?`<section class="footer-column footer-contact"><h3>${label("تواصل معنا","Get in touch")}</h3><div>${address?`<span class="footer-contact-row">${icon("map-pin",18)}<span>${esc(address)}</span></span>`:""}${phoneHref?`<a class="footer-contact-row" href="tel:${esc(phoneHref)}">${icon("phone",18)}<bdi dir="ltr">${esc(phone)}</bdi></a>`:""}${email?`<a class="footer-contact-row" href="mailto:${esc(email)}">${icon("mail",18)}<bdi dir="ltr">${esc(email)}</bdi></a>`:""}${whatsapp?`<a class="footer-contact-row" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer">${whatsappIcon(18)}<span>${label("تواصلي عبر واتساب","Chat on WhatsApp")}</span></a>`:""}</div></section>`:""}
     ${hasBusiness?`<section class="footer-column footer-business" aria-label="${label("بيانات المنشأة","Business details")}"><div class="footer-business-heading">${company.business_center_logo_url?`<img class="business-logo" src="${esc(company.business_center_logo_url)}" alt="${label("المركز السعودي للأعمال","Saudi Business Center")}" loading="lazy" />`:icon("badge-check",30)}<h3>${label("موثق لدى منصة الأعمال","Business registration")}</h3></div><dl>${company.business_document?`<div><dt>${label("رقم التوثيق","Document number")}</dt><dd><bdi>${esc(company.business_document)}</bdi></dd></div>`:""}${company.commercial_registration?`<div><dt>${label("السجل التجاري","Commercial registration")}</dt><dd><bdi>${esc(company.commercial_registration)}</bdi></dd></div>`:""}</dl></section>`:""}
   </div><div class="footer-bottom"><div class="container footer-bottom-inner"><p>${esc((english?footer.copyright_en:footer.copyright_ar)||label(`جميع الحقوق محفوظة © ${new Date().getFullYear()} ${name}`,`© ${new Date().getFullYear()} ${name}. All rights reserved.`))}</p>${company.payment_methods_image_url?`<div class="footer-payments"><span>${icon("lock-keyhole",16)}${label("وسائل الدفع","Payment methods")}</span><img class="payment-methods" src="${esc(company.payment_methods_image_url)}" alt="${label("وسائل الدفع","Payment methods")}" loading="lazy" /></div>`:""}</div></div></footer>${whatsapp?`<a class="whatsapp-float" href="https://wa.me/${whatsapp}" target="_blank" rel="noopener noreferrer" aria-label="${label("فتح محادثة واتساب","Open WhatsApp chat")}">${whatsappIcon(28)}</a>`:""}<button class="scroll-top" type="button" aria-label="${label("العودة إلى أعلى الصفحة","Back to top")}" title="${label("العودة إلى الأعلى","Back to top")}" tabindex="-1">${icon("arrow-up",22)}</button>`;
@@ -414,7 +418,7 @@ function closeOverlay() {
 
 function openMenu() {
   const company=state.appearance.company||{};
-  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a><a href="/products">المتجر</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="#about" data-overlay-close>من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
+  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a><a href="/products">المتجر</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
   overlayRoot.querySelectorAll("[data-overlay-close]").forEach(button=>button.onclick=closeOverlay);
 }
 
@@ -935,6 +939,26 @@ function renderCollection(collection) {
   shell(`${breadcrumbs(name)}<main class="collection-page"><header class="collection-hero ${cover?"has-cover":""}">${cover?`<img src="${esc(cover)}" alt="${esc(name)}" />`:""}<div class="container collection-hero-copy"><span>Collection</span><h1>${esc(name)}</h1>${description?`<p>${esc(description)}</p>`:""}<small>${rows.length} ${rows.length===1?"اختيار":"اختيارات"}</small></div></header><section class="container collection-catalog"><div class="collection-catalog-head"><div><span>مختارة لك</span><h2>منتجات المجموعة</h2></div><p>كل بطاقة تفتح المنتج على اللون والاختيار المحددين للمجموعة.</p></div>${rows.length?`<div class="product-grid collection-grid">${rows.map((item)=>collectionItemCard(item,collection)).join("")}</div>`:`<div class="collection-empty"><h2>لا توجد اختيارات متاحة حاليًا</h2><p>يمكنك متابعة باقي منتجات المتجر.</p><a class="primary-button" href="/products">تصفح المنتجات</a></div>`}</section></main>`);
 }
 
+function dynamicPageContentHtml(content="") {
+  const lines=String(content||"").replace(/\r/g,"").split("\n"),html=[];
+  let paragraph=[],list=[];
+  const flushParagraph=()=>{if(paragraph.length){html.push(`<p>${paragraph.map(esc).join("<br />")}</p>`);paragraph=[];}};
+  const flushList=()=>{if(list.length){html.push(`<ul>${list.map(item=>`<li>${esc(item)}</li>`).join("")}</ul>`);list=[];}};
+  lines.forEach(raw=>{const line=raw.trim();if(!line){flushParagraph();flushList();return;}if(line.startsWith("## ")){flushParagraph();flushList();html.push(`<h2>${esc(line.slice(3).trim())}</h2>`);return;}if(/^[-*]\s+/.test(line)){flushParagraph();list.push(line.replace(/^[-*]\s+/,""));return;}flushList();paragraph.push(line);});
+  flushParagraph();flushList();return html.join("");
+}
+
+function renderDynamicPage(page) {
+  const english=document.documentElement.lang==="en"||localStorage.getItem("language")==="en";
+  const title=(english?page.title_en:page.title_ar)||page.title_ar||page.title_en||"";
+  const content=(english?page.content_en:page.content_ar)||page.content_ar||page.content_en||"";
+  const description=(english?page.meta_description_en:page.meta_description_ar)||page.meta_description_ar||page.meta_description_en||"";
+  const company=state.appearance?.company||{};
+  document.title=`${title} | ${(english?company.site_name_en:company.site_name_ar)||company.site_name_ar||"رداء الحشمة"}`;
+  const meta=document.querySelector('meta[name="description"]');if(meta&&description)meta.content=description;
+  shell(`${breadcrumbs(title)}<article class="dynamic-page"><header class="dynamic-page-head"><div class="container"><span>${english?"Information":"معلومات المتجر"}</span><h1>${esc(title)}</h1>${description?`<p>${esc(description)}</p>`:""}</div></header><div class="container dynamic-page-layout"><nav class="dynamic-page-index" aria-label="${english?"Store pages":"صفحات المتجر"}">${state.pages.filter(row=>row.is_active!==false&&row.show_in_footer!==false).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)).map(row=>`<a href="/page/${encodeURIComponent(row.slug)}" class="${row.slug===page.slug?"active":""}">${esc((english?row.footer_title_en:row.footer_title_ar)||(english?row.title_en:row.title_ar)||row.title_ar||row.title_en)}</a>`).join("")}</nav><section class="dynamic-page-body">${dynamicPageContentHtml(content)}</section></div></article>`);
+}
+
 function renderStoreRoute() {
   const path=location.pathname.replace(/\/$/,"")||"/";
   trackCommerceEventOnce(`page_view:${location.pathname}${location.search}`,"page_view",[],{value:0});
@@ -943,6 +967,7 @@ function renderStoreRoute() {
   else if(path.startsWith("/product/")){const id=decodeURIComponent(path.split("/").pop());const product=state.products.find(item=>String(item.id)===id||item.slug===id);product?renderProduct(product):renderNotFound();}
   else if(path.startsWith("/collection/")){const slug=decodeURIComponent(path.split("/").pop());const collection=state.collections.find(item=>String(item.id)===slug||item.slug===slug);collection?renderCollection(collection):renderNotFound();}
   else if(path.startsWith("/bundle/")){const id=decodeURIComponent(path.split("/").pop());const bundle=state.bundles.find(item=>String(item.id)===id||item.slug===id);bundle?renderBundle(bundle):renderNotFound();}
+  else if(path.startsWith("/page/")){const slug=decodeURIComponent(path.split("/").pop());const page=state.pages.find(item=>item.slug===slug&&item.is_active!==false);page?renderDynamicPage(page):renderNotFound();}
   else if(path==="/cart")renderCart(false);
   else if(path==="/checkout")renderCart(true);
   else if(path.startsWith("/payment/tamara/"))renderTamaraReturn(path.split("/").pop());
@@ -1444,10 +1469,10 @@ function renderNotFound(){shell(`<section class="container empty-cart"><div><h1>
 
 async function init() {
   try {
-    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,addressConfig,paymentMethods,marketingPixels,profile] = await Promise.all([
-      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
+    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,pagesResponse,addressConfig,paymentMethods,marketingPixels,profile] = await Promise.all([
+      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/pages").catch(()=>({pages:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
     ]);
-    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
+    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.pages=pagesResponse.pages||pagesResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
     if(["/cart","/checkout"].includes(location.pathname)&&state.cart.length){try{await reconcileCart({page:cartPageName(),force:true});}catch(error){state.cartValidationError=error;}}
     applyTheme();
     renderStoreRoute();

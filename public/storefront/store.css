@@ -700,6 +700,22 @@ img { max-width: 100%; display: block; }
 .whatsapp-float:hover { color:#fff; background:#1fbd59; text-decoration:none; transform:translateY(-2px); box-shadow:0 9px 24px rgba(18,75,40,.32); }
 .whatsapp-float:focus-visible { outline:3px solid rgba(37,211,102,.35); outline-offset:3px; }
 .footer-contact-row .whatsapp-mark { flex:0 0 18px; opacity:.9; }
+.dynamic-page { padding-bottom:72px; }
+.dynamic-page-head { padding:52px 0 44px;border-bottom:1px solid var(--line);background:var(--surface-soft,#f8f7f5); }
+.dynamic-page-head span { display:block;margin-bottom:8px;color:var(--primary);font-size:12px;font-weight:800; }
+.dynamic-page-head h1 { margin:0;font-size:clamp(34px,5vw,58px);line-height:1.2; }
+.dynamic-page-head p { max-width:720px;margin:12px 0 0;color:var(--muted);font-size:15px;line-height:1.8; }
+.dynamic-page-layout { display:grid;grid-template-columns:220px minmax(0,760px);justify-content:center;align-items:start;gap:56px;padding-top:48px; }
+.dynamic-page-index { position:sticky;top:120px;display:grid;border-inline-start:1px solid var(--line); }
+.dynamic-page-index a { padding:11px 16px;color:var(--muted);font-size:14px;line-height:1.5; }
+.dynamic-page-index a:hover,.dynamic-page-index a.active { color:var(--primary); }
+.dynamic-page-index a.active { border-inline-start:3px solid var(--primary);margin-inline-start:-2px;font-weight:800; }
+.dynamic-page-body { min-width:0;color:var(--text); }
+.dynamic-page-body p { margin:0 0 24px;font-size:16px;line-height:2.05; }
+.dynamic-page-body h2 { margin:42px 0 16px;font-size:25px;line-height:1.45; }
+.dynamic-page-body h2:first-child { margin-top:0; }
+.dynamic-page-body ul { margin:0 0 28px;padding-inline-start:24px;display:grid;gap:10px; }
+.dynamic-page-body li { padding-inline-start:4px;font-size:16px;line-height:1.8; }
 .scroll-top { position:fixed; z-index:25; left:20px; bottom:max(20px,env(safe-area-inset-bottom)); width:48px; height:48px; padding:0; border:1px solid rgba(47,30,69,.16); border-radius:50%; background:#fff; color:var(--primary); display:grid; place-items:center; box-shadow:0 6px 20px rgba(35,24,43,.18); opacity:0; visibility:hidden; transform:translateY(12px); pointer-events:none; transition:opacity .2s ease,visibility .2s ease,transform .2s ease,background-color .18s ease,color .18s ease; }
 .scroll-top.is-visible { opacity:1; visibility:visible; transform:none; pointer-events:auto; }
 .scroll-top:hover { background:var(--primary); color:#fff; }
@@ -1015,5 +1031,15 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
  .footer-bottom-inner { flex-direction:column-reverse; gap:18px; text-align:center; }
  .footer-payments { flex-direction:column; gap:10px; }
  .payment-methods { max-width:100%; width:264px; height:54px; }
+ .dynamic-page { padding-bottom:48px; }
+ .dynamic-page-head { padding:34px 0 28px; }
+ .dynamic-page-head h1 { font-size:34px; }
+ .dynamic-page-layout { grid-template-columns:1fr;gap:28px;padding-top:28px; }
+ .dynamic-page-index { position:static;display:flex;gap:6px;overflow-x:auto;border:0;padding-bottom:4px;scrollbar-width:none; }
+ .dynamic-page-index::-webkit-scrollbar { display:none; }
+ .dynamic-page-index a { flex:0 0 auto;padding:8px 12px;border:1px solid var(--line);border-radius:6px;white-space:nowrap; }
+ .dynamic-page-index a.active { margin:0;border:1px solid var(--primary); }
+ .dynamic-page-body p,.dynamic-page-body li { font-size:15px; }
+ .dynamic-page-body h2 { margin-top:34px;font-size:22px; }
 }
 .product-payment-widgets{display:grid;gap:8px;margin:12px 0 4px}.product-payment-widgets[hidden]{display:none}.installment-widget{min-height:34px;border-radius:8px;overflow:hidden}.tamara-installment-widget{width:100%;min-height:42px}.tamara-installment-widget tamara-widget{display:block;width:100%}
