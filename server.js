@@ -446,6 +446,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_promo_redemptions_guest ON promo_redemptions(guest_hash, status);
   CREATE INDEX IF NOT EXISTS idx_promo_redemptions_email ON promo_redemptions(email_hash, status);
   CREATE INDEX IF NOT EXISTS idx_promo_redemptions_phone ON promo_redemptions(phone_hash, status);
+
+  CREATE TABLE IF NOT EXISTS inventory_movements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    order_id INTEGER,
+    target_type TEXT NOT NULL DEFAULT 'product',
+    product_id INTEGER,
+    bundle_id INTEGER,
+    variant_id TEXT,
+    line_key TEXT,
+    movement_type TEXT NOT NULL,
+    quantity_delta INTEGER NOT NULL,
+    quantity_before INTEGER,
+    quantity_after INTEGER,
+    actor TEXT,
+    source TEXT,
+    details TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_inventory_movements_order ON inventory_movements(order_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_inventory_movements_product ON inventory_movements(product_id, variant_id, created_at);
 `);
 
 if (!db.prepare("PRAGMA table_info(promo_redemptions)").all().some((column) => column.name === "payment_hash")) {
@@ -508,6 +529,14 @@ const defaults = {
     bundle_extra_discounts: false,
     default_stacking_policy: "same_group_blocked",
     group_order: ["bundle", "product", "order", "shipping", "gift"],
+    updated_at: null
+  },
+  fulfillmentSettings: {
+    inventory_tracking_enabled: true,
+    reserve_on_order_confirmation: true,
+    pending_payment_hold_minutes: 30,
+    return_deadline_days: 7,
+    require_warehouse_confirmation: true,
     updated_at: null
   },
   robotsTxt: {
@@ -880,6 +909,233 @@ function updateProductRecord(id, payload = {}) {
   delete merged.created_at;
   delete merged.updated_at;
   return existing ? updateRecord("products", id, normalizeProductPayload(merged)) : createRecord("products", normalizeProductPayload(merged));
+}
+
+function normalizeFulfillmentSettings(value = getSetting("fulfillmentSettings") || {}) {
+  return {
+    inventory_tracking_enabled: value.inventory_tracking_enabled !== false,
+    reserve_on_order_confirmation: value.reserve_on_order_confirmation !== false,
+    pending_payment_hold_minutes: Math.min(1440, Math.max(5, Number(value.pending_payment_hold_minutes || 30))),
+    return_deadline_days: Math.min(90, Math.max(1, Number(value.return_deadline_days || 7))),
+    require_warehouse_confirmation: value.require_warehouse_confirmation !== false,
+    updated_at: value.updated_at || null
+  };
+}
+
+function inventoryOrderTargets(order = {}) {
+  const targets = [];
+  asArray(order.items).forEach((item, index) => {
+    const lineKey = String(item.key || `${item.bundle_id ? "bundle" : "product"}:${item.bundle_id || item.product_id}:${index}`);
+    if (item.item_type === "bundle" || item.bundle_id) {
+      const rawBundle = getRecord("bundles", item.bundle_id);
+      const bundle = rawBundle ? normalizeBundlePayload(rawBundle) : null;
+      if (!bundle) return;
+      if (bundle.use_own_stock) {
+        targets.push({ target_type:"bundle", bundle_id:Number(item.bundle_id), variant_id:null, quantity:Math.max(1, Number(item.quantity || 1)), line_key:lineKey });
+        return;
+      }
+      const components = asArray(item.components).length
+        ? asArray(item.components)
+        : bundle.items.map(component => ({ ...component, quantity:Number(component.quantity || 1) * Math.max(1, Number(item.quantity || 1)) }));
+      components.forEach((component, componentIndex) => targets.push({
+        target_type:"product", product_id:Number(component.product_id), variant_id:component.variant_id || null,
+        quantity:Math.max(1, Number(component.quantity || 1)), line_key:`${lineKey}:component:${componentIndex}`
+      }));
+      return;
+    }
+    targets.push({ target_type:"product", product_id:Number(item.product_id), variant_id:item.variant_id || null, quantity:Math.max(1, Number(item.quantity || 1)), line_key:lineKey });
+  });
+  const merged = new Map();
+  targets.filter(target => target.product_id || target.bundle_id).forEach(target => {
+    const key = `${target.target_type}:${target.product_id || target.bundle_id}:${target.variant_id || "base"}`;
+    const current = merged.get(key);
+    if (current) current.quantity += target.quantity;
+    else merged.set(key, { ...target, inventory_key:key });
+  });
+  return [...merged.values()];
+}
+
+const applyOrderInventoryTransaction = db.transaction((orderId, options = {}) => {
+  const order = getRecord("orders", orderId);
+  if (!order) fail("ORDER_NOT_FOUND", 404);
+  const sign = Number(options.sign || 0);
+  if (![1, -1].includes(sign)) fail("INVENTORY_MOVEMENT_SIGN_INVALID");
+  const movements = [];
+  const now = new Date().toISOString();
+  for (const target of inventoryOrderTargets(order)) {
+    const idempotencyKey = `order:${order.id}:${options.idempotency_suffix || options.movement_type}:${target.inventory_key}`;
+    const existingMovement = db.prepare("SELECT * FROM inventory_movements WHERE idempotency_key = ?").get(idempotencyKey);
+    if (existingMovement) { movements.push(existingMovement); continue; }
+    let before = null;
+    let after = null;
+    if (target.target_type === "bundle") {
+      const raw = getRecord("bundles", target.bundle_id);
+      if (!raw) fail(`BUNDLE_${target.bundle_id}_NOT_FOUND`, 404);
+      const bundle = normalizeBundlePayload(raw);
+      if (!bundle.use_own_stock || bundle.stock === null || bundle.stock === undefined) continue;
+      before = Math.max(0, Number(bundle.stock || 0));
+      after = before + sign * target.quantity;
+      if (after < 0) fail(`BUNDLE_${target.bundle_id}_OUT_OF_STOCK`, 409);
+      updateRecord("bundles", target.bundle_id, { stock:after });
+    } else {
+      const raw = getRecord("products", target.product_id);
+      if (!raw) fail(`PRODUCT_${target.product_id}_NOT_FOUND`, 404);
+      const product = normalizeProductPayload(raw);
+      const variantIndex = target.variant_id ? product.variants.findIndex(variant => String(variant.id) === String(target.variant_id)) : -1;
+      if (target.variant_id && variantIndex < 0) fail(`PRODUCT_OPTION_${target.variant_id}_NOT_FOUND`, 404);
+      const variant = variantIndex >= 0 ? product.variants[variantIndex] : null;
+      const mode = variant ? variant.inventory_mode : product.inventory_mode;
+      if (mode === "unlimited") continue;
+      if (mode === "out_of_stock" && sign < 0) fail(`PRODUCT_${target.product_id}_OUT_OF_STOCK`, 409);
+      before = Math.max(0, Number((variant ? variant.stock : product.stock) || 0));
+      after = before + sign * target.quantity;
+      if (after < 0) fail(`PRODUCT_${target.product_id}_INSUFFICIENT_STOCK`, 409);
+      if (variant) product.variants[variantIndex] = { ...variant, inventory_mode:"tracked", stock:after, is_in_stock:after > 0, stock_status:after > 0 ? "in_stock" : "out_of_stock" };
+      else Object.assign(product, { inventory_mode:"tracked", stock:after, is_in_stock:after > 0, stock_status:after > 0 ? "in_stock" : "out_of_stock" });
+      updateRecord("products", target.product_id, product);
+    }
+    const result = db.prepare(`INSERT INTO inventory_movements (idempotency_key, order_id, target_type, product_id, bundle_id, variant_id, line_key, movement_type, quantity_delta, quantity_before, quantity_after, actor, source, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      idempotencyKey, Number(order.id), target.target_type, target.product_id || null, target.bundle_id || null, target.variant_id ? String(target.variant_id) : null,
+      target.line_key, String(options.movement_type), sign * target.quantity, before, after, String(options.actor || "system"), String(options.source || "order"), JSON.stringify(options.details || {}), now
+    );
+    movements.push(db.prepare("SELECT * FROM inventory_movements WHERE id = ?").get(result.lastInsertRowid));
+  }
+  const tracked = movements.length > 0;
+  const patch = typeof options.order_patch === "function" ? options.order_patch(order, { movements, tracked, now }) : (options.order_patch || {});
+  updateRecord("orders", order.id, patch);
+  return { order:getRecord("orders", order.id), movements };
+});
+
+function reserveInventoryForOrder(order, actor = "system") {
+  const settings = normalizeFulfillmentSettings();
+  if (!settings.inventory_tracking_enabled || order.is_historical || order.suppress_side_effects) return order;
+  if (["reserved", "sold", "return_pending", "restocked"].includes(order.inventory_state)) return order;
+  return applyOrderInventoryTransaction(order.id, {
+    sign:-1, movement_type:"reservation", idempotency_suffix:"reservation", actor, source:order.source || "storefront",
+    details:{ order_status:order.status },
+    order_patch:(_current,{ tracked,now })=>({ inventory_tracking_version:1, inventory_state:tracked?"reserved":"not_tracked", inventory_reserved_at:tracked?now:null })
+  }).order;
+}
+
+function releaseInventoryForOrder(order, reason = "cancelled_before_pickup", actor = "system") {
+  const current = getRecord("orders", order.id) || order;
+  if (!["reserved"].includes(current.inventory_state)) return current;
+  return applyOrderInventoryTransaction(current.id, {
+    sign:1, movement_type:"reservation_released", idempotency_suffix:"release", actor, source:"order_cancellation", details:{ reason },
+    order_patch:(_row,{ now })=>({ inventory_state:"released", inventory_released_at:now, inventory_release_reason:reason })
+  }).order;
+}
+
+function restockReturnedOrder(order, actor = "admin", returnReference = "full") {
+  const current = getRecord("orders", order.id) || order;
+  if (current.inventory_state === "restocked") return current;
+  if (!["return_pending", "sold", "reserved"].includes(current.inventory_state)) fail("ORDER_INVENTORY_NOT_RETURNABLE", 409);
+  return applyOrderInventoryTransaction(current.id, {
+    sign:1, movement_type:"return_restocked", idempotency_suffix:`return:${returnReference}`, actor, source:"warehouse_return",
+    details:{ return_reference:returnReference },
+    order_patch:(_row,{ now })=>({ inventory_state:"restocked", return_state:"restocked", return_confirmed_at:now, return_confirmed_by:actor })
+  }).order;
+}
+
+function inventoryMovementsForOrder(orderId) {
+  return db.prepare("SELECT * FROM inventory_movements WHERE order_id = ? ORDER BY id DESC").all(Number(orderId)).map(row => ({ ...row, details:JSON.parse(row.details || "{}") }));
+}
+
+function orderWasPickedUp(order = {}, shipment = orderShipment(order)) {
+  if (order.pickup_at || order.fulfillment_state === "picked_up" || order.inventory_state === "sold") return true;
+  return ["picked_up", "in_transit", "out_for_delivery", "delivered", "return"].includes(String(shipment?.status_group || ""));
+}
+
+function markOrderPickedUp(order, actor = "system", source = "carrier") {
+  const current = getRecord("orders", order.id) || order;
+  if (current.is_historical || current.suppress_side_effects || current.pickup_at || ["picked_up", "delivered", "return_pending"].includes(current.fulfillment_state)) return current;
+  const now = new Date().toISOString();
+  const updated = updateRecord("orders", current.id, {
+    status: ["pending", "confirmed", "processing", "ready_to_ship"].includes(current.status) ? "shipped" : current.status,
+    fulfillment_state:"picked_up",
+    inventory_state:current.inventory_state === "reserved" ? "sold" : current.inventory_state,
+    pickup_at:current.pickup_at || now,
+    picked_up_by:actor
+  });
+  addOrderEvent(current.id, "carrier_pickup_confirmed", { source }, actor);
+  return updated;
+}
+
+function markOrderReturnPending(order, reason = "carrier_return", actor = "system") {
+  const current = getRecord("orders", order.id) || order;
+  if (current.return_state === "pending" || current.return_state === "restocked") return current;
+  const settings = normalizeFulfillmentSettings();
+  const now = new Date();
+  const due = new Date(now.getTime() + settings.return_deadline_days * 86400000).toISOString();
+  const updated = updateRecord("orders", current.id, {
+    status:"cancelled",
+    fulfillment_state:"return_pending",
+    inventory_state:current.inventory_state === "not_tracked" ? "not_tracked" : "return_pending",
+    return_state:"pending",
+    return_reason:reason,
+    return_requested_at:now.toISOString(),
+    return_due_at:due
+  });
+  addOrderEvent(current.id, "return_pending", { reason, return_due_at:due }, actor);
+  return updated;
+}
+
+function cancelOrderWithInventory(order, reason = "cancelled_by_admin", actor = "admin") {
+  const current = getRecord("orders", order.id) || order;
+  const shipment = orderShipment(current);
+  if (orderWasPickedUp(current, shipment)) return markOrderReturnPending(current, reason, actor);
+  const released = releaseInventoryForOrder(current, reason, actor);
+  const now = new Date().toISOString();
+  const remoteShipmentExists = Boolean(shipment?.waybill_no || shipment?.external_order_no || shipment?.oto_id);
+  if (remoteShipmentExists && shipment.status_group !== "cancelled") {
+    upsertShippingShipment({ ...shipment, sync_state:"cancellation_required", cancellation_requested_at:now });
+    addOrderEvent(current.id, "carrier_cancellation_required", { provider:shipment.provider, shipment_id:shipment.id, waybill_no:shipment.waybill_no || null }, actor);
+  }
+  const updated = updateRecord("orders", current.id, {
+    status:"cancelled",
+    fulfillment_state:"cancelled_before_pickup",
+    return_state:"not_required",
+    cancelled_at:current.cancelled_at || now,
+    cancelled_before_pickup:true,
+    shipping_cancellation_required:remoteShipmentExists && shipment?.status_group !== "cancelled"
+  });
+  if (current.status !== "cancelled" || released.inventory_state !== current.inventory_state) {
+    addOrderEvent(current.id, "cancelled_before_pickup", { reason, stock_released:released.inventory_state === "released" }, actor);
+  }
+  return updated;
+}
+
+function syncTrackedOrderFromShipment(shipment = {}, previous = null) {
+  const order = getRecord("orders", shipment.store_order_id);
+  if (!order || order.inventory_tracking_version !== 1 || order.is_historical || order.suppress_side_effects) return order;
+  const group = String(shipment.status_group || "pending");
+  if (["picked_up", "in_transit", "out_for_delivery"].includes(group)) return markOrderPickedUp(order, shipment.provider || "carrier", "shipment_status");
+  if (group === "delivered") {
+    if (order.status === "delivered" && order.fulfillment_state === "delivered") return order;
+    const picked = markOrderPickedUp(order, shipment.provider || "carrier", "shipment_status");
+    if (picked.status === "delivered" && picked.fulfillment_state === "delivered") return picked;
+    const updated = updateRecord("orders", order.id, { status:"delivered", fulfillment_state:"delivered", inventory_state:picked.inventory_state === "reserved" ? "sold" : picked.inventory_state, delivered_at:order.delivered_at || new Date().toISOString() });
+    addOrderEvent(order.id, "carrier_delivery_confirmed", { provider:shipment.provider, previous_status:previous?.status_group || null }, shipment.provider || "carrier");
+    return updated;
+  }
+  if (group === "return") return markOrderReturnPending(order, "carrier_return", shipment.provider || "carrier");
+  if (group === "cancelled") return orderWasPickedUp(order, shipment)
+    ? markOrderReturnPending(order, "carrier_cancelled_after_pickup", shipment.provider || "carrier")
+    : cancelOrderWithInventory(order, "carrier_cancelled_before_pickup", shipment.provider || "carrier");
+  return order;
+}
+
+function expirePendingInventoryReservations() {
+  const settings = normalizeFulfillmentSettings();
+  const cutoff = Date.now() - settings.pending_payment_hold_minutes * 60000;
+  let released = 0;
+  entityRows("orders").filter(order => order.inventory_tracking_version === 1 && order.inventory_state === "reserved" && order.status === "pending" && order.payment?.method === "prepaid" && recentTimestamp(order) < cutoff).forEach(order => {
+    cancelOrderWithInventory(order, "payment_reservation_expired", "scheduler");
+    releaseOrderPromotionReservations(order, "payment_reservation_expired");
+    addOrderEvent(order.id, "payment_reservation_expired", { hold_minutes:settings.pending_payment_hold_minutes }, "scheduler");
+    released += 1;
+  });
+  return released;
 }
 
 function softDelete(entity, id) {
@@ -1821,7 +2077,8 @@ async function completeTabbyPayment(order, remote) {
     addOrderEvent(nextOrder.id, "payment_confirmed", { provider: "tabby", status, transaction_id: remote?.id || null }, "tabby");
   } else if (failed && !nextOrder.payment_failed_at) {
     releaseOrderPromotionReservations(nextOrder, `tabby_${status}`);
-    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString() });
+    nextOrder = releaseInventoryForOrder(nextOrder, `tabby_${status}`, "tabby");
+    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString(), fulfillment_state:"cancelled_before_pickup" });
     addOrderEvent(nextOrder.id, "payment_failed", { provider: "tabby", status }, "tabby");
   }
   return getRecord("orders", nextOrder.id);
@@ -3346,7 +3603,10 @@ function upsertShippingShipment(payload = {}) {
   delete normalized.id;
   delete normalized.created_at;
   delete normalized.updated_at;
-  return existing ? updateRecord("shipping_shipments", existing.id, normalized) : createRecord("shipping_shipments", normalized);
+  const saved = existing ? updateRecord("shipping_shipments", existing.id, normalized) : createRecord("shipping_shipments", normalized);
+  try { syncTrackedOrderFromShipment(saved, existing); }
+  catch (error) { console.error(`Shipment inventory lifecycle sync failed for order ${saved.store_order_id || "unknown"}: ${error.message}`); }
+  return saved;
 }
 
 async function syncImileTracking(options = {}) {
@@ -4947,7 +5207,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
       : variant.stock === "" || variant.stock === null || variant.stock === undefined || Number(variant.stock || 0) === 0
         ? "unlimited"
         : "tracked";
-  const isInStock = inventoryMode !== "out_of_stock";
+  const trackedStock = inventoryMode === "tracked" ? Math.max(0, Number(variant.stock || 0)) : null;
+  const isInStock = inventoryMode === "unlimited" || (inventoryMode === "tracked" && trackedStock > 0);
   const stableFallbackId = `variant-${crypto.createHash("sha256").update(JSON.stringify([color, option, value, variant.sku || "", variant.barcode || "", index])).digest("hex").slice(0, 12)}`;
   return {
     id: variant.id || stableFallbackId,
@@ -4966,7 +5227,7 @@ function normalizedProductVariant(variant = {}, index = 0) {
     price_adjustment: Number(variant.price_adjustment || variant.price_delta || 0),
     weight: variant.weight === "" || variant.weight === null || variant.weight === undefined ? null : Math.max(0, Number(variant.weight || 0)),
     inventory_mode: inventoryMode,
-    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(1, Number(variant.stock || 1)),
+    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : trackedStock,
     is_in_stock: isInStock,
     stock_status: isInStock ? "in_stock" : "out_of_stock",
     is_active: variant.is_active !== false && variant.isActive !== false && variant.active !== false,
@@ -5012,7 +5273,9 @@ function normalizeProductPayload(payload = {}) {
     barcode: String(payload.barcode || "").trim(),
     cost: Number(payload.cost || 0),
     inventory_mode: inventoryMode,
-    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(1, Number(payload.stock || 1)),
+    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(0, Number(payload.stock || 0)),
+    is_in_stock: inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0),
+    stock_status: inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0) ? "in_stock" : "out_of_stock",
     goods_type_id: String(payload.goods_type_id || "").trim(),
     shipping_profile_id: String(payload.shipping_profile_id || "").trim(),
     requires_shipping: payload.requires_shipping !== false && payload.requires_shipping !== "false",
@@ -5622,6 +5885,7 @@ function checkoutLineItems(items = []) {
         price: unitPrice,
         quantity,
         subtotal: Number((unitPrice * quantity).toFixed(2)),
+        image_url: bundle.main_photo_url || bundle.image_url || "",
         shipping: {
           requires_shipping: componentShipping.some((component) => component.requires_shipping),
           weight: Number(componentShipping.reduce((sum, component) => sum + component.weight * component.quantity, 0).toFixed(3)),
@@ -5637,8 +5901,8 @@ function checkoutLineItems(items = []) {
       };
     }
     const productId = Number(item.product_id || item.productId || item.product?.id || 0);
-    const product = findProduct(productId) || entityRows("products").find((entry) => Number(entry.id) === productId);
-    if (!product) fail(`Product ${productId || "unknown"} was not found`, 404);
+    const product = getRecord("products", productId);
+    if (!product || product.is_active === false || product.isActive === false || product.active === false) fail(`Product ${productId || "unknown"} was not found`, 404);
     const variantId = item.variant_id || item.variantId || item.optionId || null;
     const variant = normalizeProductPayload(product).variants.find((entry) => String(entry.id) === String(variantId));
     if (variantId && (!variant || variant.is_active === false)) fail("Product option was not found or is inactive", 404);
@@ -5657,6 +5921,8 @@ function checkoutLineItems(items = []) {
       category_slug: product.category_slug || product.category?.slug || item.category_slug || "",
       sku: product.sku || null,
       variant_sku: variant?.sku || null,
+      variant_label: variant ? [variant.color, variant.option, variant.value].filter(Boolean).join(" · ") : "",
+      image_url: variant?.image_url || product.main_photo_url || product.image_url || "",
       unit_price: unitPrice,
       price: unitPrice,
       quantity,
@@ -7595,7 +7861,7 @@ async function dispatchOrderToShippingProvider(order, requestedProvider = "") {
   try {
     shipment = upsertShippingShipment({ ...shipment, provider, sync_state: "creation_pending", integration_error: null, last_attempted_at: new Date().toISOString() });
     const created = provider === "oto" ? await createOtoShipment(order, shipment) : provider === "smartship" ? await createSmartshipShipment(order, shipment) : await createImileShipment(order, shipment);
-    updateRecord("orders", order.id, { shipping_shipment_id: created.id, shipping_provider: provider, status: order.status === "pending" ? "ready_to_ship" : order.status });
+    updateRecord("orders", order.id, { shipping_shipment_id: created.id, shipping_provider: provider, status: order.status === "pending" ? "ready_to_ship" : order.status, fulfillment_state:"awaiting_pickup", shipment_created_at:new Date().toISOString() });
     return created;
   } catch (error) {
     upsertShippingShipment({ ...shipment, provider, sync_state: "creation_failed", integration_error: String(error.message || `${provider.toUpperCase()}_CREATE_FAILED`), last_attempted_at: new Date().toISOString() });
@@ -7971,7 +8237,8 @@ async function completeTamaraPayment(order, status, details = {}) {
     addOrderEvent(nextOrder.id, "payment_confirmed", { provider: "tamara", status }, "tamara");
   } else if (failedStatuses.has(status) && !nextOrder.payment_failed_at) {
     releaseOrderPromotionReservations(nextOrder, `tamara_${status}`);
-    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString() });
+    nextOrder = releaseInventoryForOrder(nextOrder, `tamara_${status}`, "tamara");
+    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString(), fulfillment_state:"cancelled_before_pickup" });
     addOrderEvent(nextOrder.id, "payment_failed", { provider: "tamara", status }, "tamara");
   }
   return getRecord("orders", nextOrder.id);
@@ -8163,7 +8430,8 @@ async function completeEdfaPayPayment(order, status, details = {}) {
     addOrderEvent(nextOrder.id, "payment_confirmed", { provider: "edfapay", status, transaction_id: details.transaction_id || null }, "edfapay");
   } else if (failed && !nextOrder.payment_failed_at) {
     releaseOrderPromotionReservations(nextOrder, `edfapay_${status}`);
-    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString() });
+    nextOrder = releaseInventoryForOrder(nextOrder, `edfapay_${status}`, "edfapay");
+    nextOrder = updateRecord("orders", nextOrder.id, { payment_failed_at: new Date().toISOString(), fulfillment_state:"cancelled_before_pickup" });
     addOrderEvent(nextOrder.id, "payment_failed", { provider: "edfapay", status, reason: details.reason || null }, "edfapay");
   }
   return getRecord("orders", nextOrder.id);
@@ -8375,7 +8643,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
         const customer = order.shipping_address || order.customer || {};
         const displayOrderNumber = order.is_historical ? order.legacy_order_number : order.id;
         const haystack = [displayOrderNumber, customer.full_name, customer.phone, customer.city, ...(order.discount_codes || [])].join(" ").toLowerCase();
-        const sourceMatches = !source || (source === "legacy" ? order.is_historical === true : order.is_historical !== true);
+        const sourceMatches = !source || (source === "legacy" ? order.is_historical === true : source === "manual" ? order.source === "manual" : order.is_historical !== true);
         const addressStatus = customer.address_verification?.status || "manual";
         const addressMatches = !address || (address === "verified" ? addressStatus === "verified" : addressStatus !== "verified");
         const queryMatches = !query || (exactOrderNumberQuery ? String(displayOrderNumber) === query : haystack.includes(query));
@@ -8542,6 +8810,71 @@ app.get("/api/admin/order-management/stats/summary", (req, res) => {
     totalRevenue: Number(rows.filter((row) => row.status !== "cancelled").reduce((sum, row) => sum + Number(row.total || 0), 0).toFixed(2))
   }));
 });
+app.get("/api/admin/fulfillment/settings", (req, res) => {
+  res.json(ok({ settings:normalizeFulfillmentSettings() }));
+});
+app.put("/api/admin/fulfillment/settings", (req, res) => {
+  const settings = normalizeFulfillmentSettings({ ...normalizeFulfillmentSettings(), ...(req.body || {}), updated_at:new Date().toISOString() });
+  setSetting("fulfillmentSettings", settings);
+  res.json(ok({ settings }));
+});
+app.get("/api/admin/returns", (req, res) => {
+  const query = String(req.query.q || "").trim().toLowerCase();
+  const state = String(req.query.state || "all").toLowerCase();
+  const now = Date.now();
+  let rows = entityRows("orders").filter(order => order.return_state && order.return_state !== "not_required");
+  if (state !== "all") rows = rows.filter(order => String(order.return_state) === state);
+  if (String(req.query.overdue || "") === "true") rows = rows.filter(order => order.return_state === "pending" && order.return_due_at && new Date(order.return_due_at).getTime() < now);
+  if (query) rows = rows.filter(order => [order.id, order.customer?.full_name, order.customer?.phone, orderShipment(order)?.waybill_no].some(value => String(value || "").toLowerCase().includes(query)));
+  rows.sort((a,b) => recentTimestamp(b) - recentTimestamp(a));
+  res.json(ok({
+    returns:rows.map(order => ({ ...adminOrderView(order), is_return_overdue:order.return_state === "pending" && order.return_due_at && new Date(order.return_due_at).getTime() < now })),
+    summary:{ pending:rows.filter(order => order.return_state === "pending").length, overdue:rows.filter(order => order.return_state === "pending" && order.return_due_at && new Date(order.return_due_at).getTime() < now).length, restocked:rows.filter(order => order.return_state === "restocked").length },
+    settings:normalizeFulfillmentSettings()
+  }));
+});
+app.post("/api/admin/order-management/manual", async (req, res, next) => {
+  let order = null;
+  try {
+    const actor = req.user.email || "admin";
+    const customer = await normalizeVerifiedCheckoutCustomer(req.body?.customer || {}, `manual_order_${actor}`);
+    const items = checkoutLineItems(req.body?.items || []);
+    if (!items.length) fail("MANUAL_ORDER_ITEMS_REQUIRED", 422);
+    const paymentMethod = ["cod", "paid", "bank_transfer"].includes(String(req.body?.payment_method || "cod")) ? String(req.body?.payment_method || "cod") : "cod";
+    const subtotal = Number(items.reduce((sum,item) => sum + Number(item.subtotal || 0), 0).toFixed(2));
+    const discountAmount = Math.min(subtotal, Math.max(0, Number(req.body?.discount_amount || 0)));
+    const shippingAmount = Math.max(0, Number(req.body?.shipping_amount || 0));
+    const total = Number((subtotal - discountAmount + shippingAmount).toFixed(2));
+    const snapshots = commerceOrderSnapshot(customer, paymentMethod === "cod" ? "cod" : "manual_paid");
+    const provider = String(req.body?.shipping_provider || orderFulfillmentProvider({ shipping_provider:"" }) || "internal").toLowerCase();
+    const sourceChannel = ["phone", "whatsapp", "instagram", "walk_in", "other"].includes(String(req.body?.source_channel || "")) ? String(req.body.source_channel) : "other";
+    order = createRecord("orders", {
+      status:"confirmed", source:"manual", manual_source:sourceChannel, manual_notes:String(req.body?.notes || "").trim(), created_by:actor,
+      inventory_tracking_version:1, inventory_state:"pending", fulfillment_state:"awaiting_confirmation",
+      customer, shipping_address:customer, market_snapshot:snapshots.market, currency_snapshot:snapshots.currency,
+      payment:{ ...snapshots.payment, method:paymentMethod === "cod" ? "cod" : "prepaid", provider:"manual", status:paymentMethod === "paid" ? "captured" : paymentMethod === "bank_transfer" ? "pending" : "cash_on_delivery", cod_amount:paymentMethod === "cod" ? total : 0, currency:snapshots.currency.code },
+      items, subtotal, discount_amount:discountAmount, shipping_amount:shippingAmount, shipping_base_amount:shippingAmount, expected_shipping_cost:shippingAmount, total,
+      shipping_provider:provider, shipping_selection:{ provider, carrier_code:provider },
+      shipping_package:{ total_count:items.reduce((sum,item)=>sum+Number(item.quantity||1),0), gross_weight:Number(items.reduce((sum,item)=>sum+Number(item.shipping?.weight||0)*Number(item.quantity||1),0).toFixed(3)), goods_type_ids:[...new Set(items.flatMap(item=>item.shipping?.goods_type_ids||[item.shipping?.goods_type_id]).filter(Boolean))], requires_shipping:items.some(item=>item.shipping?.requires_shipping!==false) },
+      customer_identity:{ email_hash:customer.email ? identityHash(customer.email) : null, phone_hash:customer.phone ? identityHash(customer.phone) : null }
+    });
+    order = reserveInventoryForOrder(order, actor);
+    addOrderEvent(order.id, "manual_order_created", { source_channel:sourceChannel, item_count:items.length, total }, actor);
+    let shipment = null;
+    let dispatchError = null;
+    if (req.body?.dispatch_now === true && provider !== "internal") {
+      try { shipment = await dispatchOrderToShippingProvider(order, provider); addOrderEvent(order.id, "shipment_dispatched", { provider, shipment_id:shipment.id }, actor); }
+      catch (error) { dispatchError = String(error.message || "SHIPPING_DISPATCH_FAILED"); addOrderEvent(order.id, "shipment_dispatch_failed", { provider, reason:dispatchError }, actor); }
+    }
+    res.status(201).json(ok({ order:adminOrderView(getRecord("orders", order.id)), shipment, dispatch_error:dispatchError }));
+  } catch (error) {
+    if (order?.id) {
+      try { cancelOrderWithInventory(order, "manual_order_creation_failed", req.user?.email || "admin"); }
+      catch {}
+    }
+    next(error);
+  }
+});
 app.get("/api/admin/order-migrations/legacy", (req, res) => {
   if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
   const orders = entityRows("orders").filter((order) => order.source === "komrz_woocommerce");
@@ -8569,7 +8902,7 @@ app.get("/api/admin/order-management/:id", (req, res) => {
   const checkoutEvents = recoverySession
     ? entityRows("checkout_recovery_events").filter((event) => Number(event.session_id) === Number(recoverySession.id)).sort((a, b) => recentTimestamp(a) - recentTimestamp(b))
     : [];
-  res.json(ok({ order: adminOrderView(order), events, checkout_events:checkoutEvents, checkout_session:recoverySession ? { id:recoverySession.id, session_key:recoverySession.session_key } : null, integrations: publicShippingIntegrations() }));
+  res.json(ok({ order: adminOrderView(order), events, inventory_movements:inventoryMovementsForOrder(order.id), fulfillment_settings:normalizeFulfillmentSettings(), checkout_events:checkoutEvents, checkout_session:recoverySession ? { id:recoverySession.id, session_key:recoverySession.session_key } : null, integrations: publicShippingIntegrations() }));
 });
 app.patch("/api/admin/order-management/:id/status", (req, res) => {
   if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
@@ -8577,9 +8910,35 @@ app.patch("/api/admin/order-management/:id/status", (req, res) => {
   if (!order) fail("ORDER_NOT_FOUND", 404);
   const status = String(req.body?.status || "").toLowerCase();
   if (!managedOrderStatuses.has(status)) fail("INVALID_ORDER_STATUS");
-  const updated = updateRecord("orders", order.id, { status });
+  let updated;
+  if (status === "cancelled") updated = cancelOrderWithInventory(order, String(req.body?.reason || "cancelled_by_admin"), req.user.email || "admin");
+  else if (status === "delivered") {
+    const picked = markOrderPickedUp(order, req.user.email || "admin", "manual_status");
+    updated = updateRecord("orders", picked.id, { status:"delivered", fulfillment_state:"delivered", inventory_state:picked.inventory_state === "reserved" ? "sold" : picked.inventory_state, delivered_at:picked.delivered_at || new Date().toISOString() });
+  } else updated = updateRecord("orders", order.id, { status });
   addOrderEvent(order.id, "status_changed", { from: order.status, to: status }, req.user.email || "admin");
   res.json(ok({ order: adminOrderView(updated) }));
+});
+app.post("/api/admin/order-management/:id/pickup-confirm", (req, res) => {
+  const order = getRecord("orders", req.params.id);
+  if (!order) fail("ORDER_NOT_FOUND", 404);
+  const updated = markOrderPickedUp(order, req.user.email || "admin", "manual_confirmation");
+  res.json(ok({ order:adminOrderView(updated), inventory_movements:inventoryMovementsForOrder(order.id) }));
+});
+app.post("/api/admin/order-management/:id/return-start", (req, res) => {
+  const order = getRecord("orders", req.params.id);
+  if (!order) fail("ORDER_NOT_FOUND", 404);
+  if (!orderWasPickedUp(order)) fail("ORDER_NOT_PICKED_UP", 409);
+  const updated = markOrderReturnPending(order, String(req.body?.reason || "customer_return"), req.user.email || "admin");
+  res.json(ok({ order:adminOrderView(updated) }));
+});
+app.post("/api/admin/order-management/:id/return-confirm", (req, res) => {
+  const order = getRecord("orders", req.params.id);
+  if (!order) fail("ORDER_NOT_FOUND", 404);
+  if (order.return_state !== "pending") fail("ORDER_RETURN_NOT_PENDING", 409);
+  const updated = restockReturnedOrder(order, req.user.email || "admin", String(req.body?.reference || "full"));
+  addOrderEvent(order.id, "warehouse_return_confirmed", { reference:String(req.body?.reference || "full") }, req.user.email || "admin");
+  res.json(ok({ order:adminOrderView(updated), inventory_movements:inventoryMovementsForOrder(order.id) }));
 });
 app.put("/api/admin/order-management/:id/address", async (req, res, next) => {
   try {
@@ -10494,8 +10853,12 @@ app.post("/api/orders", async (req, res, next) => {
       final_subtotal: Number(line?.final_subtotal ?? item.subtotal)
     };
   });
-  const order = createRecord("orders", {
+  let order = createRecord("orders", {
     status: "pending",
+    source:"storefront",
+    inventory_tracking_version:1,
+    inventory_state:"pending",
+    fulfillment_state:"awaiting_confirmation",
     payment_attempt_id: paymentAttemptId || null,
     customer,
     shipping_address: customer,
@@ -10528,6 +10891,13 @@ app.post("/api/orders", async (req, res, next) => {
     discount_breakdown: applied?.line_discounts || [],
     customer_identity: identities
   });
+  try {
+    order = reserveInventoryForOrder(order, requestedPaymentMethod || "checkout");
+  } catch (error) {
+    releaseOrderPromotionReservations(order, "inventory_reservation_failed");
+    updateRecord("orders", order.id, { status:"cancelled", inventory_state:"reservation_failed", fulfillment_state:"cancelled_before_pickup", inventory_error:String(error.message || "INVENTORY_RESERVATION_FAILED") });
+    throw error;
+  }
   const finalizedPromotionDetails = promotionTrackingDetails(applied, { action:"order_submit" });
   addOrderEvent(order.id, "promotions_finalized", finalizedPromotionDetails, "promotion_engine");
   if (recoverySession) recoverySession = updateCheckoutRecoverySession(recoverySession, {
@@ -10544,6 +10914,7 @@ app.post("/api/orders", async (req, res, next) => {
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "tamara" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "tamara_checkout_failed");
+      releaseInventoryForOrder(order, "tamara_checkout_failed", "tamara");
       updateRecord("orders", order.id, { status: "cancelled", payment: { ...commerceSnapshot.payment, provider: "tamara", status: "failed", failure_reason: String(error.message || "TAMARA_CHECKOUT_FAILED"), last_updated_at: new Date().toISOString() }, payment_failed_at: new Date().toISOString() });
       paymentTransaction({ provider: "tamara", order_id: order.id, type: "checkout_failed", status: "failed", amount: total, currency: commerceSnapshot.currency.code, details: { reason: String(error.message || "TAMARA_CHECKOUT_FAILED").slice(0, 500) } });
       throw error;
@@ -10557,6 +10928,7 @@ app.post("/api/orders", async (req, res, next) => {
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "edfapay" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "edfapay_checkout_failed");
+      releaseInventoryForOrder(order, "edfapay_checkout_failed", "edfapay");
       updateRecord("orders", order.id, { status: "cancelled", payment: { ...commerceSnapshot.payment, provider: "edfapay", status: "failed", failure_reason: String(error.message || "EDFAPAY_CHECKOUT_FAILED"), last_updated_at: new Date().toISOString() }, payment_failed_at: new Date().toISOString() });
       paymentTransaction({ provider: "edfapay", order_id: order.id, type: "checkout_failed", status: "failed", amount: total, currency: commerceSnapshot.currency.code, details: { reason: String(error.message || "EDFAPAY_CHECKOUT_FAILED").slice(0, 500), diagnostic: error.edfapay_context || {} } });
       throw error;
@@ -10570,6 +10942,7 @@ app.post("/api/orders", async (req, res, next) => {
       return res.json(ok({ order: pendingOrder, payment_redirect_url: pendingOrder.payment?.checkout_url, payment_provider: "tabby" }));
     } catch (error) {
       releaseOrderPromotionReservations(order, "tabby_checkout_failed");
+      releaseInventoryForOrder(order, "tabby_checkout_failed", "tabby");
       updateRecord("orders", order.id, { status: "cancelled", payment: { ...commerceSnapshot.payment, provider: "tabby", status: "failed", failure_reason: String(error.message || "TABBY_CHECKOUT_FAILED"), last_updated_at: new Date().toISOString() }, payment_failed_at: new Date().toISOString() });
       paymentTransaction({ provider: "tabby", order_id: order.id, type: "checkout_failed", status: "failed", amount: total, currency: commerceSnapshot.currency.code, details: { reason: String(error.message || "TABBY_CHECKOUT_FAILED").slice(0, 500) } });
       throw error;
@@ -11174,7 +11547,7 @@ app.listen(port, () => {
   setTimeout(runScheduledShippingSync, 30_000);
   setInterval(runScheduledShippingSync, 60_000);
   setInterval(() => {
-    try { refreshCheckoutRecoveryStatuses(); pruneCheckoutRecoveryHistory(); }
+    try { refreshCheckoutRecoveryStatuses(); pruneCheckoutRecoveryHistory(); expirePendingInventoryReservations(); }
     catch (error) { console.error(`Checkout recovery maintenance failed: ${error.message}`); }
   }, 5 * 60_000);
 });
