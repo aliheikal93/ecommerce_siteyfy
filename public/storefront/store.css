@@ -405,6 +405,8 @@ img { max-width: 100%; display: block; }
 .gallery-thumb { position:relative;flex:0 0 76px;width:76px;aspect-ratio:1;padding:0;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:#fff;scroll-snap-align:center; }
 .gallery-thumb.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(88,58,128,.13); }
 .gallery-thumb img,.gallery-thumb video { width:100%;height:100%;display:block;object-fit:cover;pointer-events:none; }
+.gallery-thumb.is-out-of-stock img { filter:grayscale(.9);opacity:.55; }
+.gallery-thumb.is-out-of-stock::before { content:"";position:absolute;z-index:2;inset:0;background:rgba(62,58,64,.12);pointer-events:none; }
 .gallery-thumb.is-video::after { content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(18,13,20,.38));pointer-events:none; }
 .gallery-thumb.is-video>span { position:absolute;z-index:1;inset:50% auto auto 50%;width:30px;height:30px;display:grid;place-items:center;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,255,255,.94);color:var(--primary);pointer-events:none; }
 .gallery-thumb.is-video>span svg { width:15px;height:15px;fill:currentColor; }

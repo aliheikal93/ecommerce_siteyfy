@@ -937,10 +937,27 @@ function renderProduct(product) {
   let selectedVariant=variants.find((variant)=>String(variant.id)===String(requestedVariantId)) || variants.find(variantInStock) || variants[0] || null;
   let selectedColor=selectedVariant?.color || "";
   let selectedValue=selectedVariant?.value || "";
+  let displayedVariant=selectedVariant;
   let quantity=1;
   const media=productMedia(product);
   const initialImage=selectedVariant?.image_url || media.find(item=>item.type === "image")?.url || product.main_photo_url;
   let mediaIndex=Math.max(0,media.findIndex(item=>item.url===initialImage));
+  const mediaKey=value=>String(value||"").split("?")[0];
+  const mediaIsOutOfStock=(item,variant=displayedVariant)=>{
+    if(!productInStock(product))return true;
+    if(!item||item.type!=="image")return false;
+    const itemKey=mediaKey(item.url);
+    const relatedVariants=variants.filter(row=>mediaKey(row.image_url)===itemKey);
+    if(variant&&mediaKey(variant.image_url)===itemKey)return !variantInStock(variant);
+    return relatedVariants.length>0&&relatedVariants.every(row=>!variantInStock(row));
+  };
+  const updateMediaStockState=()=>{
+    const unavailable=mediaIsOutOfStock(media[mediaIndex]);
+    const galleryStage=document.getElementById("productGalleryStage"),stockOverlay=document.getElementById("productStockOverlay");
+    galleryStage?.classList.toggle("is-out-of-stock",unavailable);
+    if(stockOverlay)stockOverlay.hidden=!unavailable;
+    document.querySelectorAll("[data-gallery-index]").forEach((button,index)=>button.classList.toggle("is-out-of-stock",mediaIsOutOfStock(media[index])));
+  };
   const thumbnail=(item,index)=>`<button class="gallery-thumb ${index===mediaIndex?"active":""} ${item.type==="video"?"is-video":""}" type="button" data-gallery-index="${index}" aria-label="${item.type==="video"?"تشغيل فيديو المنتج":`عرض صورة ${index+1}`}">${item.type==="video"?`<video src="${esc(item.url)}" muted preload="metadata" playsinline></video><span>${icon("play",17)}</span>`:`<img src="${esc(item.url)}" alt="" loading="lazy" />`}</button>`;
   const shortDescription=productText(product.short_description_ar||product.description_ar||"");
   const fullDescription=productText(product.description_ar||product.short_description_ar||"");
@@ -971,6 +988,7 @@ function renderProduct(product) {
       stage.onpointerleave=()=>lens.classList.remove("visible");
       image.onclick=openCurrentMedia;
     } else { stage.onpointermove=null;stage.onpointerleave=null; }
+    updateMediaStockState();
     hydrateIcons();
   };
   const selectMediaByUrl=url=>{const index=media.findIndex(item=>item.url===url);if(index>=0)renderMedia(index);};
@@ -989,11 +1007,13 @@ function renderProduct(product) {
     if(values.length&&!values.includes(selectedValue))selectedValue=valueRows.find(variantInStock)?.value||values[0];
     if(!values.length)selectedValue="";
     const variant=currentVariant();
+    displayedVariant=variant;
     document.getElementById("variantControls").innerHTML=`${colorRows.length?`<div class="variant-group"><div class="variant-group-title"><span>اللون</span><small>${esc(selectedColor)}</small></div><div class="variant-options">${colorRows.map(color=>{const unavailable=!variants.some(row=>row.color===color.name&&variantInStock(row));return `<button class="color-option ${color.name===selectedColor?"selected":""} ${unavailable?"is-out-of-stock":""}" style="--color:${esc(color.hex)}" title="${esc(color.name)}${unavailable?" - نفدت الكمية":""}" aria-label="${esc(color.name)}${unavailable?" - نفدت الكمية":""}" aria-pressed="${color.name===selectedColor}" data-select-color="${esc(color.name)}"><span class="color-chip" aria-hidden="true"></span><span>${esc(color.name)}</span>${unavailable?`<small>نفد</small>`:""}</button>`;}).join("")}</div></div>`:""}${values.length?`<div class="variant-group"><div class="variant-group-title"><span>${esc(variant?.option||"الاختيار")}</span><small>${esc(selectedValue)}</small></div><div class="variant-options">${values.map(value=>{const unavailable=!valueRows.some(row=>row.value===value&&variantInStock(row));return `<button class="text-option ${value===selectedValue?"selected":""} ${unavailable?"is-out-of-stock":""}" aria-label="${esc(value)}${unavailable?" - نفدت الكمية":""}" aria-pressed="${value===selectedValue}" data-select-value="${esc(value)}"><span>${esc(value)}</span>${unavailable?`<small>نفد</small>`:""}</button>`;}).join("")}</div></div>`:""}`;
     const price=variantPrice(product,variant);const compare=variant?.compare_at_price!==null&&variant?.compare_at_price!==undefined?Number(variant.compare_at_price):comparePrice(product);document.getElementById("detailPrice").innerHTML=`${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong>`;renderInstallmentWidgets(product,price);
-    const unavailable=!productInStock(product)||Boolean(variant&&!variantInStock(variant)),stockState=document.getElementById("variantStockState"),addButton=document.getElementById("addProduct"),buyButton=document.getElementById("buyNow"),galleryStage=document.getElementById("productGalleryStage"),stockOverlay=document.getElementById("productStockOverlay");
-    stockState.hidden=!unavailable;stockState.innerHTML=unavailable?`${icon("circle-alert",17)}${variant?"نفدت كمية هذا الاختيار":"نفدت كمية المنتج"}`:"";addButton.disabled=unavailable;buyButton.disabled=unavailable;galleryStage.classList.toggle("is-out-of-stock",unavailable);stockOverlay.hidden=!unavailable;addButton.innerHTML=unavailable?`${icon("circle-x",18)}نفدت الكمية`:`${icon("shopping-cart")}إضافة إلى السلة`;buyButton.textContent=unavailable?"هذا الاختيار غير متاح":"اشتري الآن";
+    const unavailable=!productInStock(product)||Boolean(variant&&!variantInStock(variant)),stockState=document.getElementById("variantStockState"),addButton=document.getElementById("addProduct"),buyButton=document.getElementById("buyNow");
+    stockState.hidden=!unavailable;stockState.innerHTML=unavailable?`${icon("circle-alert",17)}${variant?"نفدت كمية هذا الاختيار":"نفدت كمية المنتج"}`:"";addButton.disabled=unavailable;buyButton.disabled=unavailable;addButton.innerHTML=unavailable?`${icon("circle-x",18)}نفدت الكمية`:`${icon("shopping-cart")}إضافة إلى السلة`;buyButton.textContent=unavailable?"هذا الاختيار غير متاح":"اشتري الآن";
     if(variant?.image_url)selectMediaByUrl(variant.image_url);
+    else updateMediaStockState();
     updateVariantUrl(variant);
     document.querySelectorAll("[data-select-color]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedColor=button.dataset.selectColor;update();[...document.querySelectorAll("[data-select-color]")].find(el=>el.dataset.selectColor===selectedColor)?.focus({preventScroll:true});});
     document.querySelectorAll("[data-select-value]").forEach(button=>button.onclick=()=>{selectedVariant=null;selectedValue=button.dataset.selectValue;update();[...document.querySelectorAll("[data-select-value]")].find(el=>el.dataset.selectValue===selectedValue)?.focus({preventScroll:true});});
