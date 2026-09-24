@@ -211,3 +211,10 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - Bundle inventory inherits from exact component variants unless independent bundle stock is explicitly enabled. The available bundle quantity is the minimum available component quantity after component quantities are applied.
 - Legacy prayer sets from category 105 are migrated into bundle records while the original product records remain archived for order history and carry a migrated_bundle_id. Storefront legacy product URLs redirect to the replacement bundle.
 - scripts/migrate-prayer-sets-to-bundles.cjs is an idempotent preview/apply migration. It only maps exact color and option matches from existing standalone products and records the mapping policy in each bundle.
+
+## Arabic set terminology and detail-page content — 2026-09-24
+
+- Arabic customer and admin copy uses طقم / أطقم for bundle products. The English interface and internal entity/API name remain `bundle`.
+- Set selection is intentionally placed at the bottom of the set detail page, after components and the formatted description. The configuration panel owns option selection, quantity, and purchase actions.
+- Imported product and set descriptions are rendered through a browser-side allowlist sanitizer. Import metadata attributes and unsafe elements are removed, literal escaped newlines are normalized, and semantic paragraphs, headings, lists, emphasis, and safe links remain formatted.
+- Legacy saved Arabic bundle name `بندل 2` was normalized to `طقم 2`. Pre-change database backup: `/root/hst_backups/siteyfy-set-language-20260924/siteyfy-before-set-language.sqlite`.
