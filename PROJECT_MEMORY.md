@@ -235,3 +235,9 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - Only categories with children render an expansion arrow. Hovering or focusing شراشف expands the menu to 650px and reveals its subcategories; moving to a direct category collapses it back to the compact width.
 - The mobile drawer uses the same order and renders exactly one nested-expansion control for شراشف. Direct categories have no misleading arrows.
 - Verified with Playwright: 310px collapsed width, 650px expanded width, one expandable desktop/mobile category, correct ordering, automatic collapse, all three subcategories, and no runtime errors.
+
+## Fixed products submenu expansion anchor — 2026-09-24
+
+- The compact desktop products column is pinned by its right edge and keeps a fixed 288px width and content height when a nested category opens.
+- The subcategory panel expands only to the left. Its spacing and separator belong to the expanding panel, so the original category list does not recenter, resize, or shift.
+- Verified with Playwright at 1440px: the category list remained at x=807.046875, width=288px, height=244px, and right edge=1095px before and after opening شراشف. No browser runtime errors were reported.
