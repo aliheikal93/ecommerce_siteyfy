@@ -154,18 +154,26 @@ function richDescriptionHtml(value = "") {
   const walker = parsed.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) textNodes.push(walker.currentNode);
   textNodes.forEach(node => {
+    if (!node.textContent.trim()) { node.remove(); return; }
     if (!node.textContent.includes("\n")) return;
-    const lines = node.textContent.split(/\n+/).map(line => line.replace(/[ \t]+/g, " ").trim()).filter(Boolean);
-    if (!lines.length) { node.remove(); return; }
+    const parts = node.textContent.split(/(\n+)/);
     const fragment = parsed.createDocumentFragment();
-    lines.forEach((line, index) => { if (index) fragment.append(parsed.createElement("br")); fragment.append(parsed.createTextNode(line)); });
+    parts.forEach(part => {
+      if (!part) return;
+      if (/^\n+$/.test(part)) {
+        for (let index = 0; index < part.length; index += 1) fragment.append(parsed.createElement("br"));
+        return;
+      }
+      fragment.append(parsed.createTextNode(part.replace(/[ \t]+/g, " ")));
+    });
     node.replaceWith(fragment);
   });
   root.querySelectorAll("p,li,h2,h3,h4").forEach(element => { if (!element.textContent.trim() && !element.querySelector("br")) element.remove(); });
   const hasBlock = root.querySelector("p,ul,ol,h2,h3,h4");
   if (!hasBlock && root.textContent.trim()) {
-    const lines = root.textContent.split(/\n+/).map(line => line.trim()).filter(Boolean);
-    root.innerHTML = lines.map(line => `<p>${esc(line)}</p>`).join("");
+    const paragraph = parsed.createElement("p");
+    while (root.firstChild) paragraph.append(root.firstChild);
+    root.append(paragraph);
   }
   return root.innerHTML.trim();
 }
@@ -1319,14 +1327,15 @@ function renderStoreRoute() {
 
 function renderBundle(bundle) {
   let quantity=1;
-  const options=(bundle.variants||bundle.bundle_variants||[]).filter(option=>option.is_active!==false);
-  let selected=options.find(option=>String(option.id)===String(bundle.default_variant_id))||options.find(option=>Number(option.available_stock)!==0)||options[0]||null;
+  const isSoldOutOption=option=>option.available_stock!==null&&option.available_stock!==undefined&&Number(option.available_stock)<=0;
+  const options=(bundle.variants||bundle.bundle_variants||[]).filter(option=>option.is_active!==false).map((option,index)=>({...option,_display_order:index})).sort((left,right)=>Number(isSoldOutOption(left))-Number(isSoldOutOption(right))||left._display_order-right._display_order);
+  let selected=options.find(option=>String(option.id)===String(bundle.default_variant_id)&&!isSoldOutOption(option))||options.find(option=>!isSoldOutOption(option))||options[0]||null;
   const current=()=>selected||bundle;
   const draw=()=>{
     const active=current(),items=active.items||bundle.items||[],compare=Number(active.compare_at_price||active.regular_total||bundle.compare_at_price||bundle.regular_total||0),price=Number(active.price??bundle.price??0),saving=Math.max(0,Number(active.savings??active.regular_total-price));
     const shortDescription=descriptionExcerpt(bundle.short_description_ar||bundle.description_ar||"",240);
     const fullDescription=richDescriptionHtml(bundle.description_ar||bundle.short_description_ar||"");
-    const optionButtons=options.map(option=>{const soldOut=Number(option.available_stock)===0;return `<button type="button" data-bundle-option="${esc(option.id)}" class="${String(option.id)===String(selected?.id)?"active":""} ${soldOut?"is-out-of-stock":""}" ${soldOut?"disabled":""}>${option.hex_code?`<i style="--bundle-color:${esc(option.hex_code)}"></i>`:""}<b>${esc(option.label_ar||option.label_en||option.color||"خيار")}</b><small>${soldOut?"نفد":money(option.price)}</small></button>`;}).join("");
+    const optionButtons=options.map(option=>{const soldOut=isSoldOutOption(option);return `<button type="button" data-bundle-option="${esc(option.id)}" class="${String(option.id)===String(selected?.id)?"active":""} ${soldOut?"is-out-of-stock":""}" ${soldOut?"disabled":""}>${option.hex_code?`<i style="--bundle-color:${esc(option.hex_code)}"></i>`:""}<b>${esc(option.label_ar||option.label_en||option.color||"خيار")}</b><small>${soldOut?"نفد":money(option.price)}</small></button>`;}).join("");
     shell(`${breadcrumbs(bundle.name_ar||"أطقم المنتجات")}<section class="container product-page bundle-page"><div class="product-detail"><div class="bundle-main-visual">${active.image_url?`<img src="${esc(active.image_url)}" alt="${esc(active.label_ar||active.label_en||bundle.name_ar||"")}"/>`:bundleVisual({...bundle,items})}</div><div class="product-summary"><div class="product-meta">طقم خاص · ${Number(active.item_count||items.length||0)} قطع</div><h1>${esc(bundle.name_ar||bundle.name_en)}</h1><div class="price detail-price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div>${saving?`<div class="bundle-saving">وفّري ${money(saving)} عند شراء الطقم</div>`:""}${shortDescription?`<p class="short-description">${esc(shortDescription)}</p>`:""}</div></div><section class="bundle-includes"><div class="section-head center"><h2>الطقم يحتوي على</h2></div><div class="bundle-items-row">${items.map((item,index)=>`${index?`<span class="bundle-item-plus">+</span>`:""}<a class="bundle-item-card" href="/product/${item.product_id}"><img src="${esc(item.image_url)}" alt="${esc(item.name_ar)}" /><div><span>${item.quantity>1?`${item.quantity} × `:""}منتج #${item.product_id}</span><strong>${esc(item.name_ar||item.name_en)}</strong>${item.variant_label?`<em>${esc(item.variant_label)}</em>`:""}<small>${money(item.unit_price)}</small></div></a>`).join("")}</div></section>${fullDescription?`<section class="detail-description"><h2>وصف الطقم</h2><div class="rich-description">${fullDescription}</div></section>`:""}<section class="bundle-configurator" id="bundleConfigurator"><header><span>اختيارات الطقم</span><h2>اختاري اللون ونوع الشرشف</h2><p>اللون المختار يطبّق على السجادة والشرشف معًا، ثم حددي خياطة الشرشف المناسبة.</p></header>${options.length?`<div class="bundle-option-picker"><span>اللون والخياطة</span><div>${optionButtons}</div></div>`:""}<div class="bundle-configurator-summary"><div><small>سعر الاختيار</small><div class="price detail-price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div>${saving?`<span class="bundle-saving">وفّري ${money(saving)}</span>`:""}</div><div class="bundle-purchase-actions"><div class="purchase-row"><div class="quantity-control"><button id="bundleQtyPlus" aria-label="زيادة الكمية">+</button><strong id="bundleQtyValue">${quantity}</strong><button id="bundleQtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addBundle" ${active.available_stock===0?"disabled":""}>${icon("shopping-cart")}${active.available_stock===0?"نفد هذا الاختيار":"إضافة الطقم للسلة"}</button></div><button class="secondary-button buy-now" id="buyBundleNow" ${active.available_stock===0?"disabled":""}>اشتري الآن</button></div></div></section></section>`);
     document.querySelectorAll("[data-bundle-option]").forEach(button=>button.onclick=()=>{selected=options.find(option=>String(option.id)===button.dataset.bundleOption)||selected;quantity=1;draw();requestAnimationFrame(()=>document.getElementById("bundleConfigurator")?.scrollIntoView({block:"start"}));});
     const update=()=>document.getElementById("bundleQtyValue").textContent=quantity;

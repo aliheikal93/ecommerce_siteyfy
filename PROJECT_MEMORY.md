@@ -215,6 +215,6 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 ## Arabic set terminology and detail-page content — 2026-09-24
 
 - Arabic customer and admin copy uses طقم / أطقم for bundle products. The English interface and internal entity/API name remain `bundle`.
-- Set selection is intentionally placed at the bottom of the set detail page, after components and the formatted description. The configuration panel owns option selection, quantity, and purchase actions.
-- Imported product and set descriptions are rendered through a browser-side allowlist sanitizer. Import metadata attributes and unsafe elements are removed, literal escaped newlines are normalized, and semantic paragraphs, headings, lists, emphasis, and safe links remain formatted.
+- Set selection appears directly after the formatted description, following the component summary. The configuration panel owns option selection, quantity, and purchase actions; available options retain their saved order first and sold-out options are grouped at the end.
+- Imported product and set descriptions are rendered through a browser-side allowlist sanitizer. Import metadata attributes and unsafe elements are removed, literal escaped newlines are normalized, explicit line breaks are preserved, and semantic paragraphs, headings, lists, emphasis, and safe links remain formatted. Whitespace-only HTML indentation must not become visible breaks.
 - Legacy saved Arabic bundle name `بندل 2` was normalized to `طقم 2`. Pre-change database backup: `/root/hst_backups/siteyfy-set-language-20260924/siteyfy-before-set-language.sqlite`.
