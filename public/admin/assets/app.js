@@ -3,6 +3,7 @@
   const STORAGE_USER = "slyrah_admin_user";
   const STORAGE_LANG = "slyrah_admin_lang";
   const STORAGE_NAV_GROUP = "siteyfy_admin_nav_group";
+  const STORAGE_THEME = "siteyfy_admin_theme";
 
   const icons = {
     dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/></svg>',
@@ -26,6 +27,7 @@
     globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
     logout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18h-8"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M10.3 4.1 2.5 18a2 2 0 0 0 1.8 3h15.4a2 2 0 0 0 1.8-3L13.7 4.1a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>',
     "arrow-left": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>',
     "arrow-right": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m9 18 6-6-6-6"/><path d="M15 12H4"/></svg>',
@@ -36,9 +38,13 @@
     eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>',
     star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>',
     message: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"/><path d="M8 9h8M8 13h5"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
     "chevron-down": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
+    menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>'
   };
 
   const i = (name) => `<span class="icon">${icons[name] || icons.dashboard}</span>`;
@@ -58,10 +64,18 @@
       signIn: "Sign in",
       signingIn: "Signing in",
       overview: "Overview",
-      overviewSub: "Store readiness, empty-data status, and the main areas that need setup.",
+      overviewSub: "A live, permission-aware view of the store areas you manage.",
+      salesOverview: "Sales overview",
+      inventoryManagement: "Inventory management",
+      inventoryOverview: "Inventory overview",
+      financeManagement: "Finance",
+      financeOverview: "Finance overview",
+      userOverview: "Users overview",
+      shippingOverview: "Shipping overview",
       content: "Content",
       storefront: "Storefront",
       brandStudio: "Brand studio",
+      dashboardIdentity: "Dashboard identity",
       market: "Market & shipping",
       currencies: "Currencies",
       integrations: "Integrations",
@@ -80,6 +94,10 @@
       shippingCodBills: "COD bills",
       shippingFeeBills: "Fee bills",
       shippingReconciliation: "Weekly reconciliation",
+      finance: "Finance",
+      financeSub: "Profit, cost, promotions, payment channels, and carrier reconciliation in one place.",
+      notifications: "Notifications",
+      notificationsSub: "Monitor store events, automate reminders, and control dashboard and email delivery.",
       storefrontLayout: "Header & footer",
       catalog: "Catalog",
       sales: "Sales",
@@ -131,7 +149,7 @@
       bundles: "Bundles",
       bundlesSub: "Create product sets with a custom combined price and optional cover image.",
       collections: "Collections",
-      collectionsSub: "Curate product variants into ordered storefront rails.",
+      collectionsSub: "Build collections from facets, whole products or individual variants.",
       reviewsRecommendations: "Reviews & Recommendations",
       createCollection: "Create collection",
       editCollection: "Edit collection",
@@ -139,7 +157,8 @@
       brands: "Brands",
       colors: "Colors",
       options: "Options",
-      labels: "Labels",
+      labels: "Product badges",
+      facets: "Product facets",
       pages: "Pages",
       page: "Page",
       homeContent: "Home content",
@@ -157,7 +176,18 @@
       orders: "Orders",
       returns: "Returns",
       manualOrder: "Manual order",
+      inventoryOperations: "Inventory",
+      inventory: "Inventory overview",
+      inventoryReceipt: "Stock receipt",
       users: "Users",
+      staff: "Staff",
+      staffSub: "Manage employee access, roles, sessions, and notification preferences.",
+      staffRoles: "Roles & permissions",
+      staffRolesSub: "Build reusable roles and define exactly what each team can view or change.",
+      staffActivity: "Activity log",
+      staffActivitySub: "Review employee actions, access decisions, and session activity.",
+      staffProfile: "My profile",
+      staffProfileSub: "Manage your contact details, password, language, and notifications.",
       locations: "Locations",
       settings: "Settings",
       aiAssistant: "AI Assistant",
@@ -373,10 +403,18 @@
       signIn: "تسجيل الدخول",
       signingIn: "جاري الدخول",
       overview: "نظرة عامة",
-      overviewSub: "جاهزية المتجر، حالة البيانات الفارغة، والأقسام الأساسية المطلوب تجهيزها.",
+      overviewSub: "عرض مباشر لبيانات الأقسام التي تديرها حسب صلاحيات حسابك.",
+      salesOverview: "نظرة عامة على المبيعات",
+      inventoryManagement: "إدارة المخزون",
+      inventoryOverview: "نظرة عامة على المخزون",
+      financeManagement: "المالية",
+      financeOverview: "نظرة عامة على المالية",
+      userOverview: "نظرة عامة على المستخدمين",
+      shippingOverview: "نظرة عامة على الشحن",
       content: "المحتوى",
       storefront: "واجهة المتجر",
       brandStudio: "استوديو الهوية",
+      dashboardIdentity: "هوية لوحة التحكم",
       market: "السوق والشحن",
       currencies: "العملات",
       integrations: "التكاملات",
@@ -395,6 +433,10 @@
       shippingCodBills: "فواتير COD",
       shippingFeeBills: "فواتير المصاريف",
       shippingReconciliation: "مراجعة أسبوعية",
+      finance: "المالية",
+      financeSub: "الأرباح والتكاليف والعروض ووسائل الدفع ومطابقة شركات الشحن في مكان واحد.",
+      notifications: "الإشعارات",
+      notificationsSub: "متابعة أحداث المتجر وأتمتة التذكيرات والتحكم في إشعارات الداشبورد والبريد.",
       storefrontLayout: "الهيدر والفوتر",
       catalog: "الكتالوج",
       sales: "المبيعات",
@@ -446,7 +488,7 @@
       bundles: "البندلز",
       bundlesSub: "اجمع منتجين أو أكثر بسعر نهائي مخصص وصورة اختيارية للبندل.",
       collections: "المجموعات",
-      collectionsSub: "نسّق اختيارات المنتجات في مجموعات مرتبة للواجهة.",
+      collectionsSub: "أنشئ مجموعات من الفئات أو المنتجات الكاملة أو اختياراتها.",
       reviewsRecommendations: "التقييمات والتوصيات",
       createCollection: "إنشاء مجموعة",
       editCollection: "تعديل المجموعة",
@@ -454,7 +496,8 @@
       brands: "العلامات التجارية",
       colors: "الألوان",
       options: "الخيارات",
-      labels: "الملصقات",
+      labels: "شارات المنتجات",
+      facets: "الفئات",
       pages: "الصفحات",
       page: "الصفحة",
       homeContent: "محتوى الرئيسية",
@@ -472,7 +515,18 @@
       orders: "الطلبات",
       returns: "المرتجعات",
       manualOrder: "طلب يدوي",
+      inventoryOperations: "المخزون",
+      inventory: "إدارة المخزون",
+      inventoryReceipt: "استلام بضاعة",
       users: "المستخدمون",
+      staff: "الموظفون",
+      staffSub: "إدارة دخول الموظفين والأدوار والجلسات وتفضيلات الإشعارات.",
+      staffRoles: "الأدوار والصلاحيات",
+      staffRolesSub: "أنشئ أدوارًا قابلة لإعادة الاستخدام وحدد ما يستطيع كل فريق رؤيته أو تعديله.",
+      staffActivity: "سجل النشاط",
+      staffActivitySub: "راجع إجراءات الموظفين وقرارات الصلاحيات ونشاط الجلسات.",
+      staffProfile: "ملفي الشخصي",
+      staffProfileSub: "إدارة بيانات التواصل وكلمة المرور واللغة والإشعارات.",
       locations: "المناطق",
       settings: "الإعدادات",
       aiAssistant: "AI Assistant",
@@ -696,9 +750,12 @@
         ["sku", "sku", "text"],
         ["barcode", "barcode", "text"],
         ["category_slug", "categories", "categorySelect"],
+        ["subcategory_ids", "subcategories", "subcategorySelect"],
         ["brand_slug", "brands", "brandSelect"],
         ["color", "colors", "colorSelect"],
         ["options", "options", "optionSelect"],
+        ["label_ids", "labels", "labelSelect"],
+        ["facet_ids", "facets", "facetSelect"],
         ["price", "price", "number"],
         ["sale_price", "salePrice", "number"],
         ["cost", "cost", "number"],
@@ -753,6 +810,12 @@
       columns: ["id", "nameEn", "nameAr", "isActive"],
       fields: [["nameEn", "nameEn", "text", true], ["nameAr", "nameAr", "text", true], ["isActive", "active", "checkbox"]]
     },
+    facets: {
+      icon: "layers",
+      api: "/api/admin/facets",
+      columns: ["id", "image_url", "name_ar", "name_en", "is_active"],
+      fields: [["image_url", "image", "image"], ["name_ar", "nameAr", "text", true], ["name_en", "nameEn", "text", true], ["is_active", "active", "checkbox"]]
+    },
     labels: {
       icon: "tag",
       api: "/api/admin/labels",
@@ -788,30 +851,33 @@
   };
 
   const navGroups = [
-    { label: "dashboard", items: [{ id: "overview", icon: "dashboard" }] },
-    { label: "storefront", items: [{ id: "brandStudio", icon: "palette" }, { id: "storefrontLayout", icon: "layers" }, { id: "homeSections", icon: "layers" }, { id: "market", icon: "map" }, { id: "currencies", icon: "globe" }] },
-    { label: "content", items: [
+    { label: "dashboard", icon:"dashboard", items: [{ id: "overview", icon: "dashboard" }] },
+    { label: "storefront", icon:"globe", items: [{ id: "brandStudio", icon: "palette" }, { id: "storefrontLayout", icon: "layers" }, { id: "homeSections", icon: "layers" }, { id: "market", icon: "map" }, { id: "currencies", icon: "globe" }] },
+    { label: "content", icon:"file", items: [
       { id: "content", icon: "image" },
       { id: "imageGallery", icon: "image" },
       { id: "pages", icon: "file" }
     ] },
-    { label: "catalog", items: [
+    { label: "catalog", icon:"box", items: [
       { id: "products", icon: "box" },
       { id: "categories", icon: "layers" },
       { id: "brands", icon: "tag" },
       { id: "colors", icon: "palette" },
       { id: "options", icon: "settings" },
+      { id: "facets", icon: "layers" },
       { id: "labels", icon: "tag" },
       { id: "collections", icon: "collection" },
       { id: "bundles", icon: "layers" },
       { id: "reviewsRecommendations", icon: "message" }
     ] },
-    { label: "sales", items: [{ id: "orders", icon: "cart" }, { id: "returns", icon: "refresh" }, { id: "checkoutRecovery", icon: "users" }, { id: "discounts", icon: "tag" }, { id: "combinedPromotions", icon: "layers" }] },
-    { label: "userManagement", items: [{ id: "users", icon: "users" }, { id: "locations", icon: "map" }] },
-    { label: "integrations", items: [{ id: "integrationCenter", icon: "settings" }, { id: "shippingIntegrations", icon: "truck" }, { id: "paymentGateways", icon: "credit-card" }, { id: "marketingPixels", icon: "dashboard" }] },
-    { label: "shippingOperations", items: [{ id: "shippingShipments", icon: "truck" }, { id: "shippingClosings", icon: "file" }, { id: "shippingAudit", icon: "check" }] },
-    { label: "aiAssistant", items: [{ id: "aiSetup", icon: "sparkles" }, { id: "aiProducts", icon: "image" }, { id: "aiSEO", icon: "file" }, { id: "aiPricing", icon: "tag" }, { id: "aiLogs", icon: "file" }] },
-    { label: "system", items: [{ id: "lighthouse", icon: "dashboard" }, { id: "settings", icon: "settings" }] }
+    { label: "inventoryManagement", icon:"box", items: [{ id: "inventoryOverview", icon: "dashboard" }, { id: "inventory", icon: "box" }] },
+    { label: "sales", icon:"cart", items: [{ id: "salesOverview", icon: "dashboard" }, { id: "orders", icon: "cart" }, { id: "returns", icon: "refresh" }, { id: "checkoutRecovery", icon: "users" }, { id: "discounts", icon: "tag" }, { id: "combinedPromotions", icon: "layers" }] },
+    { label: "financeManagement", icon:"credit-card", items: [{ id: "financeOverview", icon: "dashboard" }, { id: "finance", icon: "credit-card" }] },
+    { label: "userManagement", icon:"users", items: [{ id: "userOverview", icon: "dashboard" }, { id: "users", icon: "users" }, { id: "staff", icon: "users" }, { id: "staffRoles", icon: "settings" }, { id: "staffActivity", icon: "file" }] },
+    { label: "integrations", icon:"settings", items: [{ id: "integrationCenter", icon: "settings" }, { id: "shippingIntegrations", icon: "truck" }, { id: "paymentGateways", icon: "credit-card" }, { id: "marketingPixels", icon: "dashboard" }] },
+    { label: "shippingOperations", icon:"truck", items: [{ id: "shippingOverview", icon: "dashboard" }, { id: "shippingShipments", icon: "truck" }, { id: "shippingClosings", icon: "file" }, { id: "shippingAudit", icon: "check" }, { id: "locations", icon: "map", condition:"internal_shipping" }] },
+    { label: "aiAssistant", icon:"sparkles", items: [{ id: "aiSetup", icon: "sparkles" }, { id: "aiProducts", icon: "image" }, { id: "aiSEO", icon: "file" }, { id: "aiPricing", icon: "tag" }, { id: "aiLogs", icon: "file" }] },
+    { label: "system", icon:"settings", items: [{ id: "dashboardIdentity", icon: "palette" }, { id: "notifications", icon: "bell" }, { id: "lighthouse", icon: "dashboard" }, { id: "settings", icon: "settings" }] }
   ];
 
   function navItemIsActive(item, view = state?.view) {
@@ -820,6 +886,7 @@
       || (view === "recommendationEditor" && item.id === "reviewsRecommendations")
       || (view === "orderDetail" && item.id === "orders")
       || (view === "manualOrder" && item.id === "orders")
+      || (view === "inventoryReceipt" && item.id === "inventory")
       || (view === "checkoutRecoveryDetail" && item.id === "checkoutRecovery")
       || (view === "shippingAuditFinding" && item.id === "shippingAudit")
       || (view === "shippingProvider" && item.id === "shippingIntegrations")
@@ -842,6 +909,11 @@
   }
 
   const initialRoute = adminRoute();
+  const dashboardIdentityDefaults = {
+    brand_name:"SITEYFY", tagline_en:"Digital Solutions", tagline_ar:"الحلول الرقمية", default_theme:"light", allow_theme_switch:true,
+    light:{primary:"#005BFF",secondary:"#363ECF",accent:"#9724A5",canvas:"#F8FAFC",surface:"#FFFFFF",surface_soft:"#F1F5F9",heading:"#0C113F",text:"#0F172A",muted:"#64748B",border:"#E2E8F0",logo_horizontal:"/admin/assets/brand/siteyfy-light-lockup.png",logo_vertical:"/admin/assets/brand/siteyfy-light-gradient.png",icon:"/admin/assets/brand/siteyfy-light-lockup.png",icon_crop:true},
+    dark:{primary:"#005BFF",secondary:"#363ECF",accent:"#9724A5",canvas:"#080D3C",surface:"#111644",surface_soft:"#161B48",heading:"#FFFFFF",text:"#DFE0FF",muted:"#A8ACC8",border:"#2C315F",logo_horizontal:"/admin/assets/brand/siteyfy-dark-lockup.png",logo_vertical:"/admin/assets/brand/siteyfy-dark-gradient.png",icon:"/admin/assets/brand/siteyfy-dark-lockup.png",icon_crop:true}
+  };
   const state = {
     lang: localStorage.getItem(STORAGE_LANG) || "en",
     token: localStorage.getItem(STORAGE_TOKEN) || "",
@@ -849,7 +921,14 @@
     view: initialRoute.view,
     reportId: initialRoute.id,
     openNavGroup: initialNavGroup(initialRoute.view),
+    notificationUnread: 0,
     rows: {},
+    navigation: JSON.parse(localStorage.getItem(STORAGE_USER) || "null")?.navigation || {},
+    dashboardDays: 30,
+    dashboardIdentity: dashboardIdentityDefaults,
+    theme: localStorage.getItem(STORAGE_THEME) || "light",
+    identityLoaded: false,
+    authSynced: false,
     loading: false
   };
 
@@ -857,6 +936,72 @@
   const ui = (en, ar) => state.lang === "ar" ? ar : en;
   const bundleMoney = value => `${Number(value || 0).toLocaleString(state.lang === "ar" ? "ar-SA" : "en-US")} ${state.lang === "ar" ? "ر.س" : "SAR"}`;
   const app = document.getElementById("app");
+
+  function dashboardMode(theme = state.theme) {
+    return state.dashboardIdentity?.[theme] || dashboardIdentityDefaults[theme];
+  }
+
+  function applyDashboardIdentity() {
+    const mode = dashboardMode();
+    document.documentElement.dataset.adminTheme = state.theme;
+    const values = {
+      "--bg":mode.canvas, "--panel":mode.surface, "--panel-soft":mode.surface_soft,
+      "--text":mode.text, "--heading":mode.heading, "--muted":mode.muted,
+      "--line":mode.border, "--line-strong":mode.border, "--brand":mode.primary,
+      "--brand-ink":mode.secondary, "--brand-accent":mode.accent,
+      "--brand-soft":state.theme === "dark" ? mode.surface_soft : `${mode.primary}12`
+    };
+    Object.entries(values).forEach(([key,value])=>document.documentElement.style.setProperty(key,value));
+  }
+
+  async function loadDashboardIdentity() {
+    try {
+      const response = await fetch("/api/dashboard-identity", { headers:{ Accept:"application/json" } });
+      const json = await response.json();
+      state.dashboardIdentity = json?.data || json || dashboardIdentityDefaults;
+      if (!localStorage.getItem(STORAGE_THEME)) state.theme = state.dashboardIdentity.default_theme || "light";
+    } catch {
+      state.dashboardIdentity = dashboardIdentityDefaults;
+    }
+    state.identityLoaded = true;
+    applyDashboardIdentity();
+  }
+
+  function brandAsset(kind="horizontal", extra="") {
+    const mode=dashboardMode();
+    const key=kind === "vertical" ? "logo_vertical" : kind === "icon" ? "icon" : "logo_horizontal";
+    const url=mode[key] || dashboardIdentityDefaults[state.theme][key];
+    if(kind === "icon" && mode.icon_crop) return `<span class="brand-asset brand-icon-crop ${extra}" style="--brand-image:url('${escapeHtml(url)}')" aria-hidden="true"></span>`;
+    return `<img class="brand-asset brand-${kind} ${extra}" src="${escapeHtml(url)}" alt="${escapeHtml(state.dashboardIdentity.brand_name || "SITEYFY")}" />`;
+  }
+
+  function toggleDashboardTheme() {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    localStorage.setItem(STORAGE_THEME,state.theme);
+    applyDashboardIdentity();
+    render();
+  }
+
+  const viewPermissions = {
+    overview:"dashboard.view", salesOverview:"orders.view", inventoryOverview:"inventory.view", financeOverview:"finance.view", userOverview:"customers.view", shippingOverview:"shipping.view", brandStudio:"content.view", storefrontLayout:"content.view", homeSections:"content.view", content:"content.view", imageGallery:"content.view", pages:"content.view",
+    market:"settings.view", currencies:"settings.view", locations:"settings.view", lighthouse:"settings.view", settings:"settings.view", dashboardIdentity:"settings.view",
+    products:"catalog.view", categories:"catalog.view", brands:"catalog.view", colors:"catalog.view", options:"catalog.view", facets:"catalog.view", labels:"catalog.view", collections:"catalog.view", collectionEditor:"catalog.view", bundles:"catalog.view", reviewsRecommendations:"catalog.view", recommendationEditor:"catalog.view",
+    inventory:"inventory.view", inventoryReceipt:"inventory.view", orders:"orders.view", orderDetail:"orders.view", manualOrder:"orders.manage", returns:"returns.view", checkoutRecovery:"orders.view", checkoutRecoveryDetail:"orders.view",
+    discounts:"promotions.view", combinedPromotions:"promotions.view", finance:"finance.view", users:"customers.view",
+    integrationCenter:"integrations.view", shippingIntegrations:"integrations.view", shippingProvider:"integrations.view", paymentGateways:"integrations.view", marketingPixels:"integrations.view",
+    shippingShipments:"shipping.view", shippingClosings:"shipping.view", shippingReport:"shipping.view", shippingSettlement:"shipping.view", shippingLedger:"shipping.view", shippingAudit:"shipping.view", shippingAuditFinding:"shipping.view", shippingCarrierBill:"shipping.view", shippingCodBills:"shipping.view", shippingFeeBills:"shipping.view", shippingReconciliation:"shipping.view",
+    aiSetup:"ai.view", aiProducts:"ai.view", aiSEO:"ai.view", aiPricing:"ai.view", aiLogs:"ai.view", notifications:"notifications.view",
+    staff:"staff.view", staffRoles:"roles.view", staffActivity:"audit.view", staffProfile:"dashboard.view"
+  };
+
+  function can(permission) {
+    const permissions = state.user?.effective_permissions || state.user?.permissions || [];
+    return state.user?.role === "admin" || permissions.includes("*") || permissions.includes(permission);
+  }
+
+  function canView(view) {
+    return !viewPermissions[view] || can(viewPermissions[view]);
+  }
 
   function setLang(lang) {
     state.lang = lang;
@@ -915,6 +1060,7 @@
 
   function render() {
     setLang(state.lang);
+    applyDashboardIdentity();
     if (!state.token) return renderLogin();
     app.innerHTML = `
       <div class="app-shell">
@@ -938,7 +1084,7 @@
     app.innerHTML = `
       <section class="login-screen">
         <div class="login-art">
-          <div class="brand-lockup"><span class="brand-mark">S</span><span>SITEYFY</span></div>
+          <div class="login-brand"><img class="brand-asset brand-vertical" src="${escapeHtml(state.dashboardIdentity.dark?.logo_vertical || dashboardIdentityDefaults.dark.logo_vertical)}" alt="${escapeHtml(state.dashboardIdentity.brand_name || "SITEYFY")}" /></div>
           <div>
             <h1>${t("loginTitle")}</h1>
             <p>${t("loginSubtitle")}</p>
@@ -947,13 +1093,14 @@
         </div>
         <div class="login-panel">
           <form class="login-card" id="loginForm">
-            <div class="brand-lockup" style="margin-bottom: 24px;"><span class="brand-mark">S</span><span>SITEYFY Admin</span></div>
+            <div class="login-card-brand">${brandAsset("icon")}<div><strong>${escapeHtml(state.dashboardIdentity.brand_name || "SITEYFY")}</strong><small>${escapeHtml(state.lang === "ar" ? state.dashboardIdentity.tagline_ar : state.dashboardIdentity.tagline_en)}</small></div></div>
             <h2>${t("signIn")}</h2>
             <p class="muted">${t("loginSubtitle")}</p>
-            <div class="field"><label>${t("email")}</label><input name="email" type="email" value="admin@siteyfy.com" required /></div>
-            <div class="field" style="margin-top:14px;"><label>${t("password")}</label><input name="password" type="password" value="admin12345" required /></div>
+            <div class="field"><label>${t("email")}</label><input name="email" type="email" autocomplete="username" required /></div>
+            <div class="field" style="margin-top:14px;"><label>${t("password")}</label><input name="password" type="password" autocomplete="current-password" required /></div>
             <button class="btn primary" style="width:100%; justify-content:center; margin-top:20px;" type="submit">${t("signIn")}</button>
             <button class="btn ghost" style="width:100%; justify-content:center; margin-top:10px;" type="button" id="loginLang">${i("globe")}${t("language")}</button>
+            ${state.dashboardIdentity.allow_theme_switch !== false ? `<button class="btn ghost" style="width:100%;justify-content:center;margin-top:8px" type="button" id="loginTheme">${i(state.theme === "dark" ? "sun" : "moon")}${ui(state.theme === "dark" ? "Light mode" : "Dark mode",state.theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن")}</button>` : ""}
           </form>
         </div>
       </section>
@@ -962,6 +1109,7 @@
       setLang(state.lang === "en" ? "ar" : "en");
       renderLogin();
     };
+    document.getElementById("loginTheme")?.addEventListener("click",toggleDashboardTheme);
     document.getElementById("loginForm").onsubmit = login;
   }
 
@@ -978,8 +1126,14 @@
       });
       state.token = data.token;
       state.user = data.admin || data.user;
+      state.navigation = state.user?.navigation || {};
+      state.authSynced = true;
       localStorage.setItem(STORAGE_TOKEN, state.token);
       localStorage.setItem(STORAGE_USER, JSON.stringify(state.user));
+      if (state.user?.must_change_password) {
+        state.view = "staffProfile";
+        location.hash = "staffProfile";
+      }
       render();
     } catch (error) {
       toast(`${t("loginFailed")}: ${error.message}`, "error");
@@ -990,11 +1144,17 @@
   }
 
   function sidebar() {
+    const conditionVisible = item => item.condition !== "internal_shipping" || state.navigation.internal_shipping_enabled === true;
+    const visibleGroups = navGroups.map(group => ({ ...group, items:group.items.filter(item => canView(item.id) && conditionVisible(item)) })).filter(group => group.items.length);
     return `
       <aside class="sidebar">
-        <div class="sidebar-head"><div class="brand-lockup"><span class="brand-mark">S</span><span>SITEYFY</span></div></div>
+        <div class="sidebar-head"><div class="dashboard-brand">${brandAsset("icon")}<div><strong>${escapeHtml(state.dashboardIdentity.brand_name || "SITEYFY")}</strong><small>${escapeHtml(state.lang === "ar" ? state.dashboardIdentity.tagline_ar : state.dashboardIdentity.tagline_en)}</small></div></div></div>
         <nav class="sidebar-nav" aria-label="${ui("Dashboard sections", "أقسام لوحة التحكم")}">
-          ${navGroups.map(group => { const open=state.openNavGroup === group.label; const active=group.items.some(item=>navItemIsActive(item)); return `<section class="nav-accordion ${open?"is-open":""} ${active?"has-active":""}" data-nav-accordion="${group.label}"><button class="nav-group-toggle" type="button" data-nav-group-toggle="${group.label}" aria-expanded="${open}"><span>${t(group.label)}</span><small>${group.items.length}</small>${i("chevron-down")}</button><div class="nav-group-panel"><div class="nav-group-panel-inner">${group.items.map(item => `<button class="nav-item ${navItemIsActive(item)?"active":""}" data-view="${item.id}">${i(item.icon)}<span>${t(item.id)}</span></button>`).join("")}</div></div></section>`; }).join("")}
+          ${visibleGroups.map(group => {
+            if(group.items.length===1){const item=group.items[0];return `<section class="nav-direct"><button class="nav-item nav-item-direct ${navItemIsActive(item)?"active":""}" data-view="${item.id}">${i(item.icon)}<span>${t(item.id)}</span></button></section>`;}
+            const open=state.openNavGroup === group.label,active=group.items.some(item=>navItemIsActive(item));
+            return `<section class="nav-accordion ${open?"is-open":""} ${active?"has-active":""}" data-nav-accordion="${group.label}"><button class="nav-group-toggle" type="button" data-nav-group-toggle="${group.label}" aria-expanded="${open}">${i(group.icon||"layers")}<span>${t(group.label)}</span><small>${group.items.length}</small>${i("chevron-down")}</button><div class="nav-group-panel"><div class="nav-group-panel-inner">${group.items.map(item => `<button class="nav-item ${navItemIsActive(item)?"active":""}" data-view="${item.id}">${i(item.icon)}<span>${t(item.id)}</span></button>`).join("")}</div></div></section>`;
+          }).join("")}
         </nav>
         <div class="sidebar-foot">
           <a class="btn" href="/" target="_blank">${i("globe")}<span>${t("viewSite")}</span></a>
@@ -1015,6 +1175,9 @@
           </div>
         </div>
         <div class="toolbar">
+          ${can("notifications.view") ? `<button class="btn icon-btn notification-bell" id="notificationBell" type="button" title="${t("notifications")}">${i("bell")}<span class="notification-badge ${state.notificationUnread ? "" : "hidden"}" id="notificationBadge">${state.notificationUnread}</span></button>` : ""}
+          ${state.dashboardIdentity.allow_theme_switch !== false ? `<button class="btn icon-btn" id="themeBtn" type="button" title="${ui(state.theme === "dark" ? "Light mode" : "Dark mode",state.theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن")}">${i(state.theme === "dark" ? "sun" : "moon")}</button>` : ""}
+          <button class="btn staff-profile-trigger" id="staffProfileBtn" type="button" title="${t("staffProfile")}">${personAvatar(state.user, "topbar-avatar")}<b>${escapeHtml(state.user?.name || ui("My profile","ملفي"))}</b></button>
           <button class="btn" id="langBtn">${i("globe")}${t("language")}</button>
         </div>
       </header>
@@ -1022,6 +1185,25 @@
   }
 
   function bindShell() {
+    if (!state.authSynced) {
+      state.authSynced = true;
+      api("/api/admin/auth/me").then(data => {
+        const user=data.admin||data.user;
+        if(!user) return;
+        const before=JSON.stringify(state.navigation||{});
+        state.user=user;
+        state.navigation=user.navigation||{};
+        localStorage.setItem(STORAGE_USER,JSON.stringify(state.user));
+        if(before!==JSON.stringify(state.navigation)) render();
+      }).catch(()=>{});
+    }
+    document.getElementById("notificationBell")?.addEventListener("click", () => { location.hash="notifications"; });
+    document.getElementById("themeBtn")?.addEventListener("click",toggleDashboardTheme);
+    if (can("notifications.view")) api("/api/admin/notifications?limit=10").then((data) => {
+      state.notificationUnread=Number(data.summary?.unread||0);
+      const badge=document.getElementById("notificationBadge");
+      if(badge){badge.textContent=state.notificationUnread>99?"99+":String(state.notificationUnread);badge.classList.toggle("hidden",!state.notificationUnread);}
+    }).catch(()=>{});
     document.querySelectorAll("[data-nav-group-toggle]").forEach(button => {
       button.onclick = () => {
         const nextGroup = button.dataset.navGroupToggle;
@@ -1044,7 +1226,9 @@
         render();
       };
     });
-    document.getElementById("logoutBtn").onclick = () => {
+    document.getElementById("staffProfileBtn")?.addEventListener("click", () => { location.hash="staffProfile"; });
+    document.getElementById("logoutBtn").onclick = async () => {
+      await api("/api/admin/auth/logout", { method:"POST", body:"{}" }).catch(()=>{});
       localStorage.removeItem(STORAGE_TOKEN);
       localStorage.removeItem(STORAGE_USER);
       state.token = "";
@@ -1075,8 +1259,19 @@
 
   async function renderView() {
     const page = document.getElementById("page");
+    if (state.user?.must_change_password && state.view !== "staffProfile") {
+      state.view = "staffProfile";
+      location.hash = "staffProfile";
+      return renderStaffProfile(page);
+    }
+    if (!canView(state.view)) {
+      page.innerHTML = `<div class="card access-denied"><div>${i("alert")}</div><h2>${ui("You do not have access to this section","ليس لديك صلاحية لفتح هذا القسم")}</h2><p>${ui("Ask an administrator to update your role or personal permissions.","اطلب من المدير تحديث الدور أو الصلاحيات الخاصة بحسابك.")}</p></div>`;
+      return;
+    }
     if (state.view === "overview") return renderOverview(page);
+    if (["salesOverview","inventoryOverview","financeOverview","userOverview","shippingOverview"].includes(state.view)) return renderModuleOverview(page,state.view.replace("Overview","") || "orders");
     if (state.view === "settings") return renderSettings(page);
+    if (state.view === "dashboardIdentity") return renderDashboardIdentity(page);
     if (state.view === "brandStudio") return renderBrandStudio(page);
     if (state.view === "market") return renderMarket(page);
     if (state.view === "currencies") return renderCurrencies(page);
@@ -1096,6 +1291,8 @@
     if (state.view === "shippingCodBills") return renderShippingBillList(page,"codBill");
     if (state.view === "shippingFeeBills") return renderShippingBillList(page,"feeBill");
     if (state.view === "shippingReconciliation") return renderShippingReconciliation(page, state.reportId);
+    if (state.view === "finance") return renderFinance(page);
+    if (state.view === "notifications") return renderNotifications(page);
     if (state.view === "storefrontLayout") return renderStorefrontLayout(page);
     if (state.view === "homeSections") return renderHomeSections(page);
     if (state.view === "imageGallery") return renderGallery(page);
@@ -1115,11 +1312,17 @@
     if (state.view === "bundles") return renderBundles(page);
     if (state.view === "orders") return renderOrders(page);
     if (state.view === "manualOrder") return renderManualOrder(page);
+    if (state.view === "inventory") return renderInventory(page);
+    if (state.view === "inventoryReceipt") return renderInventoryReceipt(page, state.reportId);
     if (state.view === "returns") return renderReturns(page);
     if (state.view === "orderDetail") return renderOrderDetail(page, state.reportId);
     if (state.view === "checkoutRecovery") return renderCheckoutRecovery(page);
     if (state.view === "checkoutRecoveryDetail") return renderCheckoutRecoveryDetail(page, state.reportId);
     if (state.view === "users") return renderUsers(page);
+    if (state.view === "staff") return renderStaff(page);
+    if (state.view === "staffRoles") return renderStaffRoles(page);
+    if (state.view === "staffActivity") return renderStaffActivity(page);
+    if (state.view === "staffProfile") return renderStaffProfile(page);
     if (resources[state.view]) return renderResource(page, state.view);
     state.view = "overview";
     renderOverview(page);
@@ -1133,38 +1336,36 @@
     return rows;
   }
 
-  async function renderOverview(page) {
-    page.innerHTML = pageTitle("overview", "overviewSub");
-    const keys = ["products", "categories", "brands", "orders", "users"];
-    await Promise.all(keys.map(k => loadResource(k).catch(() => [])));
-    const products = state.rows.products?.length || 0;
-    const categories = state.rows.categories?.length || 0;
-    const orders = state.rows.orders?.length || 0;
-    const users = state.rows.users?.length || 0;
-    page.innerHTML += `
-      <div class="grid kpi-grid">
-        ${kpi("products", products, products ? "healthy" : "empty", "box")}
-        ${kpi("orders", orders, orders ? "healthy" : "empty", "cart")}
-        ${kpi("users", users, users ? "healthy" : "empty", "users")}
-        ${kpi("categories", categories, categories ? "healthy" : "needsSetup", "layers")}
-      </div>
-      <div class="grid two-col" style="margin-top:16px;">
-        <div class="card card-pad">
-          <h2>${t("quickSetup")}</h2>
-          <p class="muted">${t("quickSetupSub")}</p>
-          ${setupStep(1, "stepCategories", categories > 0)}
-          ${setupStep(2, "stepProducts", products > 0)}
-          ${setupStep(3, "stepContent", true)}
-        </div>
-        <div class="card card-pad">
-          <h2>${t("storeHealth")}</h2>
-          <div class="switch-row"><span>${t("currentWindow")}</span><span class="status-pill good">${t("healthy")}</span></div>
-          <div class="switch-row"><span>${t("emptyDb")}</span><span class="status-pill empty">${t("empty")}</span></div>
-          <div class="switch-row"><span>Docker</span><span class="status-pill good">Online</span></div>
-        </div>
-      </div>
-    `;
+  const dashboardModuleViews={orders:"orders",inventory:"inventory",finance:"finance",shipping:"shippingShipments",customers:"users",staff:"staff",catalog:"products",promotions:"discounts",notifications:"notifications"};
+  const dashboardLabels={pending:["Pending","قيد الانتظار"],confirmed:["Confirmed","مؤكد"],processing:["Processing","قيد التجهيز"],ready_to_ship:["Ready to ship","جاهز للشحن"],shipped:["Shipped","تم الشحن"],delivered:["Delivered","تم التوصيل"],cancelled:["Cancelled","ملغي"],available:["Available","متاح"],low_stock:["Low stock","مخزون منخفض"],out_of_stock:["Out of stock","نافد"],cash_on_delivery:["Cash on delivery","الدفع عند الاستلام"],unspecified:["Unspecified","غير محدد"]};
+  const dashboardLabel=value=>{const key=String(value||"unspecified").toLowerCase();const label=dashboardLabels[key];return label?ui(label[0],label[1]):String(value||ui("Unspecified","غير محدد")).replaceAll("_"," ");};
+  const dashboardNumber=value=>Number(value||0).toLocaleString(state.lang==="ar"?"ar-SA":"en-US",{maximumFractionDigits:2});
+  function dashboardPeriodControl(){return `<label class="dashboard-period"><span>${ui("Period","الفترة")}</span><select id="dashboardPeriod"><option value="7" ${state.dashboardDays===7?"selected":""}>${ui("Last 7 days","آخر 7 أيام")}</option><option value="30" ${state.dashboardDays===30?"selected":""}>${ui("Last 30 days","آخر 30 يومًا")}</option><option value="90" ${state.dashboardDays===90?"selected":""}>${ui("Last 90 days","آخر 90 يومًا")}</option></select></label>`;}
+  function dashboardMetric(label,value,detail="",tone="neutral"){return `<article class="dashboard-metric ${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong>${detail?`<small>${escapeHtml(detail)}</small>`:""}</article>`;}
+  function dashboardBars(rows=[],valueKey="value",moneyCurrency=""){const normalized=rows.filter(row=>Number(row?.[valueKey]||0)>=0).slice(0,8),max=Math.max(1,...normalized.map(row=>Number(row[valueKey]||0)));return normalized.length?`<div class="dashboard-bars">${normalized.map(row=>`<div class="dashboard-bar-row"><div><span>${escapeHtml((row.label_ar||row.label_en)?ui(row.label_en||row.label_ar,row.label_ar||row.label_en):dashboardLabel(row.label||row.key))}</span><b>${moneyCurrency?shippingMoney(row[valueKey],moneyCurrency):dashboardNumber(row[valueKey])}</b></div><div class="dashboard-bar-track"><i style="width:${Math.max(3,Number(row[valueKey]||0)/max*100)}%"></i></div></div>`).join("")}</div>`:`<div class="dashboard-empty">${ui("No data in this period","لا توجد بيانات في هذه الفترة")}</div>`;}
+  function dashboardTrend(rows=[]){const shown=rows.length>45?rows.filter((_,index)=>index%3===0||index===rows.length-1):rows,max=Math.max(1,...shown.map(row=>Number(row.revenue||row.orders||0)));return `<div class="dashboard-trend" role="img" aria-label="${ui("Sales trend","اتجاه المبيعات")}">${shown.map(row=>`<span title="${escapeHtml(row.label)} · ${shippingMoney(row.revenue||0,"SAR")}" style="height:${Math.max(5,Number(row.revenue||row.orders||0)/max*100)}%"></span>`).join("")}</div><div class="dashboard-trend-axis"><span>${escapeHtml(shown[0]?.label||"")}</span><span>${escapeHtml(shown.at(-1)?.label||"")}</span></div>`;}
+  function dashboardPanel(title,subtitle,content,module){return `<section class="dashboard-panel"><header><div><span class="section-kicker">${escapeHtml(module.toUpperCase())}</span><h2>${escapeHtml(title)}</h2>${subtitle?`<p>${escapeHtml(subtitle)}</p>`:""}</div>${dashboardModuleViews[module]?`<button class="btn" data-dashboard-view="${dashboardModuleViews[module]}">${ui("Open details","فتح التفاصيل")}</button>`:""}</header>${content}</section>`;}
+  function dashboardModuleMarkup(module,data){
+    if(module==="orders"){const s=data.summary||{};return dashboardPanel(ui("Sales and orders","المبيعات والطلبات"),ui("Revenue, order flow, and payment mix for the selected period.","الإيرادات وحركة الطلبات ووسائل الدفع خلال الفترة المحددة."),`<div class="dashboard-metrics">${dashboardMetric(ui("Revenue","الإيراد"),shippingMoney(s.revenue,s.currency))}${dashboardMetric(ui("Orders","الطلبات"),dashboardNumber(s.total))}${dashboardMetric(ui("Pending","قيد الانتظار"),dashboardNumber(s.pending),"","warning")}${dashboardMetric(ui("Delivered","تم التوصيل"),dashboardNumber(s.delivered),"","positive")}</div><div class="dashboard-chart-grid"><div><h3>${ui("Revenue trend","اتجاه الإيراد")}</h3>${dashboardTrend(data.trend||[])}</div><div><h3>${ui("Order status","حالات الطلبات")}</h3>${dashboardBars(data.statuses||[])}</div><div><h3>${ui("Payment methods","وسائل الدفع")}</h3>${dashboardBars(data.payment_methods||[])}</div></div>`,module);}
+    if(module==="inventory"){const s=data.summary||{};return dashboardPanel(ui("Inventory health","حالة المخزون"),ui("Tracked units, stock value, and items that need attention.","الوحدات المتتبعة وقيمة المخزون والبنود التي تحتاج متابعة."),`<div class="dashboard-metrics">${dashboardMetric(ui("Available units","الوحدات المتاحة"),dashboardNumber(s.available_units))}${dashboardMetric(ui("Stock value","قيمة المخزون"),shippingMoney(s.stock_value,"SAR"))}${dashboardMetric(ui("Low stock","مخزون منخفض"),dashboardNumber(s.low_stock),"","warning")}${dashboardMetric(ui("Out of stock","نافد المخزون"),dashboardNumber(s.out_of_stock),"","danger")}</div><div class="dashboard-chart-grid two"><div><h3>${ui("Stock status","حالة المخزون")}</h3>${dashboardBars(data.stock_status||[])}</div><div><h3>${ui("Receipt status","حالة الاستلامات")}</h3>${dashboardBars(data.receipts||[])}</div></div>`,module);}
+    if(module==="finance"){const s=data.summary||{},currency=s.currency||"SAR";return dashboardPanel(ui("Financial performance","الأداء المالي"),ui("Recognized revenue, costs, and contribution profit.","الإيرادات المعترف بها والتكاليف وربح المساهمة."),`<div class="dashboard-metrics">${dashboardMetric(ui("Net revenue","صافي الإيراد"),shippingMoney(Number(s.product_revenue||0)+Number(s.shipping_revenue||0),currency))}${dashboardMetric(ui("Contribution profit","ربح المساهمة"),shippingMoney(s.contribution_profit,currency),"",Number(s.contribution_profit||0)>=0?"positive":"danger")}${dashboardMetric(ui("COGS","تكلفة البضاعة"),shippingMoney(s.cogs,currency))}${dashboardMetric(ui("Discount cost","تكلفة الخصومات"),shippingMoney(Number(s.product_discounts||0)+Number(s.free_shipping_benefit||0)+Number(s.bundle_discount||0),currency),"","warning")}</div><div class="dashboard-chart-grid two"><div><h3>${ui("Revenue by payment method","الإيراد حسب وسيلة الدفع")}</h3>${dashboardBars(data.payments||[],"revenue",currency)}</div><div><h3>${ui("Data quality","جودة البيانات")}</h3>${dashboardBars(Object.entries(data.data_quality||{}).map(([label,value])=>({label,value})))}</div></div>`,module);}
+    if(module==="shipping"){const s=data.summary||{};return dashboardPanel(ui("Shipping operations","عمليات الشحن"),ui("Shipment status, providers, billing, and late deliveries.","حالات الشحن والشركات والفوترة والشحنات المتأخرة."),`<div class="dashboard-metrics">${dashboardMetric(ui("Shipments","الشحنات"),dashboardNumber(s.total||s.total_shipments))}${dashboardMetric(ui("Billed","مقفلة ماليًا"),dashboardNumber(s.billed_shipments))}${dashboardMetric(ui("Unbilled","غير مقفلة"),dashboardNumber(s.unbilled_shipments),"","warning")}${dashboardMetric(ui("Late","متأخرة"),dashboardNumber(data.late),"","danger")}</div><div class="dashboard-chart-grid two"><div><h3>${ui("Shipment status","حالات الشحنات")}</h3>${dashboardBars(data.statuses||[])}</div><div><h3>${ui("Shipping providers","شركات الشحن")}</h3>${dashboardBars(data.providers||[])}</div></div>`,module);}
+    if(module==="customers"){const s=data.summary||{};return dashboardPanel(ui("Customers","العملاء"),ui("Customer accounts and account health.","حسابات العملاء وحالتها."),`<div class="dashboard-metrics">${dashboardMetric(ui("Total customers","إجمالي العملاء"),dashboardNumber(s.total))}${dashboardMetric(ui("Active","نشط"),dashboardNumber(s.active),"","positive")}${dashboardMetric(ui("Verified","موثق"),dashboardNumber(s.verified))}${dashboardMetric(ui("Blocked","محظور"),dashboardNumber(s.blocked),"","danger")}</div>${dashboardBars(data.growth||[])}`,module);}
+    if(module==="staff"){const s=data.summary||{};return dashboardPanel(ui("Team access","فريق العمل"),ui("Staff accounts, roles, and recent activity.","حسابات الموظفين والأدوار وآخر الأنشطة."),`<div class="dashboard-metrics">${dashboardMetric(ui("Employees","الموظفون"),dashboardNumber(s.total))}${dashboardMetric(ui("Active","نشط"),dashboardNumber(s.active),"","positive")}${dashboardMetric(ui("Inactive","غير نشط"),dashboardNumber(s.inactive),"","warning")}${dashboardMetric(ui("Roles","الأدوار"),dashboardNumber(s.roles))}</div>${dashboardBars(data.roles||[])}`,module);}
+    if(module==="catalog"){const s=data.summary||{};return dashboardPanel(ui("Catalog performance","أداء الكتالوج"),ui("Catalog size and the products customers buy most.","حجم الكتالوج والمنتجات الأكثر مبيعًا."),`<div class="dashboard-metrics">${dashboardMetric(ui("Products","المنتجات"),dashboardNumber(s.products))}${dashboardMetric(ui("Active products","المنتجات النشطة"),dashboardNumber(s.active),"","positive")}${dashboardMetric(ui("Categories","التصنيفات"),dashboardNumber(s.categories))}${dashboardMetric(ui("Brands","العلامات التجارية"),dashboardNumber(s.brands))}</div><h3>${ui("Top-selling products","المنتجات الأكثر مبيعًا")}</h3>${dashboardBars(data.top_products||[])}`,module);}
+    return "";
   }
+  async function loadDashboard(module=""){const data=await api(`/api/admin/dashboard/overview?days=${state.dashboardDays}${module?`&module=${encodeURIComponent(module)}`:""}`);state.navigation=data.navigation||state.navigation;return data;}
+  function bindDashboard(page,rerender){page.querySelector("#dashboardPeriod")?.addEventListener("change",event=>{state.dashboardDays=Number(event.target.value||30);rerender();});page.querySelectorAll("[data-dashboard-view]").forEach(button=>button.onclick=()=>location.hash=button.dataset.dashboardView);}
+  async function renderOverview(page) {
+    page.innerHTML=pageTitle("overview","overviewSub",dashboardPeriodControl())+`<div class="dashboard-loading"><span class="spinner"></span>${ui("Preparing your dashboard...","جاري تجهيز لوحة التحكم...")}</div>`;
+    const data=await loadDashboard();
+    const preferred=["orders","finance","inventory","shipping","catalog","customers","staff"];
+    const markup=preferred.filter(key=>data.modules?.[key]).map(key=>dashboardModuleMarkup(key,data.modules[key])).join("");
+    page.innerHTML=pageTitle("overview","overviewSub",dashboardPeriodControl())+(markup||`<div class="card access-denied"><h2>${ui("No dashboard modules are assigned","لا توجد وحدات لوحة تحكم مسندة")}</h2><p>${ui("Ask an administrator to review this account's permissions.","اطلب من المدير مراجعة صلاحيات هذا الحساب.")}</p></div>`);
+    bindDashboard(page,()=>renderOverview(page));
+  }
+  async function renderModuleOverview(page,module){const key=module==="sales"?"orders":module==="user"?"customers":module;page.innerHTML=pageTitle(`${module}Overview`,"",dashboardPeriodControl())+`<div class="dashboard-loading"><span class="spinner"></span></div>`;const data=await loadDashboard(key);page.innerHTML=pageTitle(`${module}Overview`,"",dashboardPeriodControl())+(data.modules?.[key]?dashboardModuleMarkup(key,data.modules[key]):`<div class="card access-denied"><h2>${ui("No data is available for this module","لا توجد بيانات متاحة لهذا القسم")}</h2></div>`);bindDashboard(page,()=>renderModuleOverview(page,module));}
 
   function pageTitle(titleKey, subKey, action = "") {
     return `
@@ -1224,22 +1425,93 @@
     ["use_wishlist", "Use wishlist", "استخدام المفضلة"]
   ];
 
+  function personAvatar(person = {}, className = "") {
+    const name = String(person.name || person.full_name || person.email || "U").trim();
+    const initial = escapeHtml(name.charAt(0).toUpperCase() || "U");
+    const image = String(person.avatar_url || "").trim();
+    return `<span class="person-avatar ${className}">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" onerror="this.remove()"/>` : initial}</span>`;
+  }
+
+  function avatarUploadField(person = {}) {
+    return `<div class="avatar-upload" data-avatar-upload>
+      ${personAvatar(person, "avatar-upload-preview")}
+      <div class="avatar-upload-copy"><strong>${ui("Profile photo", "الصورة الشخصية")}</strong><small>${ui("PNG, JPG, WebP, GIF or AVIF. Maximum 5 MB.", "PNG أو JPG أو WebP أو GIF أو AVIF بحد أقصى 5 ميجابايت.")}</small><div class="avatar-upload-actions"><label class="btn">${i("upload")}${ui("Choose image", "اختيار صورة")}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" data-avatar-file hidden /></label><button class="btn" type="button" data-remove-avatar ${person.avatar_url ? "" : "hidden"}>${i("trash")}${ui("Remove", "حذف")}</button></div><small class="avatar-upload-status" data-avatar-status></small></div>
+      <input type="hidden" name="avatar_url" value="${escapeHtml(person.avatar_url || "")}" data-avatar-value />
+    </div>`;
+  }
+
+  function bindAvatarUploader(root, person = {}) {
+    const field = root?.querySelector("[data-avatar-upload]");
+    if (!field) return;
+    const fileInput = field.querySelector("[data-avatar-file]");
+    const valueInput = field.querySelector("[data-avatar-value]");
+    const preview = field.querySelector(".avatar-upload-preview");
+    const removeButton = field.querySelector("[data-remove-avatar]");
+    const status = field.querySelector("[data-avatar-status]");
+    const initial = escapeHtml(String(person.name || person.full_name || person.email || "U").trim().charAt(0).toUpperCase() || "U");
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+        fileInput.value = "";
+        status.textContent = ui("Choose a supported image under 5 MB.", "اختر صورة مدعومة أقل من 5 ميجابايت.");
+        status.classList.add("is-error");
+        return;
+      }
+      status.classList.remove("is-error");
+      status.textContent = ui("Uploading...", "جاري الرفع...");
+      fileInput.disabled = true;
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const result = await api("/api/admin/profile-images", { method:"POST", body:form });
+        valueInput.value = result.url;
+        preview.innerHTML = `<img src="${escapeHtml(result.url)}" alt=""/>`;
+        removeButton.hidden = false;
+        status.textContent = ui("Ready to save", "جاهزة للحفظ");
+      } catch (error) {
+        status.textContent = error.message;
+        status.classList.add("is-error");
+      } finally {
+        fileInput.disabled = false;
+        fileInput.value = "";
+      }
+    });
+    removeButton.addEventListener("click", () => {
+      valueInput.value = "";
+      preview.innerHTML = initial;
+      removeButton.hidden = true;
+      status.classList.remove("is-error");
+      status.textContent = ui("Photo will be removed after saving.", "سيتم حذف الصورة من الحساب بعد الحفظ.");
+    });
+  }
+
   function openUserEditor(user = {}) {
     const isEdit = Boolean(user.id);
     const permissions = new Set(Array.isArray(user.permissions) ? user.permissions : userPermissionOptions.map(([key]) => key));
     document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop user-editor-backdrop"><form class="modal user-editor-modal" id="userEditorForm"><div class="modal-head"><div><span class="section-kicker">ACCOUNT ACCESS</span><h2>${isEdit?ui("Edit user account", "تعديل حساب المستخدم"):ui("Create user account", "إنشاء حساب مستخدم")}</h2><p>${ui("Set login details, account type, and exact storefront permissions.", "حدد بيانات الدخول ونوع الحساب وصلاحياته داخل المتجر.")}</p></div><button class="btn icon-btn" type="button" data-close-user-editor aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><div class="user-editor-layout"><section><div class="studio-card-head"><span class="section-kicker">01</span><div><h3>${ui("Account details", "بيانات الحساب")}</h3><p>${ui("These details are used to sign in and identify the customer.", "تُستخدم هذه البيانات لتسجيل الدخول والتعرف على العميل.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Full name", "الاسم الكامل")}</label><input name="name" value="${escapeHtml(user.name||user.full_name||"")}" required minlength="2" autocomplete="name" /></div><div class="field"><label>${ui("Email", "البريد الإلكتروني")}</label><input name="email" type="email" value="${escapeHtml(user.email||"")}" required autocomplete="email" /></div><div class="field"><label>${ui("Phone", "رقم الجوال")}</label><input name="phone" type="tel" value="${escapeHtml(user.phone||"")}" autocomplete="tel" /></div><div class="field"><label>${isEdit?ui("New password", "كلمة مرور جديدة"):ui("Password", "كلمة المرور")}</label><input name="password" type="password" minlength="8" ${isEdit?"":"required"} autocomplete="new-password" placeholder="${isEdit?ui("Leave empty to keep current password", "اتركها فارغة للاحتفاظ بالحالية"):ui("At least 8 characters", "8 أحرف على الأقل")}" /></div><div class="field"><label>${ui("Account type", "نوع الحساب")}</label><select name="role">${[["customer",ui("Customer", "عميل")],["member",ui("Member", "مستخدم عادي")],["vip_customer",ui("VIP customer", "عميل VIP")],["wholesale",ui("Wholesale", "عميل جملة")]].map(([value,label])=>`<option value="${value}" ${String(user.role||"customer")===value?"selected":""}>${label}</option>`).join("")}</select></div><div class="field"><label>${ui("Account status", "حالة الحساب")}</label><select name="status"><option value="active" ${userIsActive(user)?"selected":""}>${ui("Active", "نشط")}</option><option value="inactive" ${String(user.status).toLowerCase()==="inactive"?"selected":""}>${ui("Inactive", "غير نشط")}</option><option value="blocked" ${String(user.status).toLowerCase()==="blocked"?"selected":""}>${ui("Blocked", "محظور")}</option></select></div></div><div class="editor-toggle-row user-email-verification"><div><strong>${ui("Email verified", "البريد موثق")}</strong><small>${ui("Mark the email as confirmed by the store team.", "تأكيد أن البريد تمت مراجعته بواسطة فريق المتجر.")}</small></div><input type="hidden" name="email_verified" value="${user.email_verified===true}" />${switchButton({field:"email_verified",value:user.email_verified===true,label:false})}</div></section><section><div class="studio-card-head"><span class="section-kicker">02</span><div><h3>${ui("Storefront permissions", "صلاحيات واجهة المتجر")}</h3><p>${ui("Turn each capability on or off for this account.", "فعّل أو أوقف كل صلاحية لهذا الحساب بشكل مستقل.")}</p></div></div><div class="user-permissions-grid">${userPermissionOptions.map(([key,en,ar])=>`<div class="field editor-toggle-row" data-user-permission="${key}"><div><strong>${ui(en,ar)}</strong><small>${key.replaceAll("_"," ")}</small></div><input type="hidden" name="permission_${key}" value="${permissions.has(key)}" />${switchButton({field:`permission_${key}`,value:permissions.has(key),label:false})}</div>`).join("")}</div></section></div></div><div class="modal-foot"><button class="btn" type="button" data-close-user-editor>${t("cancel")}</button><button class="btn primary" type="submit">${i("check")}${isEdit?ui("Save changes", "حفظ التعديلات"):ui("Create account", "إنشاء الحساب")}</button></div></form></div>`);
     const backdrop = document.querySelector(".user-editor-backdrop");
     const close = () => backdrop?.remove();
+    backdrop.querySelector(".user-editor-layout > section .studio-card-head")?.insertAdjacentHTML("afterend", avatarUploadField(user));
     backdrop.querySelectorAll("[data-close-user-editor]").forEach(button => button.onclick = close);
     backdrop.querySelectorAll("[data-form-switch]").forEach(button => button.onclick = () => updateFormSwitch(button));
+    bindAvatarUploader(backdrop, user);
     backdrop.querySelector("#userEditorForm").onsubmit = async event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(event.currentTarget));
       const body = { name:data.name, email:data.email, phone:data.phone, role:data.role, status:data.status, email_verified:data.email_verified === "true", permissions:userPermissionOptions.filter(([key])=>data[`permission_${key}`] === "true").map(([key])=>key) };
+      body.avatar_url = data.avatar_url;
       if (data.password) body.password = data.password;
       const button=event.currentTarget.querySelector('[type="submit"]'); button.disabled=true;
       try { await api(isEdit?`/api/admin/users/${user.id}`:"/api/admin/users", { method:isEdit?"PUT":"POST", body:JSON.stringify(body) }); close(); toast(isEdit?ui("User updated", "تم تحديث المستخدم"):ui("Account created", "تم إنشاء الحساب")); renderUsers(document.getElementById("page")); } catch(error) { toast(error.message,"error"); button.disabled=false; }
     };
+  }
+
+  async function openUserAddresses(user = {}) {
+    const payload = await api(`/api/admin/users/${user.id}/addresses`);
+    const addresses = payload.addresses || [];
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop user-addresses-backdrop"><section class="modal user-addresses-modal"><div class="modal-head"><div><span class="section-kicker">ADDRESS BOOK</span><h2>${ui("Customer addresses", "عناوين العميل")}</h2><p>${escapeHtml(user.name||user.full_name||user.email||`#${user.id}`)} · ${addresses.length} ${ui("saved addresses", "عنوان محفوظ")}</p></div><button class="btn icon-btn" type="button" data-close-user-addresses aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><div class="admin-address-list">${addresses.length?addresses.map(address=>`<article class="admin-address-card ${address.is_default?"is-default":""}"><header><span>${i("map")}</span><div><strong>${escapeHtml(address.label||ui("Saved address","عنوان محفوظ"))}</strong><small>${address.is_default?ui("Default address","العنوان الافتراضي"):address.type||"home"}</small></div>${address.is_default?`<b>${ui("Default","افتراضي")}</b>`:""}</header><p>${escapeHtml([address.city,address.district,address.street,address.building_number].filter(Boolean).join(" · "))}</p><dl><div><dt>${ui("Short address","الرمز المختصر")}</dt><dd><bdi>${escapeHtml(address.short_address||"-")}</bdi></dd></div><div><dt>${ui("Recipient","المستلم")}</dt><dd>${escapeHtml(address.full_name||[address.first_name,address.last_name].filter(Boolean).join(" "))}</dd></div><div><dt>${ui("Phone","الجوال")}</dt><dd><bdi>${escapeHtml(address.phone||"-")}</bdi></dd></div></dl></article>`).join(""):`<div class="empty-state"><div><h2>${ui("No saved addresses","لا توجد عناوين محفوظة")}</h2><p class="muted">${ui("The first complete order address will be synced automatically.","سيتم مزامنة أول عنوان مكتمل من الطلبات تلقائيًا.")}</p></div></div>`}</div></div><div class="modal-foot"><button class="btn primary" type="button" data-close-user-addresses>${t("close")}</button></div></section></div>`);
+    const backdrop=document.querySelector(".user-addresses-backdrop");const close=()=>backdrop?.remove();backdrop.querySelectorAll("[data-close-user-addresses]").forEach(button=>button.onclick=close);
   }
 
   async function renderUsers(page) {
@@ -1262,15 +1534,118 @@
         return (!q || haystack.includes(q)) && (!status || currentStatus === status);
       });
       document.getElementById("userMatchCount").textContent = `${rows.length} ${ui("users", "مستخدم")}`;
-      document.getElementById("usersTableArea").innerHTML = rows.length ? `<div class="table-scroll"><table class="data-table users-table"><thead><tr><th>${ui("User", "المستخدم")}</th><th>${ui("Contact", "التواصل")}</th><th>${ui("Orders", "الطلبات")}</th><th>${ui("Total spent", "إجمالي المشتريات")}</th><th>${ui("Joined", "تاريخ الانضمام")}</th><th>${ui("Status", "الحالة")}</th><th>${ui("Access", "الدخول")}</th><th></th></tr></thead><tbody>${rows.map(user => { const active=userIsActive(user); const name=user.name||user.full_name||user.email||`#${user.id}`; return `<tr><td><div class="user-identity"><span>${escapeHtml(String(name).trim().charAt(0).toUpperCase() || "U")}</span><div><strong>${escapeHtml(name)}</strong><small>#${escapeHtml(user.id)} · ${escapeHtml(user.role || "customer")}</small></div></div></td><td><strong>${escapeHtml(user.email || "-")}</strong><small>${escapeHtml(user.phone || "-")}</small></td><td><strong>${Number(user.order_count || 0)}</strong><small>${Number(user.completed_order_count || 0)} ${ui("completed", "مكتمل")}</small></td><td><strong>${shippingMoney(user.total_spent || 0,"SAR")}</strong><small>${user.last_order_at ? `${ui("Last order", "آخر طلب")}: ${formatDateTime(user.last_order_at)}` : ui("No orders", "لا توجد طلبات")}</small></td><td><strong>${formatDateTime(user.created_at || user.createdAt)}</strong></td><td><span class="status-pill ${active ? "good" : String(user.status).toLowerCase() === "blocked" ? "bad" : "empty"}">${userStatusLabel(user)}</span></td><td><label class="user-access-toggle"><span>${active ? ui("Active", "نشط") : ui("Inactive", "غير نشط")}</span><span data-user-access="${user.id}">${switchButton({field:`user_active_${user.id}`,value:active,label:false})}</span></label></td><td><button class="btn icon-btn" type="button" data-edit-user="${user.id}" title="${t("edit")}">${i("edit")}</button></td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty-state"><div><h2>${ui("No matching users", "لا يوجد مستخدمون مطابقون")}</h2><p class="muted">${ui("Create the first account manually from the Add user button.", "أنشئ أول حساب يدويًا من زر إضافة مستخدم.")}</p></div></div>`;
+      document.getElementById("usersTableArea").innerHTML = rows.length ? `<div class="table-scroll"><table class="data-table users-table"><thead><tr><th>${ui("User", "المستخدم")}</th><th>${ui("Contact", "التواصل")}</th><th>${ui("Orders", "الطلبات")}</th><th>${ui("Addresses", "العناوين")}</th><th>${ui("Total spent", "إجمالي المشتريات")}</th><th>${ui("Joined", "تاريخ الانضمام")}</th><th>${ui("Status", "الحالة")}</th><th>${ui("Access", "الدخول")}</th><th></th></tr></thead><tbody>${rows.map(user => { const active=userIsActive(user); const name=user.name||user.full_name||user.email||`#${user.id}`; return `<tr><td><div class="user-identity"><span>${escapeHtml(String(name).trim().charAt(0).toUpperCase() || "U")}</span><div><strong>${escapeHtml(name)}</strong><small>#${escapeHtml(user.id)} · ${escapeHtml(user.role || "customer")}</small></div></div></td><td><strong>${escapeHtml(user.email || "-")}</strong><small>${escapeHtml(user.phone || "-")}</small></td><td><strong>${Number(user.order_count || 0)}</strong><small>${Number(user.completed_order_count || 0)} ${ui("completed", "مكتمل")}</small></td><td><button class="btn user-address-book-btn" type="button" data-user-addresses="${user.id}">${i("map")}${Number(user.address_count||0)}</button></td><td><strong>${shippingMoney(user.total_spent || 0,"SAR")}</strong><small>${user.last_order_at ? `${ui("Last order", "آخر طلب")}: ${formatDateTime(user.last_order_at)}` : ui("No orders", "لا توجد طلبات")}</small></td><td><strong>${formatDateTime(user.created_at || user.createdAt)}</strong></td><td><span class="status-pill ${active ? "good" : String(user.status).toLowerCase() === "blocked" ? "bad" : "empty"}">${userStatusLabel(user)}</span></td><td><label class="user-access-toggle"><span>${active ? ui("Active", "نشط") : ui("Inactive", "غير نشط")}</span><span data-user-access="${user.id}">${switchButton({field:`user_active_${user.id}`,value:active,label:false})}</span></label></td><td><button class="btn icon-btn" type="button" data-edit-user="${user.id}" title="${t("edit")}">${i("edit")}</button></td></tr>`; }).join("")}</tbody></table></div>` : `<div class="empty-state"><div><h2>${ui("No matching users", "لا يوجد مستخدمون مطابقون")}</h2><p class="muted">${ui("Create the first account manually from the Add user button.", "أنشئ أول حساب يدويًا من زر إضافة مستخدم.")}</p></div></div>`;
+      document.querySelectorAll("#usersTableArea .user-identity > span").forEach((avatar, index) => { if (rows[index]?.avatar_url) { avatar.classList.add("person-avatar"); avatar.innerHTML=`<img src="${escapeHtml(rows[index].avatar_url)}" alt="" loading="lazy" onerror="this.remove()"/>`; } });
       document.querySelectorAll("[data-user-access]").forEach(wrapper => wrapper.querySelector("[data-form-switch]").onclick = async event => { const button=event.currentTarget; const next=button.dataset.switchValue !== "true"; button.disabled=true; try { await api(`/api/admin/users/${wrapper.dataset.userAccess}/status`, { method:"PATCH", body:JSON.stringify({ status:next?"active":"inactive" }) }); toast(next?ui("User activated", "تم تفعيل المستخدم"):ui("User deactivated", "تم إيقاف المستخدم")); renderUsers(document.getElementById("page")); } catch(error) { toast(error.message,"error"); button.disabled=false; } });
       document.querySelectorAll("[data-edit-user]").forEach(button => button.onclick = () => openUserEditor(users.find(user => String(user.id) === button.dataset.editUser) || {}));
+      document.querySelectorAll("[data-user-addresses]").forEach(button => button.onclick = () => openUserAddresses(users.find(user => String(user.id) === button.dataset.userAddresses) || {}).catch(error=>toast(error.message,"error")));
     };
     document.getElementById("userSearch").oninput = draw;
     document.getElementById("userStatusFilter").onchange = draw;
     document.getElementById("refreshUsers").onclick = () => renderUsers(page);
     document.getElementById("addUser").onclick = () => openUserEditor();
     draw();
+  }
+
+  const staffStatusLabel = status => ({ active:ui("Active","نشط"), inactive:ui("Inactive","غير نشط"), blocked:ui("Blocked","محظور") }[status] || status);
+  const staffPermissionLabel = permission => ui(permission.label_en, permission.label_ar);
+  const staffRoleLabel = role => state.lang === "ar" ? (role?.name_ar || role?.name_en) : (role?.name_en || role?.name_ar);
+
+  function staffPermissionGroups(permissions = []) {
+    return permissions.reduce((groups, permission) => {
+      const key = permission.module || permission.group || "other";
+      (groups[key] ||= []).push(permission);
+      return groups;
+    }, {});
+  }
+
+  function openStaffEditor(staff = {}, roles = [], permissions = []) {
+    const editing = Boolean(staff.id);
+    const overrides = staff.permission_overrides || { allow:[], deny:[] };
+    const groups = staffPermissionGroups(permissions);
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop staff-editor-backdrop"><form class="modal staff-editor-modal" id="staffEditorForm"><div class="modal-head"><div><span class="section-kicker">TEAM ACCESS</span><h2>${editing?ui("Edit staff account","تعديل حساب الموظف"):ui("Add staff member","إضافة موظف")}</h2><p>${ui("Assign a role, then add only the personal exceptions this account needs.","اختر دورًا ثم أضف الاستثناءات الشخصية التي يحتاجها هذا الحساب فقط.")}</p></div><button class="btn icon-btn" type="button" data-close-staff>${i("x")}</button></div><div class="modal-body"><div class="staff-editor-grid"><section><h3>${ui("Account details","بيانات الحساب")}</h3><div class="form-grid">
+      <div class="field"><label>${ui("Full name","الاسم الكامل")} *</label><input name="name" required value="${escapeHtml(staff.name||"")}" /></div>
+      <div class="field"><label>${ui("Work email","البريد الوظيفي")} *</label><input name="email" type="email" required value="${escapeHtml(staff.email||"")}" /></div>
+      <div class="field"><label>${ui("Phone","رقم الجوال")}</label><input name="phone" value="${escapeHtml(staff.phone||"")}" /></div>
+      <div class="field"><label>${ui("Job title","المسمى الوظيفي")}</label><input name="job_title" value="${escapeHtml(staff.job_title||"")}" /></div>
+      <div class="field"><label>${ui("Role","الدور")} *</label><select name="role_id" required>${roles.filter(role=>role.is_active!==false).map(role=>`<option value="${role.id}" ${Number(staff.role_id)===Number(role.id)?"selected":""}>${escapeHtml(staffRoleLabel(role))}</option>`).join("")}</select></div>
+      <div class="field"><label>${ui("Status","الحالة")}</label><select name="status"><option value="active" ${staff.status!=="inactive"&&staff.status!=="blocked"?"selected":""}>${ui("Active","نشط")}</option><option value="inactive" ${staff.status==="inactive"?"selected":""}>${ui("Inactive","غير نشط")}</option><option value="blocked" ${staff.status==="blocked"?"selected":""}>${ui("Blocked","محظور")}</option></select></div>
+      <div class="field"><label>${editing?ui("New password","كلمة مرور جديدة"):ui("Temporary password","كلمة المرور المؤقتة")} *</label><input name="password" type="password" minlength="8" ${editing?"":"required"} autocomplete="new-password" /></div>
+      <div class="field"><label>${ui("Notification email","بريد الإشعارات")}</label><input name="notification_email" type="email" value="${escapeHtml(staff.notification_email||staff.email||"")}" /></div>
+    </div><div class="staff-pref-row"><label><input type="checkbox" name="dashboard_notifications" ${staff.notification_preferences?.dashboard!==false?"checked":""}/> ${ui("Dashboard notifications","إشعارات الداشبورد")}</label><label><input type="checkbox" name="email_notifications" ${staff.notification_preferences?.email===true?"checked":""}/> ${ui("Email notifications","إشعارات البريد")}</label></div></section>
+    <section><div class="staff-section-head"><div><h3>${ui("Personal permission overrides","استثناءات الصلاحيات الشخصية")}</h3><p>${ui("Inherit keeps the role setting. Allow or deny affects this employee only.","الوراثة تتبع إعداد الدور، والسماح أو المنع يؤثر على هذا الموظف فقط.")}</p></div></div><div class="permission-override-list">${Object.entries(groups).map(([group,rows])=>`<div class="permission-group"><h4>${escapeHtml(group.replaceAll("_"," "))}</h4>${rows.map(permission=>{const mode=(overrides.allow||[]).includes(permission.key)?"allow":(overrides.deny||[]).includes(permission.key)?"deny":"inherit";return `<label><span><strong>${escapeHtml(staffPermissionLabel(permission))}</strong><small>${escapeHtml(permission.key)}</small></span><select name="permission_${escapeHtml(permission.key)}"><option value="inherit" ${mode==="inherit"?"selected":""}>${ui("Inherit","وراثة")}</option><option value="allow" ${mode==="allow"?"selected":""}>${ui("Allow","سماح")}</option><option value="deny" ${mode==="deny"?"selected":""}>${ui("Deny","منع")}</option></select></label>`;}).join("")}</div>`).join("")}</div></section></div></div><div class="modal-foot"><button class="btn" type="button" data-close-staff>${t("cancel")}</button><button class="btn primary" type="submit">${i("check")}${editing?ui("Save changes","حفظ التعديلات"):ui("Create staff account","إنشاء حساب الموظف")}</button></div></form></div>`);
+    const backdrop=document.querySelector(".staff-editor-backdrop");
+    const close=()=>backdrop?.remove();
+    backdrop.querySelector(".staff-editor-grid > section h3")?.insertAdjacentHTML("afterend", avatarUploadField(staff));
+    backdrop.querySelectorAll("[data-close-staff]").forEach(button=>button.onclick=close);
+    bindAvatarUploader(backdrop, staff);
+    document.getElementById("staffEditorForm").onsubmit=async event=>{
+      event.preventDefault();
+      const data=Object.fromEntries(new FormData(event.currentTarget));
+      const allow=[],deny=[];
+      permissions.forEach(permission=>{if(data[`permission_${permission.key}`]==="allow")allow.push(permission.key);if(data[`permission_${permission.key}`]==="deny")deny.push(permission.key);});
+      const body={name:data.name,email:data.email,phone:data.phone,avatar_url:data.avatar_url,job_title:data.job_title,role_id:Number(data.role_id),status:data.status,notification_email:data.notification_email,notification_preferences:{dashboard:data.dashboard_notifications==="on",email:data.email_notifications==="on"},permission_overrides:{allow,deny}};
+      if(data.password)body.password=data.password;
+      const submit=event.currentTarget.querySelector('[type="submit"]');
+      submit.disabled=true;
+      try{
+        await api(editing?`/api/admin/staff/${staff.id}`:"/api/admin/staff",{method:editing?"PUT":"POST",body:JSON.stringify(body)});
+        close();toast(editing?ui("Staff account updated","تم تحديث حساب الموظف"):ui("Staff account created","تم إنشاء حساب الموظف"));renderStaff(document.getElementById("page"));
+      }catch(error){toast(error.message,"error");submit.disabled=false;}
+    };
+  }
+
+  async function renderStaff(page) {
+    const payload=await api("/api/admin/staff"); const staff=payload.staff||[],roles=payload.roles||[],permissions=payload.permissions||[];
+    page.innerHTML=pageTitle("staff","staffSub",can("staff.manage")?`<button class="btn primary" id="addStaff">${i("plus")}${ui("Add staff member","إضافة موظف")}</button>`:"");
+    const active=staff.filter(row=>row.status==="active").length, online=staff.filter(row=>row.last_login_at&&Date.now()-new Date(row.last_login_at).getTime()<86400000).length;
+    page.innerHTML+=`<section class="staff-kpis"><article><span>${ui("Team accounts","حسابات الفريق")}</span><strong>${staff.length}</strong></article><article><span>${ui("Active","نشط")}</span><strong>${active}</strong></article><article><span>${ui("Roles in use","الأدوار المستخدمة")}</span><strong>${new Set(staff.map(row=>row.role_id)).size}</strong></article><article><span>${ui("Signed in today","دخل اليوم")}</span><strong>${online}</strong></article></section><section class="card staff-table-card"><div class="staff-table-head"><div><span class="section-kicker">TEAM DIRECTORY</span><h2>${ui("Employees and access","الموظفون والصلاحيات")}</h2></div><div class="staff-filters"><input id="staffSearch" type="search" placeholder="${ui("Search name, email or title","بحث بالاسم أو البريد أو المسمى")}"/><select id="staffRoleFilter"><option value="">${ui("All roles","كل الأدوار")}</option>${roles.map(role=>`<option value="${role.id}">${escapeHtml(staffRoleLabel(role))}</option>`).join("")}</select><select id="staffStatusFilter"><option value="">${ui("All statuses","كل الحالات")}</option><option value="active">${ui("Active","نشط")}</option><option value="inactive">${ui("Inactive","غير نشط")}</option><option value="blocked">${ui("Blocked","محظور")}</option></select></div></div><div id="staffRows"></div></section>`;
+    const draw=()=>{const q=document.getElementById("staffSearch").value.trim().toLowerCase(),role=document.getElementById("staffRoleFilter").value,status=document.getElementById("staffStatusFilter").value;const rows=staff.filter(row=>(!q||[row.name,row.email,row.phone,row.job_title].join(" ").toLowerCase().includes(q))&&(!role||Number(row.role_id)===Number(role))&&(!status||row.status===status));document.getElementById("staffRows").innerHTML=rows.length?`<div class="table-scroll"><table class="data-table staff-table"><thead><tr><th>${ui("Employee","الموظف")}</th><th>${ui("Role","الدور")}</th><th>${ui("Last login","آخر دخول")}</th><th>${ui("Notifications","الإشعارات")}</th><th>${ui("Status","الحالة")}</th><th></th></tr></thead><tbody>${rows.map(row=>`<tr><td><div class="staff-identity"><span>${escapeHtml(String(row.name||"S").charAt(0).toUpperCase())}</span><div><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.job_title||ui("No job title","بدون مسمى"))} · ${escapeHtml(row.email)}</small></div></div></td><td><strong>${escapeHtml(staffRoleLabel(row.role)||row.role_code||"-")}</strong><small>${(row.effective_permissions||[]).includes("*")?ui("Full access","صلاحية كاملة"):`${(row.effective_permissions||[]).length} ${ui("permissions","صلاحية")}`}</small></td><td><strong>${formatDateTime(row.last_login_at)}</strong><small>${escapeHtml(row.last_login_ip||"")}</small></td><td><span class="status-pill ${row.notification_preferences?.email?"good":"empty"}">${row.notification_preferences?.email?ui("Email on","البريد مفعل"):ui("Dashboard only","الداشبورد فقط")}</span></td><td><span class="status-pill ${row.status==="active"?"good":row.status==="blocked"?"bad":"empty"}">${staffStatusLabel(row.status)}</span></td><td><div class="row-actions">${can("staff.manage")?`<button class="btn icon-btn" data-edit-staff="${row.id}" title="${t("edit")}">${i("edit")}</button><button class="btn" data-toggle-staff="${row.id}" data-current="${row.status}">${row.status==="active"?ui("Disable","إيقاف"):ui("Activate","تفعيل")}</button>`:""}</div></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state">${ui("No staff accounts match these filters.","لا توجد حسابات موظفين مطابقة.")}</div>`;document.querySelectorAll("[data-edit-staff]").forEach(button=>button.onclick=()=>openStaffEditor(staff.find(row=>String(row.id)===button.dataset.editStaff),roles,permissions));document.querySelectorAll("[data-toggle-staff]").forEach(button=>button.onclick=async()=>{const next=button.dataset.current==="active"?"inactive":"active";button.disabled=true;try{await api(`/api/admin/staff/${button.dataset.toggleStaff}/status`,{method:"PATCH",body:JSON.stringify({status:next})});toast(ui("Account status updated","تم تحديث حالة الحساب"));renderStaff(page);}catch(error){toast(error.message,"error");button.disabled=false;}});};
+    const drawWithAvatars=()=>{
+      draw();
+      const q=document.getElementById("staffSearch").value.trim().toLowerCase(),role=document.getElementById("staffRoleFilter").value,status=document.getElementById("staffStatusFilter").value;
+      const visible=staff.filter(row=>(!q||[row.name,row.email,row.phone,row.job_title].join(" ").toLowerCase().includes(q))&&(!role||Number(row.role_id)===Number(role))&&(!status||row.status===status));
+      document.querySelectorAll("#staffRows .staff-identity > span").forEach((avatar,index)=>{if(visible[index]?.avatar_url){avatar.classList.add("person-avatar");avatar.innerHTML=`<img src="${escapeHtml(visible[index].avatar_url)}" alt="" loading="lazy" onerror="this.remove()"/>`;}});
+    };
+    ["staffSearch","staffRoleFilter","staffStatusFilter"].forEach(id=>document.getElementById(id).addEventListener(id==="staffSearch"?"input":"change",drawWithAvatars));document.getElementById("addStaff")?.addEventListener("click",()=>openStaffEditor({},roles,permissions));drawWithAvatars();
+  }
+
+  function openStaffRoleEditor(role = {}, permissions = []) {
+    const editing=Boolean(role.id), selected=new Set(role.permissions||[]), groups=staffPermissionGroups(permissions);
+    document.body.insertAdjacentHTML("beforeend",`<div class="modal-backdrop staff-role-backdrop"><form class="modal staff-role-modal" id="staffRoleForm"><div class="modal-head"><div><span class="section-kicker">ROLE BUILDER</span><h2>${editing?ui("Edit role","تعديل الدور"):ui("Create role","إنشاء دور")}</h2><p>${ui("Permissions are grouped by the part of the business they control.","الصلاحيات مجمعة حسب الجزء الذي تتحكم فيه داخل العمل.")}</p></div><button class="btn icon-btn" type="button" data-close-role>${i("x")}</button></div><div class="modal-body"><div class="form-grid"><div class="field"><label>${ui("English name","الاسم بالإنجليزية")} *</label><input name="name_en" required value="${escapeHtml(role.name_en||"")}"/></div><div class="field"><label>${ui("Arabic name","الاسم بالعربية")} *</label><input name="name_ar" required value="${escapeHtml(role.name_ar||"")}"/></div><div class="field full"><label>${ui("Description","الوصف")}</label><input name="description_ar" value="${escapeHtml(role.description_ar||"")}"/></div></div><div class="role-permission-grid">${Object.entries(groups).map(([group,rows])=>`<section><header><strong>${escapeHtml(group.replaceAll("_"," "))}</strong><button class="text-button" type="button" data-select-permission-group="${group}">${ui("Select all","اختيار الكل")}</button></header>${rows.map(permission=>`<label><span><b>${escapeHtml(staffPermissionLabel(permission))}</b><small>${escapeHtml(permission.key)}</small></span><input type="checkbox" name="permission" value="${escapeHtml(permission.key)}" ${selected.has("*")||selected.has(permission.key)?"checked":""}/></label>`).join("")}</section>`).join("")}</div></div><div class="modal-foot"><button class="btn" type="button" data-close-role>${t("cancel")}</button><button class="btn primary" type="submit">${i("check")}${t("save")}</button></div></form></div>`);
+    const backdrop=document.querySelector(".staff-role-backdrop"),close=()=>backdrop?.remove();backdrop.querySelectorAll("[data-close-role]").forEach(button=>button.onclick=close);backdrop.querySelectorAll("[data-select-permission-group]").forEach(button=>button.onclick=()=>button.closest("section").querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=true));
+    document.getElementById("staffRoleForm").onsubmit=async event=>{event.preventDefault();const form=new FormData(event.currentTarget),body={name_en:form.get("name_en"),name_ar:form.get("name_ar"),description_ar:form.get("description_ar"),permissions:form.getAll("permission"),is_active:true};const submit=event.currentTarget.querySelector('[type="submit"]');submit.disabled=true;try{await api(editing?`/api/admin/staff-roles/${role.id}`:"/api/admin/staff-roles",{method:editing?"PUT":"POST",body:JSON.stringify(body)});close();toast(ui("Role saved","تم حفظ الدور"));renderStaffRoles(document.getElementById("page"));}catch(error){toast(error.message,"error");submit.disabled=false;}};
+  }
+
+  async function renderStaffRoles(page) {
+    const payload=await api("/api/admin/staff-roles"),roles=payload.roles||[],permissions=payload.permissions||[];
+    page.innerHTML=pageTitle("staffRoles","staffRolesSub",can("roles.manage")?`<button class="btn primary" id="addStaffRole">${i("plus")}${ui("Create role","إنشاء دور")}</button>`:"");
+    page.innerHTML+=`<section class="role-card-grid">${roles.map(role=>`<article class="card role-card"><header><div><span class="role-code">${escapeHtml(role.code)}</span><h2>${escapeHtml(staffRoleLabel(role))}</h2></div><span class="status-pill ${role.is_active!==false?"good":"empty"}">${role.is_active!==false?ui("Active","نشط"):ui("Inactive","غير نشط")}</span></header><p>${escapeHtml(state.lang==="ar"?(role.description_ar||role.description_en):(role.description_en||role.description_ar)||ui("No description","بدون وصف"))}</p><div class="role-card-stats"><span><b>${role.permissions?.includes("*")?permissions.length:role.permissions?.length||0}</b>${ui("Permissions","صلاحية")}</span><span><b>${role.staff_count||0}</b>${ui("Staff","موظف")}</span></div><footer>${role.is_system?`<span>${ui("System role","دور أساسي")}</span>`:""}${can("roles.manage")&&role.code!=="super_admin"?`<button class="btn" data-edit-role="${role.id}">${i("edit")}${ui("Edit permissions","تعديل الصلاحيات")}</button>`:""}</footer></article>`).join("")}</section>`;
+    document.getElementById("addStaffRole")?.addEventListener("click",()=>openStaffRoleEditor({},permissions));document.querySelectorAll("[data-edit-role]").forEach(button=>button.onclick=()=>openStaffRoleEditor(roles.find(role=>String(role.id)===button.dataset.editRole),permissions));
+  }
+
+  async function renderStaffActivity(page) {
+    page.innerHTML=pageTitle("staffActivity","staffActivitySub",`<button class="btn" id="refreshStaffActivity">${i("refresh")}${ui("Refresh","تحديث")}</button>`)+`<section class="card staff-activity-card"><div class="staff-activity-filters"><div class="field"><label>${ui("Employee","الموظف")}</label><select id="activityStaff"><option value="">${ui("All staff","كل الموظفين")}</option></select></div><div class="field"><label>${ui("Result","النتيجة")}</label><select id="activityOutcome"><option value="all">${ui("All results","كل النتائج")}</option><option value="success">${ui("Success","ناجح")}</option><option value="failed">${ui("Failed","فشل")}</option></select></div><div class="field"><label>${ui("From","من")}</label><input type="date" id="activityFrom"/></div><div class="field"><label>${ui("To","إلى")}</label><input type="date" id="activityTo"/></div></div><div id="staffActivityRows"></div></section>`;
+    const load=async()=>{const params=new URLSearchParams({limit:"300",staff_id:document.getElementById("activityStaff").value,outcome:document.getElementById("activityOutcome").value,date_from:document.getElementById("activityFrom").value,date_to:document.getElementById("activityTo").value});const payload=await api(`/api/admin/staff-activity?${params}`),rows=payload.activity||[],select=document.getElementById("activityStaff");if(select.options.length===1)(payload.staff||[]).forEach(staff=>select.insertAdjacentHTML("beforeend",`<option value="${staff.id}">${escapeHtml(staff.name||staff.email)}</option>`));document.getElementById("staffActivityRows").innerHTML=rows.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>${ui("Employee","الموظف")}</th><th>${ui("Action","الإجراء")}</th><th>${ui("Resource","المسار")}</th><th>${ui("Permission","الصلاحية")}</th><th>${ui("Result","النتيجة")}</th><th>${ui("Date","التاريخ")}</th></tr></thead><tbody>${rows.map(row=>`<tr><td><strong>${escapeHtml(row.actor_name||row.actor_email||ui("System admin","مدير النظام"))}</strong><small>${escapeHtml(row.actor_email||"")}</small></td><td><strong>${escapeHtml(row.action||"-")}</strong><small>${escapeHtml(row.method||"")} · ${Number(row.duration_ms||0)}ms</small></td><td><bdi>${escapeHtml(row.path||"-")}</bdi></td><td><small>${escapeHtml(row.permission||"-")}</small></td><td><span class="status-pill ${row.outcome==="success"?"good":"bad"}">${row.outcome==="success"?ui("Success","ناجح"):ui("Failed","فشل")}</span></td><td><strong>${formatDateTime(row.created_at)}</strong><small>${escapeHtml(row.ip_address||"")}</small></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state">${ui("No activity matches these filters.","لا يوجد نشاط مطابق للفلاتر.")}</div>`;};["activityStaff","activityOutcome","activityFrom","activityTo"].forEach(id=>document.getElementById(id).onchange=load);document.getElementById("refreshStaffActivity").onclick=load;await load();
+  }
+
+  async function renderStaffProfile(page) {
+    const payload=await api("/api/admin/staff/me"),staff=payload.staff||{},sessions=payload.sessions||[],environmentAdmin=state.user?.role==="admin";
+    page.innerHTML=pageTitle("staffProfile","staffProfileSub")+`<div class="staff-profile-layout"><form class="card staff-profile-card" id="staffProfileForm"><div class="staff-profile-hero"><span>${escapeHtml(String(staff.name||"A").charAt(0).toUpperCase())}</span><div><h2>${escapeHtml(staff.name||"SITEYFY Admin")}</h2><p>${escapeHtml(staff.email||"")}</p><b>${escapeHtml(staffRoleLabel(staff.role)||staff.account_type||ui("Administrator","مدير"))}</b></div></div>${environmentAdmin?`<div class="profile-readonly-note">${ui("This primary administrator is configured from the server environment.","حساب المدير الأساسي مضبوط من إعدادات الخادم ولا يتم تعديله من هنا.")}</div>`:`<div class="form-grid"><div class="field"><label>${ui("Full name","الاسم الكامل")}</label><input name="name" value="${escapeHtml(staff.name||"")}" required/></div><div class="field"><label>${ui("Phone","رقم الجوال")}</label><input name="phone" value="${escapeHtml(staff.phone||"")}"/></div><div class="field"><label>${ui("Notification email","بريد الإشعارات")}</label><input name="notification_email" type="email" value="${escapeHtml(staff.notification_email||staff.email||"")}"/></div><div class="field"><label>${ui("Language","اللغة")}</label><select name="language"><option value="ar" ${staff.language==="ar"?"selected":""}>العربية</option><option value="en" ${staff.language==="en"?"selected":""}>English</option></select></div><div class="field"><label>${ui("Current password","كلمة المرور الحالية")}</label><input name="current_password" type="password" autocomplete="current-password"/></div><div class="field"><label>${ui("New password","كلمة المرور الجديدة")}</label><input name="password" type="password" minlength="8" autocomplete="new-password"/></div></div><div class="staff-pref-row"><label><input type="checkbox" name="dashboard_notifications" ${staff.notification_preferences?.dashboard!==false?"checked":""}/> ${ui("Dashboard notifications","إشعارات الداشبورد")}</label><label><input type="checkbox" name="email_notifications" ${staff.notification_preferences?.email===true?"checked":""}/> ${ui("Email notifications","إشعارات البريد")}</label></div><button class="btn primary" type="submit">${i("check")}${ui("Save profile","حفظ الملف الشخصي")}</button>`}</form><section class="card staff-sessions-card"><span class="section-kicker">SECURITY</span><h2>${ui("Recent sessions","الجلسات الأخيرة")}</h2>${sessions.length?sessions.map(session=>`<article><div><strong>${escapeHtml(session.user_agent||ui("Browser session","جلسة متصفح"))}</strong><small>${escapeHtml(session.ip_address||"")} · ${formatDateTime(session.last_seen_at||session.created_at)}</small></div><span class="status-pill ${session.status==="active"?"good":"empty"}">${escapeHtml(session.status)}</span></article>`).join(""):`<p class="muted">${ui("The primary administrator does not use database sessions.","المدير الأساسي لا يستخدم جلسات قاعدة البيانات.")}</p>`}</section></div>`;
+    const profileForm=document.getElementById("staffProfileForm");
+    profileForm.querySelector(".staff-profile-hero")?.insertAdjacentHTML("afterend",avatarUploadField(staff));
+    if(environmentAdmin)profileForm.querySelector(".profile-readonly-note")?.insertAdjacentHTML("afterend",`<button class="btn primary" type="submit">${i("check")}${ui("Save photo","حفظ الصورة")}</button>`);
+    if(staff.avatar_url){const heroAvatar=profileForm.querySelector(".staff-profile-hero > span");heroAvatar.classList.add("person-avatar");heroAvatar.innerHTML=`<img src="${escapeHtml(staff.avatar_url)}" alt="" onerror="this.remove()"/>`;}
+    bindAvatarUploader(profileForm,staff);
+    profileForm?.addEventListener("submit",async event=>{
+      event.preventDefault();
+      const data=Object.fromEntries(new FormData(event.currentTarget));
+      const body={avatar_url:data.avatar_url};
+      if(!environmentAdmin){Object.assign(body,{name:data.name,phone:data.phone,notification_email:data.notification_email,language:data.language,notification_preferences:{dashboard:data.dashboard_notifications==="on",email:data.email_notifications==="on"}});}
+      if(data.password){body.password=data.password;body.current_password=data.current_password;}
+      const button=event.currentTarget.querySelector('[type="submit"]');button.disabled=true;
+      try{const result=await api("/api/admin/staff/me",{method:"PUT",body:JSON.stringify(body)});state.user=result.staff;setLang(result.staff.language||state.lang);localStorage.setItem(STORAGE_USER,JSON.stringify(state.user));toast(ui("Profile updated","تم تحديث الملف الشخصي"));render();}catch(error){toast(error.message,"error");button.disabled=false;}
+    });
   }
 
   const orderStatuses = ["pending","confirmed","processing","ready_to_ship","shipped","delivered","cancelled"];
@@ -1328,6 +1703,70 @@
     const drawSelected=()=>{const area=document.getElementById("manualSelectedItems");area.innerHTML=selected.length?selected.map(item=>`<article><img src="${escapeHtml(item.variant?.image_url||item.product.main_photo_url||item.product.image_url||"")}" alt=""/><div><strong>${escapeHtml(manualProductName(item.product))}</strong><small>${item.variant?escapeHtml(manualVariantName(item.variant)):""}</small><div class="manual-qty"><button type="button" data-manual-qty="${escapeHtml(item.key)}" data-delta="-1">−</button><span>${item.quantity}</span><button type="button" data-manual-qty="${escapeHtml(item.key)}" data-delta="1">+</button></div></div><b>${shippingMoney(item.price*item.quantity,"SAR")}</b><button type="button" class="manual-remove" data-manual-remove="${escapeHtml(item.key)}">×</button></article>`).join(""):`<div class="manual-empty-cart">${i("cart")}<strong>${ui("No items yet","لا توجد منتجات بعد")}</strong><small>${ui("Add products from the catalog.","أضف المنتجات من الكتالوج.")}</small></div>`;const subtotal=selected.reduce((sum,item)=>sum+item.price*item.quantity,0);const discount=Number(document.querySelector('[name="discount_amount"]').value||0);const shipping=Number(document.querySelector('[name="shipping_amount"]').value||0);document.getElementById("manualSubtotal").textContent=shippingMoney(subtotal,"SAR");document.getElementById("manualTotal").textContent=shippingMoney(Math.max(0,subtotal-discount+shipping),"SAR");document.querySelectorAll("[data-manual-qty]").forEach(button=>button.onclick=()=>{const item=selected.find(row=>row.key===button.dataset.manualQty);item.quantity=Math.max(1,item.quantity+Number(button.dataset.delta));drawSelected();});document.querySelectorAll("[data-manual-remove]").forEach(button=>button.onclick=()=>{selected.splice(selected.findIndex(row=>row.key===button.dataset.manualRemove),1);drawSelected();});};
     document.getElementById("backFromManual").onclick=()=>location.hash="orders";document.getElementById("manualProductSearch").oninput=drawCatalog;document.querySelectorAll('[name="discount_amount"],[name="shipping_amount"]').forEach(input=>input.oninput=drawSelected);drawCatalog();drawSelected();
     document.getElementById("manualOrderForm").onsubmit=async event=>{event.preventDefault();if(!selected.length)return toast(ui("Add at least one product","أضف منتجًا واحدًا على الأقل"),"error");const data=Object.fromEntries(new FormData(event.currentTarget));const button=document.getElementById("saveManualOrder");button.disabled=true;try{const result=await api("/api/admin/order-management/manual",{method:"POST",body:JSON.stringify({customer:{first_name:data.first_name,last_name:data.last_name,phone:data.phone,email:data.email,country_code:data.country_code,short_address:data.short_address,province:data.province,city:data.city,district:data.district,street:data.street,building_number:data.building_number,postal_code:data.postal_code,additional_number:data.additional_number,address_notes:data.address_notes},source_channel:data.source_channel,payment_method:data.payment_method,shipping_provider:data.shipping_provider,shipping_amount:Number(data.shipping_amount||0),discount_amount:Number(data.discount_amount||0),dispatch_now:data.dispatch_now==="on",items:selected.map(item=>({item_type:item.item_type,product_id:item.product_id,bundle_id:item.bundle_id,variant_id:item.variant_id,quantity:item.quantity}))})});toast(result.dispatch_error?ui("Order created; shipping needs attention","تم إنشاء الطلب والشحن يحتاج مراجعة"):ui("Manual order created","تم إنشاء الطلب اليدوي"),result.dispatch_error?"error":"success");location.hash=`orderDetail/${result.order.id}`;}catch(error){toast(error.message,"error");button.disabled=false;}};
+  }
+
+  function inventoryReceiptStatusLabel(status="draft") {
+    const labels={draft:["Draft","مسودة"],received:["Received","تم الاستلام"],reversed:["Reversed","تم العكس"]};
+    const value=labels[status]||[status,status];return state.lang==="ar"?value[1]:value[0];
+  }
+
+  function inventoryReceiptStatusClass(status="draft") { return status==="received"?"good":status==="reversed"?"bad":"warn"; }
+
+  async function renderInventory(page) {
+    const result=await api("/api/admin/inventory/receipts");
+    const rows=result.receipts||[],summary=result.summary||{};
+    page.innerHTML=pageTitle("inventory","",`<button class="btn" type="button" id="refreshInventory">${i("refresh")}${ui("Refresh","تحديث")}</button><button class="btn primary" type="button" id="newInventoryReceipt">${i("plus")}${ui("Receive stock","استلام بضاعة")}</button>`);
+    page.innerHTML+=`<section class="inventory-command-grid">
+      <article><span>${ui("Available units","الوحدات المتاحة")}</span><strong>${Number(summary.available_units||0).toLocaleString()}</strong><small>${Number(summary.tracked_targets||0)} ${ui("tracked variants","خيار متتبع")}</small></article>
+      <article><span>${ui("Inventory value","قيمة المخزون")}</span><strong>${shippingMoney(summary.stock_value||0,"SAR")}</strong><small>${ui("FIFO remaining layers","دفعات FIFO المتبقية")}</small></article>
+      <article class="attention"><span>${ui("Low stock","مخزون منخفض")}</span><strong>${Number(summary.low_stock||0)}</strong><small>${ui("Five units or fewer","خمس وحدات أو أقل")}</small></article>
+      <article class="danger"><span>${ui("Out of stock","نافد المخزون")}</span><strong>${Number(summary.out_of_stock||0)}</strong><small>${ui("Tracked products and options","منتجات وخيارات متتبعة")}</small></article>
+    </section>
+    <section class="card inventory-receipts-card"><div class="inventory-table-head"><div><span class="section-kicker">GOODS RECEIPTS</span><h2>${ui("Stock receipt history","سجل استلام البضاعة")}</h2><p>${ui("Every receipt keeps its quantities, costs and remaining FIFO layers.","كل استلام يحتفظ بالكميات والتكلفة ودفعات FIFO المتبقية.")}</p></div><div class="inventory-filters"><input id="inventoryReceiptSearch" type="search" placeholder="${ui("Supplier, invoice or receipt number","المورد أو الفاتورة أو رقم الاستلام")}"/><select id="inventoryReceiptStatus"><option value="">${ui("All statuses","كل الحالات")}</option><option value="draft">${ui("Draft","مسودة")}</option><option value="received">${ui("Received","تم الاستلام")}</option><option value="reversed">${ui("Reversed","تم العكس")}</option></select></div></div><div id="inventoryReceiptsTable"></div></section>`;
+    const draw=()=>{const q=document.getElementById("inventoryReceiptSearch").value.trim().toLowerCase(),status=document.getElementById("inventoryReceiptStatus").value;const filtered=rows.filter(row=>(!status||row.status===status)&&(!q||[row.receipt_number,row.invoice_number,row.supplier_name].some(value=>String(value||"").toLowerCase().includes(q))));document.getElementById("inventoryReceiptsTable").innerHTML=filtered.length?`<div class="table-scroll"><table class="data-table inventory-receipts-table"><thead><tr><th>${ui("Receipt","الاستلام")}</th><th>${ui("Supplier / invoice","المورد / الفاتورة")}</th><th>${ui("Items","البنود")}</th><th>${ui("Total cost","التكلفة الإجمالية")}</th><th>${ui("Received","تاريخ الاستلام")}</th><th>${ui("Status","الحالة")}</th><th></th></tr></thead><tbody>${filtered.map(row=>`<tr><td><strong dir="ltr">${escapeHtml(row.receipt_number)}</strong><small>#${row.id}</small></td><td><strong>${escapeHtml(row.supplier_name||ui("Not specified","غير محدد"))}</strong><small dir="ltr">${escapeHtml(row.invoice_number||"-")}</small></td><td><strong>${Number(row.total_quantity||0)} ${ui("units","وحدة")}</strong><small>${Number(row.item_count||0)} ${ui("lines","بند")}</small></td><td><strong>${shippingMoney(row.grand_total||0,row.currency||"SAR")}</strong><small>${ui("Goods","بضاعة")}: ${shippingMoney(row.merchandise_total||0,row.currency||"SAR")}</small></td><td><strong>${formatDateTime(row.received_at||row.created_at)}</strong><small>${escapeHtml(row.received_by||row.created_by||"")}</small></td><td><span class="status-pill ${inventoryReceiptStatusClass(row.status)}">${inventoryReceiptStatusLabel(row.status)}</span></td><td><button class="btn icon-btn" type="button" data-open-inventory-receipt="${row.id}" title="${ui("Open","فتح")}">${i("eye")}</button></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state"><div><h2>${ui("No stock receipts yet","لا توجد عمليات استلام بعد")}</h2><p>${ui("Create the first receipt when new goods reach the warehouse.","أنشئ أول استلام عند وصول بضاعة جديدة للمخزن.")}</p></div></div>`;document.querySelectorAll("[data-open-inventory-receipt]").forEach(button=>button.onclick=()=>location.hash=`inventoryReceipt/${button.dataset.openInventoryReceipt}`);};
+    document.getElementById("inventoryReceiptSearch").oninput=draw;document.getElementById("inventoryReceiptStatus").onchange=draw;document.getElementById("refreshInventory").onclick=()=>renderInventory(page);document.getElementById("newInventoryReceipt").onclick=()=>location.hash="inventoryReceipt/new";draw();
+  }
+
+  async function renderInventoryReceipt(page, receiptId="new") {
+    const isNew=!receiptId||receiptId==="new";
+    const [catalogResult,receiptResult]=await Promise.all([api("/api/admin/inventory/catalog"),isNew?Promise.resolve(null):api(`/api/admin/inventory/receipts/${receiptId}`)]);
+    const products=catalogResult.products||[],receipt=receiptResult?.receipt||null;
+    if(receipt&&receipt.status!=="draft"){
+      const reversible=receipt.status==="received"&&(receipt.items||[]).every(item=>Number(item.consumed_quantity||0)===0);
+      page.innerHTML=`<div class="inventory-receipt-detail-head"><div><button class="btn back-link" id="backToInventory">${i("arrow-left")}${ui("Back to inventory","العودة للمخزون")}</button><span class="section-kicker" dir="ltr">${escapeHtml(receipt.receipt_number)}</span><h1>${ui("Stock receipt","استلام بضاعة")}</h1><p>${escapeHtml(receipt.supplier_name||ui("Supplier not specified","المورد غير محدد"))} · ${formatDateTime(receipt.received_at||receipt.created_at)}</p></div><div><span class="status-pill ${inventoryReceiptStatusClass(receipt.status)}">${inventoryReceiptStatusLabel(receipt.status)}</span>${reversible?`<button class="btn danger" id="reverseInventoryReceipt">${i("refresh")}${ui("Reverse receipt","عكس الاستلام")}</button>`:""}</div></div>
+        <section class="inventory-receipt-summary"><article><span>${ui("Total quantity","إجمالي الكمية")}</span><strong>${Number(receipt.total_quantity||0)}</strong></article><article><span>${ui("Goods cost","تكلفة البضاعة")}</span><strong>${shippingMoney(receipt.merchandise_total,receipt.currency)}</strong></article><article><span>${ui("Additional cost","تكلفة إضافية")}</span><strong>${shippingMoney(receipt.additional_cost,receipt.currency)}</strong></article><article class="total"><span>${ui("Landed total","الإجمالي النهائي")}</span><strong>${shippingMoney(receipt.grand_total,receipt.currency)}</strong></article></section>
+        ${receipt.status==="received"&&!reversible?`<div class="inventory-reversal-lock">${i("box")}<div><strong>${ui("This receipt can no longer be reversed","لا يمكن عكس هذا الاستلام")}</strong><span>${ui("At least one unit has already been consumed by an order. The history remains preserved.","تم استهلاك وحدة واحدة على الأقل في طلب، وسيظل السجل محفوظًا.")}</span></div></div>`:""}
+        <section class="card inventory-receipt-lines"><div class="inventory-table-head"><div><span class="section-kicker">FIFO LAYERS</span><h2>${ui("Received items and cost changes","البنود المستلمة وتغير التكلفة")}</h2></div><div><strong dir="ltr">${escapeHtml(receipt.invoice_number||"")}</strong><small>${escapeHtml(receipt.notes||"")}</small></div></div><div class="table-scroll"><table class="data-table"><thead><tr><th>${ui("Product / option","المنتج / الخيار")}</th><th>${ui("Quantity","الكمية")}</th><th>${ui("Landed unit cost","تكلفة الوحدة النهائية")}</th><th>${ui("Cost change","تغير التكلفة")}</th><th>${ui("Stock change","تغير المخزون")}</th><th>${ui("FIFO remaining","المتبقي من الدفعة")}</th></tr></thead><tbody>${(receipt.items||[]).map(item=>`<tr><td><strong>${escapeHtml(item.product_name)}</strong><small>${escapeHtml(item.variant_label||item.sku||ui("Base product","المنتج الأساسي"))}</small></td><td><strong>${Number(item.quantity||0)}</strong></td><td><strong>${shippingMoney(item.landed_unit_cost,receipt.currency)}</strong><small>+ ${shippingMoney(item.allocated_extra_cost,receipt.currency)} ${ui("allocated","موزعة")}</small></td><td><strong>${shippingMoney(item.previous_unit_cost,receipt.currency)} → ${shippingMoney(item.resulting_average_cost,receipt.currency)}</strong><small>${ui("Weighted current cost","متوسط التكلفة الحالية")}</small></td><td><strong>${Number(item.stock_before||0)} → ${Number(item.stock_after||0)}</strong></td><td><strong>${Number(item.lot_remaining_quantity||0)} / ${Number(item.lot_original_quantity||0)}</strong><small>${Number(item.consumed_quantity||0)} ${ui("consumed","مستهلك")}</small></td></tr>`).join("")}</tbody></table></div></section>`;
+      document.getElementById("backToInventory").onclick=()=>location.hash="inventory";
+      document.getElementById("reverseInventoryReceipt")?.addEventListener("click",async event=>{const reason=prompt(ui("Reason for reversing this receipt","سبب عكس هذا الاستلام"));if(!reason)return;event.currentTarget.disabled=true;try{await api(`/api/admin/inventory/receipts/${receipt.id}/reverse`,{method:"POST",body:JSON.stringify({reason})});toast(ui("Receipt reversed and stock restored","تم عكس الاستلام وإرجاع المخزون"));renderInventoryReceipt(page,receipt.id);}catch(error){toast(error.message,"error");event.currentTarget.disabled=false;}});return;
+    }
+
+    const existingItems=new Map((receipt?.items||[]).map(item=>[`${item.product_id}:${item.variant_id||"base"}`,{product_id:Number(item.product_id),variant_id:item.variant_id||null,quantity:Number(item.quantity||1),entered_cost:Number(item.entered_cost||0)}]));
+    const selected=[...existingItems.values()];
+    const productName=product=>state.lang==="ar"?(product.name_ar||product.name_en):(product.name_en||product.name_ar);
+    const variantName=variant=>[variant.color,variant.option,variant.value].filter(Boolean).join(" / ")||variant.sku||ui("Option","خيار");
+    page.innerHTML=`<div class="inventory-receipt-editor-head"><div><button class="btn back-link" id="backToInventory">${i("arrow-left")}${ui("Back to inventory","العودة للمخزون")}</button><span class="section-kicker">GOODS RECEIPT</span><h1>${receipt?ui("Edit stock receipt","تعديل استلام البضاعة"):ui("Receive new stock","استلام بضاعة جديدة")}</h1><p>${ui("Quantities are added to existing stock. Nothing is replaced.","الكميات تُضاف للمخزون الحالي ولا تستبدله.")}</p></div><span class="status-pill warn">${ui("Draft","مسودة")}</span></div>
+      <form id="inventoryReceiptForm" class="inventory-receipt-workspace">
+        <div class="inventory-receipt-main">
+        <section class="card inventory-receipt-form-card"><div class="inventory-section-head"><span>01</span><div><h2>${ui("Receipt details","بيانات الاستلام")}</h2><p>${ui("Supplier reference and how costs should be calculated.","مرجع المورد وطريقة حساب التكلفة.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Supplier","المورد")}</label><input name="supplier_name" value="${escapeHtml(receipt?.supplier_name||"")}" placeholder="${ui("Supplier name","اسم المورد")}" /></div><div class="field"><label>${ui("Supplier invoice number","رقم فاتورة المورد")}</label><input name="invoice_number" value="${escapeHtml(receipt?.invoice_number||"")}" dir="ltr" /></div><div class="field"><label>${ui("Currency","العملة")}</label><select name="currency"><option value="SAR" ${(receipt?.currency||"SAR")==="SAR"?"selected":""}>SAR</option><option value="AED" ${receipt?.currency==="AED"?"selected":""}>AED</option><option value="EGP" ${receipt?.currency==="EGP"?"selected":""}>EGP</option></select></div><div class="field"><label>${ui("Cost entry method","طريقة إدخال التكلفة")}</label><select name="cost_mode"><option value="unit_cost" ${(!receipt||receipt.cost_mode==="unit_cost")?"selected":""}>${ui("Cost per unit","تكلفة كل وحدة")}</option><option value="line_total" ${receipt?.cost_mode==="line_total"?"selected":""}>${ui("Total per line","إجمالي كل بند")}</option><option value="invoice_total" ${receipt?.cost_mode==="invoice_total"?"selected":""}>${ui("One total for all goods","إجمالي واحد لكل البضاعة")}</option></select></div><div class="field"><label>${ui("Extra-cost allocation","توزيع المصاريف الإضافية")}</label><select name="allocation_method"><option value="quantity" ${(receipt?.allocation_method||"quantity")==="quantity"?"selected":""}>${ui("By quantity","حسب الكمية")}</option><option value="value" ${receipt?.allocation_method==="value"?"selected":""}>${ui("By item value","حسب قيمة البنود")}</option></select></div><div class="field" id="invoiceTotalField"><label>${ui("Total goods cost","إجمالي تكلفة البضاعة")}</label><input name="merchandise_total" type="number" min="0" step="0.01" value="${Number(receipt?.merchandise_total||0)}" /></div><div class="field"><label>${ui("Shipping, customs and extra costs","الشحن والجمارك والمصاريف الإضافية")}</label><input name="additional_cost" type="number" min="0" step="0.01" value="${Number(receipt?.additional_cost||0)}" /></div><div class="field full"><label>${ui("Internal notes","ملاحظات داخلية")}</label><textarea name="notes">${escapeHtml(receipt?.notes||"")}</textarea></div></div></section>
+        <section class="card inventory-receipt-form-card"><div class="inventory-section-head"><span>02</span><div><h2>${ui("Receipt lines","بنود الاستلام")}</h2><p>${ui("Select the exact product option, quantity and cost.","اختر المنتج والخيار والكمية والتكلفة بدقة.")}</p></div><strong id="receiptLineCount"></strong></div><div id="inventoryReceiptLines"></div></section>
+        </div><div class="inventory-receipt-side">
+        <aside class="card inventory-catalog-picker"><div><span class="section-kicker">CATALOG</span><h2>${ui("Add products","إضافة المنتجات")}</h2><p>${ui("Search and choose the exact option received.","ابحث واختر الخيار المستلم بالضبط.")}</p></div><input id="inventoryCatalogSearch" type="search" placeholder="${ui("Search product or SKU","ابحث باسم المنتج أو الكود")}"/><div id="inventoryCatalogList"></div></aside>
+        <aside class="card inventory-receipt-totals"><span class="section-kicker">RECEIPT TOTAL</span><div><span>${ui("Units","الوحدات")}</span><strong id="receiptTotalUnits">0</strong></div><div><span>${ui("Goods","البضاعة")}</span><strong id="receiptGoodsTotal">0</strong></div><div><span>${ui("Extra costs","مصاريف إضافية")}</span><strong id="receiptExtraTotal">0</strong></div><div class="grand"><span>${ui("Landed total","الإجمالي النهائي")}</span><strong id="receiptGrandTotal">0</strong></div><small>${ui("Final per-unit costs are calculated when the receipt is confirmed.","تُحسب تكلفة الوحدة النهائية عند اعتماد الاستلام.")}</small></aside>
+        </div>
+      </form><div class="inventory-receipt-actions"><button class="btn" id="cancelInventoryReceipt">${ui("Cancel","إلغاء")}</button>${receipt?`<button class="btn danger" id="deleteInventoryReceipt">${i("trash")}${ui("Delete draft","حذف المسودة")}</button>`:""}<span></span><button class="btn" data-save-inventory-receipt="draft">${ui("Save draft","حفظ كمسودة")}</button><button class="btn primary" data-save-inventory-receipt="receive">${i("check")}${ui("Receive and add stock","اعتماد وإضافة المخزون")}</button></div>`;
+
+    const currency=()=>document.querySelector('[name="currency"]').value||"SAR";
+    const currentMode=()=>document.querySelector('[name="cost_mode"]').value;
+    const selectedProduct=item=>products.find(product=>Number(product.id)===Number(item.product_id));
+    const selectedVariant=(product,item)=>product?.variants?.find(variant=>String(variant.id)===String(item.variant_id));
+    const lineKey=item=>`${item.product_id}:${item.variant_id||"base"}`;
+    const redrawTotals=()=>{const mode=currentMode(),units=selected.reduce((sum,item)=>sum+Number(item.quantity||0),0),entered=selected.reduce((sum,item)=>sum+(mode==="unit_cost"?Number(item.entered_cost||0)*Number(item.quantity||0):mode==="line_total"?Number(item.entered_cost||0):0),0),goods=mode==="invoice_total"?Number(document.querySelector('[name="merchandise_total"]').value||0):entered,extra=Number(document.querySelector('[name="additional_cost"]').value||0);document.getElementById("receiptTotalUnits").textContent=units.toLocaleString();document.getElementById("receiptGoodsTotal").textContent=shippingMoney(goods,currency());document.getElementById("receiptExtraTotal").textContent=shippingMoney(extra,currency());document.getElementById("receiptGrandTotal").textContent=shippingMoney(goods+extra,currency());document.getElementById("invoiceTotalField").hidden=mode!=="invoice_total";document.querySelectorAll("[data-receipt-cost-field]").forEach(field=>field.hidden=mode==="invoice_total");};
+    const drawLines=()=>{document.getElementById("receiptLineCount").textContent=`${selected.length} ${ui("lines","بند")}`;document.getElementById("inventoryReceiptLines").innerHTML=selected.length?`<div class="inventory-selected-lines">${selected.map(item=>{const product=selectedProduct(item),variant=selectedVariant(product,item),stock=variant?variant.stock:product?.stock,cost=variant?variant.cost:product?.cost;return `<article data-receipt-line="${escapeHtml(lineKey(item))}"><img src="${escapeHtml(variant?.image_url||product?.main_photo_url||"")}" alt=""/><div class="inventory-line-product"><strong>${escapeHtml(product?productName(product):`#${item.product_id}`)}</strong><small>${escapeHtml(variant?variantName(variant):ui("Base product","المنتج الأساسي"))}</small><span>${ui("Current","الحالي")}: ${stock===null?ui("Unlimited","غير محدود"):Number(stock||0)} · ${ui("Cost","التكلفة")}: ${shippingMoney(cost||0,currency())}</span></div><label><span>${ui("Quantity","الكمية")}</span><input type="number" min="1" step="1" value="${Number(item.quantity||1)}" data-line-quantity /></label><label data-receipt-cost-field><span>${currentMode()==="line_total"?ui("Line total","إجمالي البند"):ui("Unit cost","تكلفة الوحدة")}</span><input type="number" min="0" step="0.01" value="${Number(item.entered_cost||0)}" data-line-cost /></label><button class="btn icon-btn danger" type="button" data-remove-receipt-line title="${ui("Remove","حذف")}">${i("trash")}</button></article>`;}).join("")}</div>`:`<div class="inventory-lines-empty">${i("box")}<strong>${ui("No products added yet","لم تتم إضافة منتجات بعد")}</strong><span>${ui("Choose products from the catalog panel.","اختر المنتجات من لوحة الكتالوج.")}</span></div>`;document.querySelectorAll("[data-receipt-line]").forEach(row=>{const item=selected.find(entry=>lineKey(entry)===row.dataset.receiptLine);row.querySelector("[data-line-quantity]").oninput=event=>{item.quantity=Math.max(1,Number(event.target.value||1));redrawTotals();};row.querySelector("[data-line-cost]").oninput=event=>{item.entered_cost=Math.max(0,Number(event.target.value||0));redrawTotals();};row.querySelector("[data-remove-receipt-line]").onclick=()=>{selected.splice(selected.indexOf(item),1);drawLines();drawCatalog();};});redrawTotals();};
+    const drawCatalog=()=>{const q=document.getElementById("inventoryCatalogSearch").value.trim().toLowerCase();const filtered=products.filter(product=>[product.id,product.name_ar,product.name_en,product.sku,product.category_slug].join(" ").toLowerCase().includes(q));document.getElementById("inventoryCatalogList").innerHTML=filtered.slice(0,60).map(product=>{const choices=product.variants?.length?product.variants:[null];return `<article class="inventory-catalog-row" data-inventory-product="${product.id}"><img src="${escapeHtml(product.main_photo_url||"")}" alt=""/><div><strong>${escapeHtml(productName(product))}</strong><small>${escapeHtml(product.sku||`#${product.id}`)}</small>${product.variants?.length?`<select data-inventory-variant>${choices.map(variant=>`<option value="${escapeHtml(variant.id)}">${escapeHtml(variantName(variant))} · ${variant.stock===null?ui("Unlimited","غير محدود"):Number(variant.stock||0)}${variant.is_active?"":` · ${ui("Inactive","غير نشط")}`}</option>`).join("")}</select>`:`<span>${product.stock===null?ui("Unlimited stock","مخزون غير محدود"):`${Number(product.stock||0)} ${ui("available","متاح")}`}</span>`}</div><button class="btn icon-btn" type="button" data-add-inventory-product>${i("plus")}</button></article>`;}).join("")||`<div class="empty-inline">${ui("No matching products","لا توجد منتجات مطابقة")}</div>`;document.querySelectorAll("[data-inventory-product]").forEach(row=>row.querySelector("[data-add-inventory-product]").onclick=()=>{const product=products.find(entry=>String(entry.id)===row.dataset.inventoryProduct),variantId=row.querySelector("[data-inventory-variant]")?.value||null,key=`${product.id}:${variantId||"base"}`;const existing=selected.find(item=>lineKey(item)===key);if(existing)existing.quantity+=1;else selected.push({product_id:Number(product.id),variant_id:variantId,quantity:1,entered_cost:Number((variantId?product.variants.find(variant=>String(variant.id)===variantId)?.cost:product.cost)||0)});drawLines();});};
+    const payload=()=>{const values=Object.fromEntries(new FormData(document.getElementById("inventoryReceiptForm")));return {...values,merchandise_total:Number(values.merchandise_total||0),additional_cost:Number(values.additional_cost||0),items:selected.map(item=>({...item,quantity:Number(item.quantity||0),entered_cost:Number(item.entered_cost||0) }))};};
+    const save=async receiveNow=>{if(!selected.length)return toast(ui("Add at least one product","أضف منتجًا واحدًا على الأقل"),"error");document.querySelectorAll("[data-save-inventory-receipt]").forEach(button=>button.disabled=true);try{let saved;if(receipt){saved=await api(`/api/admin/inventory/receipts/${receipt.id}`,{method:"PUT",body:JSON.stringify(payload())});if(receiveNow)saved=await api(`/api/admin/inventory/receipts/${receipt.id}/receive`,{method:"POST",body:"{}"});}else saved=await api("/api/admin/inventory/receipts",{method:"POST",body:JSON.stringify({...payload(),receive_now:receiveNow})});toast(receiveNow?ui("Stock received and quantities updated","تم استلام البضاعة وتحديث الكميات"):ui("Draft saved","تم حفظ المسودة"));location.hash=receiveNow?`inventoryReceipt/${saved.receipt.id}`:"inventory";}catch(error){toast(error.message,"error");document.querySelectorAll("[data-save-inventory-receipt]").forEach(button=>button.disabled=false);}};
+    document.getElementById("backToInventory").onclick=document.getElementById("cancelInventoryReceipt").onclick=()=>location.hash="inventory";document.getElementById("inventoryCatalogSearch").oninput=drawCatalog;document.querySelector('[name="cost_mode"]').onchange=()=>drawLines();document.querySelector('[name="currency"]').onchange=()=>drawLines();document.querySelector('[name="merchandise_total"]').oninput=redrawTotals;document.querySelector('[name="additional_cost"]').oninput=redrawTotals;document.querySelectorAll("[data-save-inventory-receipt]").forEach(button=>button.onclick=()=>save(button.dataset.saveInventoryReceipt==="receive"));document.getElementById("deleteInventoryReceipt")?.addEventListener("click",async()=>{if(!confirm(ui("Delete this draft?","حذف هذه المسودة؟")))return;try{await api(`/api/admin/inventory/receipts/${receipt.id}`,{method:"DELETE"});toast(ui("Draft deleted","تم حذف المسودة"));location.hash="inventory";}catch(error){toast(error.message,"error");}});drawCatalog();drawLines();
   }
 
   async function renderReturns(page) {
@@ -1490,7 +1929,7 @@
   }
 
   function collectionVariantLabel(variant = null) {
-    if (!variant) return ui("Base product", "المنتج الأساسي");
+    if (!variant) return ui("Whole product", "المنتج كاملًا");
     return [variant.color, variant.option, variant.value].filter(Boolean).join(" · ") || variant.sku || `#${variant.id}`;
   }
 
@@ -1574,26 +2013,30 @@
 
   async function renderCollectionEditor(page, collectionId) {
     const isNew = !collectionId || collectionId === "new";
-    const [products, colors, payload] = await Promise.all([
+    const [products, colors, facets, categories, payload] = await Promise.all([
       state.rows.products?.length ? Promise.resolve(state.rows.products) : loadResource("products"),
       state.rows.colors?.length ? Promise.resolve(state.rows.colors) : loadResource("colors").catch(() => []),
+      state.rows.facets?.length ? Promise.resolve(state.rows.facets) : loadResource("facets").catch(() => []),
+      state.rows.categories?.length ? Promise.resolve(state.rows.categories) : loadResource("categories").catch(() => []),
       isNew ? Promise.resolve(null) : api(`/api/admin/collections/${encodeURIComponent(collectionId)}`)
     ]);
     const row = payload?.collection || payload || {};
-    let selected = collectionItems(row).map(item => resolveCollectionItem(item, products)).filter(item => item.product_id);
+    let selected = (row.manual_items || collectionItems(row)).map(item => resolveCollectionItem(item, products)).filter(item => item.product_id);
     page.innerHTML = `<div class="collection-editor-head"><div><button class="btn back-link" type="button" id="backToCollections">${i("arrow-left")}${ui("Back to collections", "العودة للمجموعات")}</button><span class="section-kicker">${isNew ? "NEW COLLECTION" : `COLLECTION #${escapeHtml(row.id || collectionId)}`}</span><h1>${isNew ? t("createCollection") : t("editCollection")}</h1><p>${t("collectionsSub")}</p></div><div class="collection-editor-head-actions"><button class="btn" type="button" id="cancelCollection">${t("cancel")}</button><button class="btn primary" type="submit" form="collectionEditorForm">${i("check")}${t("save")}</button></div></div>
       <form id="collectionEditorForm" class="collection-editor-layout">
         <section class="collection-editor-main">
-          <article class="card card-pad collection-identity"><div class="studio-card-head"><span class="section-kicker">01</span><div><h2>${ui("Collection identity", "بيانات المجموعة")}</h2><p>${ui("Bilingual copy and storefront URL.", "النصوص باللغتين ورابط الواجهة.")}</p></div></div><div class="form-grid">${labeledField("name_en", ui("English name", "الاسم بالإنجليزية"), row.name_en || "", "text", { full:false })}${labeledField("name_ar", ui("Arabic name", "الاسم بالعربية"), row.name_ar || "", "text", { full:false })}${labeledField("slug", ui("Slug", "الرابط المختصر"), row.slug || "", "text", { full:true })}<div class="field full"><label>${ui("English description", "الوصف بالإنجليزية")}</label><textarea name="description_en">${escapeHtml(row.description_en || "")}</textarea></div><div class="field full"><label>${ui("Arabic description", "الوصف بالعربية")}</label><textarea name="description_ar">${escapeHtml(row.description_ar || "")}</textarea></div></div></article>
-          <article class="card card-pad collection-sequence"><div class="collection-sequence-head"><div><span class="section-kicker">02</span><h2>${ui("Selected sequence", "ترتيب العناصر المختارة")}</h2><p>${ui("Each row is one exact product variant. Reorder it to control the storefront rail.", "كل سطر يمثل اختيارًا محددًا من منتج. رتبه للتحكم في ظهوره بالواجهة.")}</p></div><div><span class="pill" id="collectionEntryCount"></span><button class="btn primary" type="button" id="addCollectionProducts">${i("plus")}${ui("Add products", "إضافة منتجات")}</button></div></div><div id="collectionSequenceList"></div></article>
+          <article class="card card-pad collection-identity"><div class="studio-card-head"><span class="section-kicker">01</span><div><h2>${ui("Collection identity", "بيانات المجموعة")}</h2><p>${ui("Bilingual copy and storefront URL.", "النصوص باللغتين ورابط الواجهة.")}</p></div></div><div class="form-grid">${labeledField("name_en", ui("English name", "الاسم بالإنجليزية"), row.name_en || "", "text", { full:false })}${labeledField("name_ar", ui("Arabic name", "الاسم بالعربية"), row.name_ar || "", "text", { full:false })}${labeledField("slug", ui("Slug", "الرابط المختصر"), row.slug || "", "text", { full:true })}<div class="field full"><label>${ui("Build from facets", "بناء المجموعة من الفئات")}</label><input type="hidden" name="facet_ids" value="${escapeHtml(JSON.stringify(row.facet_ids || []))}" data-collection-facet-values /><div class="choice-chip-grid">${facets.filter(label=>label.is_active!==false&&label.isActive!==false).map(label=>{const id=String(label.id||label.slug);return `<button type="button" class="choice-chip ${(row.facet_ids||[]).map(String).includes(id)?"selected":""}" data-collection-facet="${escapeHtml(id)}">${escapeHtml(label.name_ar||label.nameAr||label.name_en||label.nameEn||id)}</button>`}).join("")}</div></div><div class="field full"><label>${ui("Build from subcategories", "بناء المجموعة من التصنيفات الفرعية")}</label><input type="hidden" name="subcategory_ids" value="${escapeHtml(JSON.stringify(row.subcategory_ids || []))}" data-collection-subcategory-values /><div class="choice-chip-grid">${categories.filter(category=>category.parent_id&&category.is_active!==false).map(category=>{const id=String(category.id);return `<button type="button" class="choice-chip ${(row.subcategory_ids||[]).map(String).includes(id)?"selected":""}" data-collection-subcategory="${id}">${escapeHtml(category.name_ar||category.name_en||category.slug)}</button>`}).join("")}</div></div><div class="field full"><label>${ui("English description", "الوصف بالإنجليزية")}</label><textarea name="description_en">${escapeHtml(row.description_en || "")}</textarea></div><div class="field full"><label>${ui("Arabic description", "الوصف بالعربية")}</label><textarea name="description_ar">${escapeHtml(row.description_ar || "")}</textarea></div></div></article>
+          <article class="card card-pad collection-sequence"><div class="collection-sequence-head"><div><span class="section-kicker">02</span><h2>${ui("Selected sequence", "ترتيب العناصر المختارة")}</h2><p>${ui("Each row can be a whole product or an exact product variant. Reorder it to control the storefront rail.", "اختر المنتج كاملًا أو خيارًا محددًا منه، ثم رتب العناصر للواجهة.")}</p></div><div><span class="pill" id="collectionEntryCount"></span><button class="btn primary" type="button" id="addCollectionProducts">${i("plus")}${ui("Add products", "إضافة منتجات")}</button></div></div><div id="collectionSequenceList"></div></article>
         </section>
         <aside class="collection-editor-side"><article class="card card-pad"><span class="section-kicker">STATUS</span><div class="collection-publish-row"><div><h2>${ui("Storefront visibility", "الظهور في الواجهة")}</h2><p>${ui("Inactive collections remain saved but are hidden.", "المجموعات غير النشطة تظل محفوظة ومخفية.")}</p></div><div class="field"><input type="hidden" name="is_active" value="${row.is_active !== false}" />${switchButton({ field:"is_active", value:row.is_active !== false, label:true })}</div></div></article><article class="card card-pad collection-cover-card"><span class="section-kicker">COVER</span>${imageUploadField("cover_image_url", ui("Collection cover", "صورة غلاف المجموعة"), row.cover_image_url || row.image_url || "")}</article></aside>
       </form>`;
     const form = document.getElementById("collectionEditorForm");
+    form.querySelectorAll("[data-collection-facet]").forEach(button => button.onclick = () => { const hidden=form.querySelector("[data-collection-facet-values]"); const values=new Set(JSON.parse(hidden.value || "[]")); const id=button.dataset.collectionFacet; values.has(id)?values.delete(id):values.add(id); hidden.value=JSON.stringify([...values]); button.classList.toggle("selected",values.has(id)); });
+    form.querySelectorAll("[data-collection-subcategory]").forEach(button => button.onclick = () => { const hidden=form.querySelector("[data-collection-subcategory-values]"); const values=new Set(JSON.parse(hidden.value || "[]").map(String)); const id=button.dataset.collectionSubcategory; values.has(id)?values.delete(id):values.add(id); hidden.value=JSON.stringify([...values].map(Number)); button.classList.toggle("selected",values.has(id)); });
     const renderSequence = () => {
       const list = document.getElementById("collectionSequenceList");
       document.getElementById("collectionEntryCount").textContent = `${selected.length} ${ui("entries", "عناصر")}`;
-      list.innerHTML = selected.length ? `<div class="collection-sequence-list">${selected.map(collectionSelectedRow).join("")}</div>` : `<div class="collection-sequence-empty"><span>${i("collection")}</span><strong>${ui("No variants selected", "لم يتم اختيار عناصر")}</strong><p>${ui("Add products, then choose the exact colors or options for this collection.", "أضف المنتجات ثم اختر الألوان أو الخيارات المحددة لهذه المجموعة.")}</p></div>`;
+      list.innerHTML = selected.length ? `<div class="collection-sequence-list">${selected.map(collectionSelectedRow).join("")}</div>` : `<div class="collection-sequence-empty"><span>${i("collection")}</span><strong>${ui("No products selected", "لم يتم اختيار منتجات")}</strong><p>${ui("Add products here, or choose facets above for an automatic collection.", "أضف منتجات هنا، أو اختر فئات بالأعلى لتتكون المجموعة تلقائيًا.")}</p></div>`;
       list.querySelectorAll("[data-remove-entry]").forEach(button => button.onclick = () => { const key = button.closest("[data-collection-entry]").dataset.collectionEntry; selected = selected.filter(item => collectionItemKey(item.product_id, item.variant_id) !== key); renderSequence(); });
       list.querySelectorAll("[data-move-entry]").forEach(button => button.onclick = () => { const key = button.closest("[data-collection-entry]").dataset.collectionEntry; const index = selected.findIndex(item => collectionItemKey(item.product_id, item.variant_id) === key); const next = button.dataset.moveEntry === "up" ? index - 1 : index + 1; if (index < 0 || next < 0 || next >= selected.length) return; [selected[index], selected[next]] = [selected[next], selected[index]]; renderSequence(); });
     };
@@ -1608,8 +2051,8 @@
       const button = document.querySelector('[type="submit"][form="collectionEditorForm"]');
       const values = namedValues(form);
       if (!values.name_en.trim() && !values.name_ar.trim()) return toast(ui("Enter at least one collection name.", "أدخل اسمًا واحدًا للمجموعة على الأقل."), "error");
-      if (!selected.length) return toast(ui("Add at least one product variant.", "أضف اختيار منتج واحدًا على الأقل."), "error");
-      const payload = { ...values, slug:values.slug || slugFromText(values.name_en || values.name_ar), is_active:values.is_active === "true", items:selected.map((item, index) => ({ product_id:Number(item.product_id), variant_id:item.variant_id === null || item.variant_id === undefined || item.variant_id === "" ? null : item.variant_id, sort_order:index })) };
+      if (!selected.length && !parseJsonArray(values.facet_ids).length && !parseJsonArray(values.subcategory_ids).length) return toast(ui("Add products or choose a facet or subcategory.", "أضف منتجات أو اختر فئة أو تصنيفًا فرعيًا."), "error");
+      const payload = { ...values, facet_ids:parseJsonArray(values.facet_ids), subcategory_ids:parseJsonArray(values.subcategory_ids).map(Number), slug:values.slug || slugFromText(values.name_en || values.name_ar), is_active:values.is_active === "true", items:selected.map((item, index) => ({ product_id:Number(item.product_id), variant_id:item.variant_id === null || item.variant_id === undefined || item.variant_id === "" ? null : item.variant_id, sort_order:index })) };
       button.disabled = true;
       try { const saved = await api(isNew ? "/api/admin/collections" : `/api/admin/collections/${row.id || collectionId}`, { method:isNew ? "POST" : "PUT", body:JSON.stringify(payload) }); toast(isNew ? t("created") : t("updated")); state.rows.collections = null; location.hash = "collections"; return saved; } catch (error) { toast(error.message, "error"); button.disabled = false; }
     };
@@ -1620,12 +2063,12 @@
     let focusedId = Number(products.find(product => productVariants(product).length || product.is_active !== false)?.id || products[0]?.id || 0);
     const pending = new Map();
     const existing = new Set(currentItems.map(item => collectionItemKey(item.product_id, item.variant_id)));
-    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop collection-picker-backdrop" id="collectionProductPicker"><div class="modal collection-picker-modal" role="dialog" aria-modal="true" aria-labelledby="collectionPickerTitle"><div class="modal-head"><div><h2 id="collectionPickerTitle">${ui("Add product variants", "إضافة اختيارات المنتجات")}</h2><p class="muted">${ui("Choose a product, then select one or more active variants.", "اختر منتجًا ثم حدد اختيارًا نشطًا أو أكثر.")}</p></div><button class="btn icon-btn" type="button" data-close-collection-picker aria-label="${t("close")}">×</button></div><div class="modal-body collection-picker-body"><div class="collection-picker-filters"><div class="field"><label>${ui("Search catalog", "بحث في الكتالوج")}</label><input id="collectionProductSearch" type="search" placeholder="${ui("Name or SKU", "الاسم أو SKU")}" /></div><div class="field"><label>${ui("Category", "التصنيف")}</label><select id="collectionCategoryFilter"><option value="">${ui("All categories", "كل التصنيفات")}</option>${[...new Set(products.map(product => product.category_slug).filter(Boolean))].sort().map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}</select></div></div><div class="collection-picker-columns"><section><div class="collection-picker-section-title"><strong>${ui("Products", "المنتجات")}</strong><span id="collectionProductResultCount"></span></div><div class="collection-product-grid" id="collectionProductGrid"></div></section><section class="collection-variant-panel"><div id="collectionVariantPanel"></div></section></div></div><div class="modal-foot"><span class="collection-picker-selection" id="collectionPendingCount"></span><button class="btn" type="button" data-close-collection-picker>${t("cancel")}</button><button class="btn primary" type="button" id="addCollectionSelection">${i("plus")}${ui("Add selected", "إضافة المحدد")}</button></div></div></div>`);
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop collection-picker-backdrop" id="collectionProductPicker"><div class="modal collection-picker-modal" role="dialog" aria-modal="true" aria-labelledby="collectionPickerTitle"><div class="modal-head"><div><h2 id="collectionPickerTitle">${ui("Add product variants", "إضافة اختيارات المنتجات")}</h2><p class="muted">${ui("Choose a product, then select the whole product or one or more active variants.", "اختر منتجًا ثم حدد اختيارًا نشطًا أو أكثر.")}</p></div><button class="btn icon-btn" type="button" data-close-collection-picker aria-label="${t("close")}">×</button></div><div class="modal-body collection-picker-body"><div class="collection-picker-filters"><div class="field"><label>${ui("Search catalog", "بحث في الكتالوج")}</label><input id="collectionProductSearch" type="search" placeholder="${ui("Name or SKU", "الاسم أو SKU")}" /></div><div class="field"><label>${ui("Category", "التصنيف")}</label><select id="collectionCategoryFilter"><option value="">${ui("All categories", "كل التصنيفات")}</option>${[...new Set(products.map(product => product.category_slug).filter(Boolean))].sort().map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}</select></div></div><div class="collection-picker-columns"><section><div class="collection-picker-section-title"><strong>${ui("Products", "المنتجات")}</strong><span id="collectionProductResultCount"></span></div><div class="collection-product-grid" id="collectionProductGrid"></div></section><section class="collection-variant-panel"><div id="collectionVariantPanel"></div></section></div></div><div class="modal-foot"><span class="collection-picker-selection" id="collectionPendingCount"></span><button class="btn" type="button" data-close-collection-picker>${t("cancel")}</button><button class="btn primary" type="button" id="addCollectionSelection">${i("plus")}${ui("Add selected", "إضافة المحدد")}</button></div></div></div>`);
     const modal = document.getElementById("collectionProductPicker");
     const close = () => modal.remove();
     modal.querySelectorAll("[data-close-collection-picker]").forEach(button => button.onclick = close);
     const updatePending = () => { const count = modal.querySelector("#collectionPendingCount"); count.textContent = pending.size ? `${pending.size} ${ui("selected", "محدد")}` : ui("Nothing selected", "لا يوجد تحديد"); modal.querySelector("#addCollectionSelection").disabled = !pending.size; };
-    const eligibleChoices = product => { const variants = productVariants(product); return variants.length ? variants.map(variant => ({ product_id:Number(product.id), variant_id:variant.id, product, variant })) : [{ product_id:Number(product.id), variant_id:null, product, variant:null }]; };
+    const eligibleChoices = product => { const variants = productVariants(product); return [{ product_id:Number(product.id), variant_id:null, product, variant:null }, ...variants.map(variant => ({ product_id:Number(product.id), variant_id:variant.id, product, variant }))]; };
     const renderVariants = () => {
       const product = products.find(item => Number(item.id) === focusedId);
       const target = modal.querySelector("#collectionVariantPanel");
@@ -1796,37 +2239,50 @@
   }
 
   async function openBundleEditor(row = {}) {
-    const products = state.rows.products?.length ? state.rows.products : await loadResource("products");
-    const selected = new Map((Array.isArray(row.items)?row.items:[]).map(item=>[Number(item.product_id||item.id),Math.max(1,Number(item.quantity||1))]));
-    document.body.insertAdjacentHTML("beforeend",`<div class="modal-backdrop" id="bundleModal"><form class="modal bundle-editor-modal" id="bundleForm"><div class="modal-head"><div><h2>${row.id?ui("Edit bundle", "تعديل البندل"):ui("Create bundle", "إنشاء بندل جديد")}</h2><p class="muted">${t("bundlesSub")}</p></div><button class="btn icon-btn" type="button" data-close-bundle>×</button></div><div class="modal-body bundle-editor-body"><section class="bundle-editor-form"><div class="section-kicker">01</div><h3>${ui("Bundle identity", "بيانات البندل")}</h3><div class="form-grid">${labeledField("name_en",ui("English name", "الاسم بالإنجليزية"),row.name_en||"", "text")}${labeledField("name_ar",ui("Arabic name", "الاسم بالعربية"),row.name_ar||"", "text")}${labeledField("slug",ui("Slug", "الرابط المختصر"),row.slug||"")}<div class="field"><label>${t("active")}</label><input type="hidden" name="is_active" value="${row.is_active!==false}" />${switchButton({field:"is_active",value:row.is_active!==false})}</div></div>${imageUploadField("main_photo_url",ui("Optional bundle cover", "صورة البندل الاختيارية"),row.main_photo_url||"")}<div class="form-grid"><div class="field full"><label>${ui("English description", "الوصف بالإنجليزية")}</label><textarea name="description_en">${escapeHtml(row.description_en||"")}</textarea></div><div class="field full"><label>${ui("Arabic description", "الوصف بالعربية")}</label><textarea name="description_ar">${escapeHtml(row.description_ar||"")}</textarea></div></div></section><section class="bundle-editor-form"><div class="section-kicker">02</div><div class="bundle-section-head"><div><h3>${ui("Choose products", "اختيار المنتجات")}</h3><p>${ui("Select at least two products and set the quantity of each.", "اختر منتجين على الأقل وحدد كمية كل منتج.")}</p></div><span id="bundleSelectedCount">0</span></div><div class="bundle-product-picker">${products.map(product=>bundlePickerCard(product,selected)).join("")}</div></section><section class="bundle-editor-form"><div class="section-kicker">03</div><h3>${ui("Price and inventory", "السعر والمخزون")}</h3><div class="form-grid">${labeledField("price",ui("Final bundle price", "السعر النهائي للبندل"),row.price||0,"number")}${labeledField("compare_at_price",ui("Before discount", "السعر قبل الخصم"),row.compare_at_price||row.regular_total||0,"number")}${labeledField("cost",ui("Bundle cost", "تكلفة البندل"),row.cost||0,"number")}<div class="field full bundle-stock-mode"><label>${ui("Independent bundle inventory", "مخزون مستقل للبندل")}</label><input type="hidden" name="use_own_stock" value="${row.use_own_stock===true}" />${switchButton({field:"use_own_stock",value:row.use_own_stock===true})}<small>${ui("Off: availability is calculated from the selected products.", "غير مفعل: المتاح يُحسب تلقائيًا من مخزون المنتجات المختارة.")}</small></div><div class="field" data-own-bundle-stock><label>${ui("Bundle stock", "مخزون البندل")}</label><input name="stock" type="number" min="0" value="${row.stock??""}" /></div></div><div class="bundle-live-summary" id="bundleLiveSummary"></div></section></div><div class="modal-foot"><button class="btn" type="button" data-close-bundle>${t("cancel")}</button><button class="btn primary" type="submit">${t("save")}</button></div></form></div>`);
-    const modal=document.getElementById("bundleModal");
-    const form=document.getElementById("bundleForm");
-    const close=()=>modal?.remove();
-    document.querySelectorAll("[data-close-bundle]").forEach(btn=>btn.onclick=close);
-    document.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);refresh();});
-    bindImageUploadFields();
-    const refresh=()=>{
-      modal.querySelectorAll("[data-bundle-product]").forEach(card=>{const id=Number(card.dataset.bundleProduct);const qty=card.querySelector("[data-bundle-quantity]");card.classList.toggle("selected",selected.has(id));qty.hidden=!selected.has(id);if(selected.has(id))qty.value=selected.get(id);});
-      const regular=[...selected].reduce((sum,[id,qty])=>{const product=products.find(item=>Number(item.id)===id);return sum+Number(product?.sale_price||product?.price||0)*qty;},0);
-      const price=Number(form.elements.price.value||0);const saving=Math.max(0,regular-price);
-      const finiteStocks=[...selected].map(([id,qty])=>{const product=products.find(item=>Number(item.id)===id);const stock=product?.stock;return stock===null||stock===undefined||Number(stock||0)===0?null:Math.floor(Number(stock)/qty);}).filter(value=>value!==null);
-      const inheritedStock=finiteStocks.length?Math.min(...finiteStocks):null;
-      const ownStock=form.elements.use_own_stock.value==="true";
-      modal.querySelector("[data-own-bundle-stock]").hidden=!ownStock;
-      const available=ownStock?Number(form.elements.stock.value||0):inheritedStock;
-      document.getElementById("bundleSelectedCount").textContent=`${selected.size} ${ui("selected", "مختار")}`;
-      document.getElementById("bundleLiveSummary").innerHTML=`<div><span>${ui("Products total", "مجموع المنتجات")}</span><strong>${bundleMoney(regular)}</strong></div><div><span>${ui("Bundle price", "سعر البندل")}</span><strong>${bundleMoney(price)}</strong></div><div class="saving"><span>${ui("Customer saves", "توفير العميل")}</span><strong>${bundleMoney(saving)}</strong></div><div><span>${ownStock?ui("Own inventory", "مخزون مستقل"):ui("From products", "من المنتجات")}</span><strong>${available===null?ui("Unlimited", "لا نهائي"):available}</strong></div>`;
-      if(!form.elements.compare_at_price.dataset.touched)form.elements.compare_at_price.value=regular||0;
+    const [products, rawColors, rawProductOptions] = await Promise.all([
+      state.rows.products?.length ? Promise.resolve(state.rows.products) : loadResource("products"),
+      state.rows.colors?.length ? Promise.resolve(state.rows.colors) : loadResource("colors").catch(() => []),
+      state.rows.options?.length ? Promise.resolve(state.rows.options) : loadResource("options").catch(() => [])
+    ]);
+    const colors=rawColors.filter(item=>item.is_active!==false&&item.isActive!==false);
+    const productOptions=rawProductOptions.filter(item=>item.is_active!==false&&item.isActive!==false);
+    const colorNames=color=>({ ar:String(color?.name_ar||color?.nameAr||color?.name_en||color?.nameEn||color?.slug||""), en:String(color?.name_en||color?.nameEn||color?.name_ar||color?.nameAr||color?.slug||"") });
+    const optionNames=choice=>({ ar:String(choice?.name_ar||choice?.nameAr||choice?.name_en||choice?.nameEn||choice?.slug||""), en:String(choice?.name_en||choice?.nameEn||choice?.name_ar||choice?.nameAr||choice?.slug||"") });
+    const optionGroups=choice=>({ ar:String(choice?.group_ar||choice?.groupAr||choice?.group_en||choice?.groupEn||""), en:String(choice?.group_en||choice?.groupEn||choice?.group_ar||choice?.groupAr||"") });
+    const matchColor=value=>colors.find(item=>String(item.id)===String(value||"")||[item.name_ar,item.nameAr,item.name_en,item.nameEn,item.slug,item.color,item.hex,item.hex_code].filter(Boolean).some(entry=>String(entry).toLowerCase()===String(value||"").toLowerCase()));
+    const matchProductOption=value=>productOptions.find(item=>String(item.id)===String(value||"")||[item.name_ar,item.nameAr,item.name_en,item.nameEn,item.slug].filter(Boolean).some(entry=>String(entry).toLowerCase()===String(value||"").toLowerCase()));
+    const bundleOptionPartLabel=(group,value)=>{const optionValue=String(value||"").trim(),rawGroup=String(group||"").trim();if(!optionValue)return "";const hasArabic=/[\u0600-\u06ff]/.test(`${rawGroup}${optionValue}`);if(/شرشف/.test(rawGroup))return `${hasArabic?"شرشف":"Bedsheet"} ${optionValue}`.trim();const cleanedGroup=rawGroup.replace(/^(?:أختر|اختر|اختار)\s*/u,"").replace(/^نوع\s*/u,"").replace(/^(?:choose|select)\s+(?:the\s+)?/i,"").replace(/^type\s+(?:of\s+)?/i,"").trim();return cleanedGroup?`${cleanedGroup} ${optionValue}`.trim():optionValue;};
+    const syncBundleOptionIdentity=option=>{const color=matchColor(option.color_id||option.color||option.hex_code),choice=matchProductOption(option.option_id||option.value);const colorLabel=colorNames(color),choiceLabel=optionNames(choice),groups=optionGroups(choice);option.color_id=color?.id||option.color_id||null;option.color=colorLabel.ar||colorLabel.en||String(option.color||"");option.color_name_ar=colorLabel.ar||String(option.color_name_ar||option.color||"");option.color_name_en=colorLabel.en||String(option.color_name_en||option.color||"");option.hex_code=color?.color||color?.hex_code||color?.hex||option.hex_code||"";option.option_id=choice?.id||option.option_id||null;option.option=groups.ar||groups.en||String(option.option||"");option.value=choiceLabel.ar||choiceLabel.en||String(option.value||"");option.option_name_ar=choiceLabel.ar||String(option.option_name_ar||option.value||"");option.option_name_en=choiceLabel.en||String(option.option_name_en||option.value||"");const generatedAr=[option.color_name_ar,bundleOptionPartLabel(groups.ar||groups.en,option.option_name_ar)].filter(Boolean).join(" · "),generatedEn=[option.color_name_en,bundleOptionPartLabel(groups.en||groups.ar,option.option_name_en)].filter(Boolean).join(" · ");option.label_ar=generatedAr||option.label_ar||ui("Bundle option","خيار بندل");option.label_en=generatedEn||option.label_en||ui("Bundle option","خيار بندل");return option;};
+    const sourceOptions = Array.isArray(row.bundle_variants) && row.bundle_variants.length ? row.bundle_variants : Array.isArray(row.variants) && row.variants.length ? row.variants : [{ label_en:"", label_ar:"", price:row.price || 0, compare_at_price:row.compare_at_price || row.regular_total || 0, cost:row.cost || 0, use_own_stock:row.use_own_stock === true, stock:row.stock ?? null, items:Array.isArray(row.items) ? row.items : [] }];
+    const options = sourceOptions.map((option, index) => syncBundleOptionIdentity({ ...option, id:option.id || `bundle-option-${Date.now()}-${index}`, items:(option.items || []).map(item => ({ product_id:Number(item.product_id || item.id), variant_id:item.variant_id || null, quantity:Math.max(1, Number(item.quantity || 1)) })) }));
+    const colorSelectOptions=option=>`<option value="">${ui("Choose color","اختر اللون")}</option>${colors.map(color=>{const names=colorNames(color),hex=color.color||color.hex_code||color.hex||"#d7dae0";return `<option value="${escapeHtml(color.id)}" ${String(option.color_id||"")===String(color.id)?"selected":""}>● ${escapeHtml(state.lang==="ar"?names.ar:names.en)} · ${escapeHtml(hex)}</option>`;}).join("")}`;
+    const productOptionSelectOptions=option=>`<option value="">${ui("Choose option / style","اختر الخيار أو الشكل")}</option>${productOptions.map(choice=>{const names=optionNames(choice),groups=optionGroups(choice),label=state.lang==="ar"?names.ar:names.en,group=state.lang==="ar"?groups.ar:groups.en;return `<option value="${escapeHtml(choice.id)}" ${String(option.option_id||"")===String(choice.id)?"selected":""}>${escapeHtml(group?`${group} — ${label}`:label)}</option>`;}).join("")}`;
+    const productType = product => product.product_type || ((product.variants || []).length ? "variable" : "basic");
+    const productName = product => state.lang === "ar" ? (product.name_ar || product.name_en) : (product.name_en || product.name_ar);
+    const variantName = variant => [variant.color, variant.option, variant.value].filter(Boolean).join(" / ") || variant.sku || variant.id;
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop" id="bundleModal"><form class="modal bundle-editor-modal" id="bundleForm"><div class="modal-head"><div><span class="section-kicker">BUNDLE PRODUCT</span><h2>${row.id ? ui("Edit bundle", "تعديل البندل") : ui("Create bundle", "إنشاء بندل جديد")}</h2><p class="muted">${ui("Each bundle option has its own price, inventory, and exact product components.", "كل خيار في البندل له سعره ومخزونه ومكونات المنتجات المحددة.")}</p></div><button class="btn icon-btn" type="button" data-close-bundle>×</button></div><div class="modal-body bundle-editor-body"><section class="bundle-editor-form"><div class="section-kicker">01</div><h3>${ui("Bundle identity", "بيانات البندل")}</h3><div class="form-grid">${labeledField("name_en",ui("English name", "الاسم بالإنجليزية"),row.name_en||"", "text")}${labeledField("name_ar",ui("Arabic name", "الاسم بالعربية"),row.name_ar||"", "text")}${labeledField("slug",ui("Slug", "الرابط المختصر"),row.slug||"")}<div class="field"><label>${t("active")}</label><input type="hidden" name="is_active" value="${row.is_active!==false}" />${switchButton({field:"is_active",value:row.is_active!==false})}</div></div>${imageUploadField("main_photo_url",ui("Optional bundle cover", "صورة عامة اختيارية للبندل"),row.main_photo_url||"")}<div class="form-grid"><div class="field full"><label>${ui("English description", "الوصف بالإنجليزية")}</label><textarea name="description_en">${escapeHtml(row.description_en||"")}</textarea></div><div class="field full"><label>${ui("Arabic description", "الوصف بالعربية")}</label><textarea name="description_ar">${escapeHtml(row.description_ar||"")}</textarea></div></div></section><section class="bundle-options-shell"><div class="bundle-section-head"><div><span class="section-kicker">02</span><h3>${ui("Bundle options", "خيارات البندل")}</h3><p>${ui("For example: Red maps to the red bedsheet variant and the red rug variant.", "مثال: خيار أحمر يتربط بمتغير الشرشف الأحمر ومتغير السجادة الحمراء.")}</p></div><button class="btn primary" type="button" id="addBundleOption">${i("plus")}${ui("Add bundle option", "إضافة خيار للبندل")}</button></div><div id="bundleOptionList"></div></section></div><div class="modal-foot"><button class="btn" type="button" data-close-bundle>${t("cancel")}</button><button class="btn primary" type="submit">${i("check")}${t("save")}</button></div></form></div>`);
+    const modal = document.getElementById("bundleModal");
+    const form = document.getElementById("bundleForm");
+    const close = () => modal?.remove();
+    const componentKey = item => `${item.product_id}:${item.variant_id || "base"}`;
+    const optionRegularTotal = option => option.items.reduce((sum, item) => { const product=products.find(entry=>Number(entry.id)===Number(item.product_id)); const variant=(product?.variants||[]).find(entry=>String(entry.id)===String(item.variant_id)); return sum + Number(variant?.price ?? product?.sale_price ?? product?.price ?? 0) * Math.max(1,Number(item.quantity||1)); },0);
+    const selectedComponentHtml = (item, optionIndex) => { const product=products.find(entry=>Number(entry.id)===Number(item.product_id)); const variant=(product?.variants||[]).find(entry=>String(entry.id)===String(item.variant_id)); return `<article class="bundle-component-row" data-component-key="${escapeHtml(componentKey(item))}"><img src="${escapeHtml(variant?.image_url||product?.main_photo_url||product?.image_url||"")}" alt=""/><div><strong>${escapeHtml(productName(product||{}))}</strong><small>${variant?escapeHtml(variantName(variant)):ui("Whole product", "المنتج كامل")}</small></div><label>${ui("Qty", "الكمية")}<input type="number" min="1" value="${Math.max(1,Number(item.quantity||1))}" data-component-qty="${optionIndex}:${escapeHtml(componentKey(item))}"/></label><button class="btn icon-btn danger" type="button" data-remove-component="${optionIndex}:${escapeHtml(componentKey(item))}">${i("trash")}</button></article>`; };
+    const catalogCardHtml = (product, optionIndex) => { const isVariable=productType(product)==="variable"; const variants=(product.variants||[]).filter(variant=>variant.is_active!==false); return `<article class="bundle-catalog-card" data-bundle-catalog="${optionIndex}:${product.id}"><img src="${escapeHtml(product.main_photo_url||product.image_url||variants[0]?.image_url||"")}" alt=""/><div><strong>${escapeHtml(productName(product))}</strong><small>${isVariable?ui("Choose an exact variant", "اختر متغيرًا محددًا"):ui("Basic product", "منتج ثابت")}</small>${isVariable?`<select data-bundle-variant-select>${variants.map(variant=>`<option value="${escapeHtml(variant.id)}">${escapeHtml(variantName(variant))} · ${bundleMoney(variant.price||0)}</option>`).join("")}</select>`:""}</div><button class="btn icon-btn" type="button" data-add-component="${optionIndex}:${product.id}" ${isVariable&&!variants.length?"disabled":""}>${i("plus")}</button></article>`; };
+    const drawOptions = () => {
+      const root = document.getElementById("bundleOptionList");
+      root.innerHTML = options.map((option,index) => { const regular=optionRegularTotal(option); return `<article class="bundle-option-editor" data-bundle-option="${index}"><header><div><span>${ui("Bundle option", "خيار البندل")} ${index+1}</span><h3>${escapeHtml(option.label_ar||option.label_en||ui("Untitled option", "خيار بدون اسم"))}</h3></div><button class="btn icon-btn danger" type="button" data-remove-bundle-option="${index}" ${options.length===1?"disabled":""}>${i("trash")}</button></header><div class="bundle-option-fields bundle-option-choice-fields"><label class="bundle-master-choice"><span>${ui("Color", "اللون")}</span><select data-option-field="color_id">${colorSelectOptions(option)}</select><small>${ui("Pulled from Colors in the dashboard", "مأخوذ من الألوان الموجودة في الداشبورد")}</small></label><label class="bundle-master-choice"><span>${ui("Product option / style", "الخيار أو الشكل")}</span><select data-option-field="option_id">${productOptionSelectOptions(option)}</select><small>${ui("Pulled from product options", "مأخوذ من خيارات المنتجات والخياطات")}</small></label><div class="bundle-generated-choice"><span class="bundle-choice-swatch" style="--bundle-choice-color:${escapeHtml(option.hex_code||"#d7dae0")}"></span><div><small>${ui("Generated bundle option", "خيار البندل الناتج")}</small><strong>${escapeHtml(state.lang==="ar"?(option.label_ar||option.label_en):(option.label_en||option.label_ar))}</strong></div></div><label>${t("sku")}<input data-option-field="sku" value="${escapeHtml(option.sku||"")}" dir="ltr"/></label><label>${ui("Option image URL", "رابط صورة الخيار")}<input data-option-field="image_url" value="${escapeHtml(option.image_url||"")}" dir="ltr"/></label><label>${ui("Bundle price", "سعر البندل")}<input data-option-field="price" type="number" min="0" step="0.01" value="${Number(option.price||0)}"/></label><label>${ui("Before discount", "السعر قبل الخصم")}<input data-option-field="compare_at_price" type="number" min="0" step="0.01" value="${Number(option.compare_at_price||regular||0)}"/></label><label>${t("cost")}<input data-option-field="cost" type="number" min="0" step="0.01" value="${Number(option.cost||0)}"/></label><label class="bundle-option-stock-toggle"><span>${ui("Independent stock", "مخزون مستقل")}</span><input data-option-field="use_own_stock" type="checkbox" ${option.use_own_stock?"checked":""}/></label><label ${option.use_own_stock?"":"hidden"} data-option-stock-wrap>${ui("Stock", "المخزون")}<input data-option-field="stock" type="number" min="0" value="${option.stock??0}"/></label></div><div class="bundle-option-summary"><span><b>${option.items.length}</b> ${ui("components", "مكونات")}</span><span>${ui("Products total", "مجموع المنتجات")}: <b>${bundleMoney(regular)}</b></span><span>${ui("Bundle price", "سعر البندل")}: <b>${bundleMoney(option.price||0)}</b></span></div><div class="bundle-option-workspace"><section><h4>${ui("Selected components", "المكونات المختارة")}</h4><div class="bundle-component-list">${option.items.length?option.items.map(item=>selectedComponentHtml(item,index)).join(""):`<div class="empty-inline">${ui("Add at least two components", "أضف مكونين على الأقل")}</div>`}</div></section><section><h4>${ui("Add products", "إضافة منتجات")}</h4><div class="bundle-catalog-list">${products.filter(product=>product.is_active!==false).map(product=>catalogCardHtml(product,index)).join("")}</div></section></div></article>`; }).join("");
+      root.querySelectorAll("[data-option-field]").forEach(input => { const update=()=>{const card=input.closest("[data-bundle-option]");const option=options[Number(card.dataset.bundleOption)],field=input.dataset.optionField;option[field]=input.type==="checkbox"?input.checked:input.type==="number"?Number(input.value||0):input.value;if(field==="color_id"||field==="option_id"){syncBundleOptionIdentity(option);drawOptions();return;}if(field==="use_own_stock")drawOptions();};input.addEventListener(input.tagName==="SELECT"||input.type==="checkbox"?"change":"input",update);});
+      root.querySelectorAll("[data-add-component]").forEach(button => button.onclick = () => { const [optionIndex,productId]=button.dataset.addComponent.split(":"); const option=options[Number(optionIndex)], card=button.closest("[data-bundle-catalog]"); const product=products.find(entry=>String(entry.id)===productId); const variantId=productType(product)==="variable"?(card.querySelector("[data-bundle-variant-select]")?.value||null):null; const item={product_id:Number(productId),variant_id:variantId,quantity:1}; if(!option.items.some(entry=>componentKey(entry)===componentKey(item))) option.items.push(item); drawOptions(); });
+      root.querySelectorAll("[data-remove-component]").forEach(button => button.onclick = () => { const split=button.dataset.removeComponent.split(":"); const optionIndex=Number(split.shift()), key=split.join(":"); options[optionIndex].items=options[optionIndex].items.filter(item=>componentKey(item)!==key); drawOptions(); });
+      root.querySelectorAll("[data-component-qty]").forEach(input => input.oninput = () => { const split=input.dataset.componentQty.split(":"); const optionIndex=Number(split.shift()), key=split.join(":"); const item=options[optionIndex].items.find(entry=>componentKey(entry)===key); if(item)item.quantity=Math.max(1,Number(input.value||1)); });
+      root.querySelectorAll("[data-remove-bundle-option]").forEach(button => button.onclick = () => { if(options.length<=1)return; options.splice(Number(button.dataset.removeBundleOption),1); drawOptions(); });
     };
-    modal.querySelectorAll("[data-bundle-product]").forEach(card=>{card.onclick=event=>{if(event.target.closest("[data-bundle-quantity]"))return;const id=Number(card.dataset.bundleProduct);selected.has(id)?selected.delete(id):selected.set(id,1);refresh();};card.querySelector("[data-bundle-quantity]").oninput=event=>{selected.set(Number(card.dataset.bundleProduct),Math.max(1,Number(event.target.value||1)));refresh();};});
-    form.elements.price.addEventListener("input",refresh);form.elements.stock.addEventListener("input",refresh);form.elements.compare_at_price.addEventListener("input",()=>{form.elements.compare_at_price.dataset.touched="true";});
-    refresh();
-    form.onsubmit=async event=>{event.preventDefault();if(selected.size<2){toast(ui("Choose at least two products", "اختر منتجين على الأقل"),"error");return;}const values=Object.fromEntries(new FormData(form));const ownStock=values.use_own_stock==="true";const payload={...values,price:Number(values.price||0),compare_at_price:Number(values.compare_at_price||0),cost:Number(values.cost||0),use_own_stock:ownStock,stock:ownStock?Number(values.stock||0):null,is_active:values.is_active==="true",items:[...selected].map(([product_id,quantity])=>({product_id,quantity}))};try{await api(row.id?`/api/admin/bundles/${row.id}`:"/api/admin/bundles",{method:row.id?"PUT":"POST",body:JSON.stringify(payload)});close();toast(row.id?t("updated"):t("created"));renderBundles(document.getElementById("page"));}catch(error){toast(error.message,"error");}};
-  }
-
-  function bundlePickerCard(product, selected) {
-    const id=Number(product.id);const active=selected.has(id);
-    return `<div class="bundle-picker-card ${active?"selected":""}" data-bundle-product="${id}" role="button" tabindex="0"><img src="${escapeHtml(product.main_photo_url||product.image_url||"")}" alt="" /><span>#${id}</span><strong>${escapeHtml(state.lang==="ar"?(product.name_ar||product.name_en):(product.name_en||product.name_ar))}</strong><small>${bundleMoney(product.sale_price||product.price||0)}</small><input data-bundle-quantity type="number" min="1" value="${selected.get(id)||1}" ${active?"":"hidden"} aria-label="${ui("Quantity", "الكمية")}" /></div>`;
+    modal.querySelectorAll("[data-close-bundle]").forEach(button=>button.onclick=close);
+    modal.querySelectorAll("[data-form-switch]").forEach(button=>button.onclick=()=>updateFormSwitch(button));
+    bindImageUploadFields();
+    document.getElementById("addBundleOption").onclick=()=>{options.push(syncBundleOptionIdentity({id:`bundle-option-${Date.now()}`,label_en:"",label_ar:"",color_id:null,option_id:null,color:"",hex_code:"",option:"",value:"",sku:"",image_url:"",price:0,compare_at_price:0,cost:0,use_own_stock:false,stock:null,items:[],is_active:true,sort_order:options.length}));drawOptions();};
+    drawOptions();
+    form.onsubmit=async event=>{event.preventDefault();const missingChoiceIndex=options.findIndex(option=>!option.color_id&&!option.option_id);if(missingChoiceIndex>=0){toast(ui(`Choose a color or product option for bundle option ${missingChoiceIndex+1}.`,`اختر لونًا أو خيار منتج لخيار البندل رقم ${missingChoiceIndex+1}.`),"error");return;}const invalidIndex=options.findIndex(option=>option.items.length<2);if(invalidIndex>=0){toast(ui(`Bundle option ${invalidIndex+1} needs at least two components.`,`خيار البندل رقم ${invalidIndex+1} يحتاج مكونين على الأقل.`),"error");return;}const values=Object.fromEntries(new FormData(form));const normalizedOptions=options.map((option,index)=>({...option,sort_order:index,is_active:true,items:option.items.map(item=>({...item,quantity:Math.max(1,Number(item.quantity||1))}))}));const first=normalizedOptions[0];const payload={...values,product_type:"bundle",is_active:values.is_active==="true",items:first.items,price:Number(first.price||0),compare_at_price:Number(first.compare_at_price||0),cost:Number(first.cost||0),use_own_stock:first.use_own_stock===true,stock:first.use_own_stock?Number(first.stock||0):null,bundle_variants:normalizedOptions};const button=form.querySelector('[type="submit"]');button.disabled=true;try{await api(row.id?`/api/admin/bundles/${row.id}`:"/api/admin/bundles",{method:row.id?"PUT":"POST",body:JSON.stringify(payload)});close();toast(row.id?t("updated"):t("created"));renderBundles(document.getElementById("page"));}catch(error){toast(error.message,"error");button.disabled=false;}};
   }
 
   function table(resource, rows, key) {
@@ -1884,8 +2340,9 @@
       if (row.inventory_mode === "out_of_stock" || value === 0) return `<span class="status-pill bad">${ui("Out of stock", "نافد")}</span>`;
       if (row.inventory_mode === "unlimited" || value === null || value === undefined || value === "") return `<span class="status-pill good">${t("unlimitedStock")}</span>`;
     }
-    if (resourceKey === "categories" && key === "category_type") return `<span class="status-pill ${value === "smart" ? "good" : "empty"}">${value === "smart" ? ui("Smart", "ذكي") : ui("Manual", "يدوي")}</span>`;
-    if (resourceKey === "categories" && key === "matched_product_count") return row.category_type === "smart" ? `<strong>${Number(value || 0)}</strong>` : `<span class="muted">${ui("Manual", "يدوي")}</span>`;
+    if (resourceKey === "categories" && key === "category_type") return `<span class="status-pill ${value === "smart" ? "good" : row.parent_id ? "warn" : "empty"}">${value === "smart" ? ui("Smart", "ذكي") : row.parent_id ? ui("Subcategory", "تصنيف فرعي") : ui("Manual", "يدوي")}</span>`;
+    if (resourceKey === "categories" && ["name_en", "name_ar"].includes(key) && row.parent_id) return `<span class="category-child-name">↳ ${escapeHtml(value || "")}</span>`;
+    if (resourceKey === "categories" && key === "matched_product_count") return `<strong>${Number(value || 0)}</strong>`;
     if (isImageKey(key) && value) return `<img class="table-thumb" src="${value}" alt="" loading="lazy" />`;
     if (key?.toLowerCase().includes("color") && String(value || "").startsWith("#")) return `<span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:18px;height:18px;border-radius:50%;background:${value};border:1px solid var(--line-strong);"></span>${value}</span>`;
     if (value === undefined || value === null || value === "") return `<span class="muted">-</span>`;
@@ -1905,7 +2362,8 @@
       slug: values.slug,
       description_en: values.description_en,
       description_ar: values.description_ar,
-      category_type: values.category_type === "smart" ? "smart" : "manual",
+      parent_id: values.parent_id ? Number(values.parent_id) : null,
+      category_type: values.parent_id ? "manual" : (values.category_type === "smart" ? "smart" : "manual"),
       smart_rule: {
         type: values.rule_type,
         lookback_days: Number(values.lookback_days || 0),
@@ -1936,7 +2394,7 @@
             <section class="catalog-form-section accent">${imageUploadField("image_url", "image", row.image_url || "")}</section>
             <section class="catalog-form-section">
               <div class="section-kicker">01</div><h3>${ui("Identity", "بيانات التصنيف")}</h3>
-              <div class="form-grid"><div class="field"><label>${t("nameEn")} *</label><input name="name_en" value="${escapeHtml(row.name_en || "")}" required /></div><div class="field"><label>${t("nameAr")} *</label><input name="name_ar" value="${escapeHtml(row.name_ar || "")}" required dir="rtl" /></div><div class="field full"><label>${t("slug")} *</label><input name="slug" value="${escapeHtml(row.slug || "")}" required dir="ltr" /></div><div class="field full"><label>${t("descriptionEn")}</label><textarea name="description_en">${escapeHtml(row.description_en || "")}</textarea></div><div class="field full"><label>${t("descriptionAr")}</label><textarea name="description_ar" dir="rtl">${escapeHtml(row.description_ar || "")}</textarea></div></div>
+              <div class="form-grid"><div class="field"><label>${t("nameEn")} *</label><input name="name_en" value="${escapeHtml(row.name_en || "")}" required /></div><div class="field"><label>${t("nameAr")} *</label><input name="name_ar" value="${escapeHtml(row.name_ar || "")}" required dir="rtl" /></div><div class="field full"><label>${t("slug")} *</label><input name="slug" value="${escapeHtml(row.slug || "")}" required dir="ltr" /></div><div class="field full"><label>${ui("Parent category", "التصنيف الرئيسي")}</label><select name="parent_id"><option value="">${ui("Main category", "تصنيف رئيسي")}</option>${(state.rows.categories || []).filter(category => !category.parent_id && category.category_type !== "smart" && Number(category.id) !== Number(row.id)).map(category => `<option value="${Number(category.id)}" ${Number(row.parent_id) === Number(category.id) ? "selected" : ""}>${escapeHtml(category.name_ar || category.name_en || category.slug)}</option>`).join("")}</select><small>${ui("Choose a main category to make this a subcategory.", "اختر تصنيفًا رئيسيًا ليصبح هذا تصنيفًا فرعيًا.")}</small></div><div class="field full"><label>${t("descriptionEn")}</label><textarea name="description_en">${escapeHtml(row.description_en || "")}</textarea></div><div class="field full"><label>${t("descriptionAr")}</label><textarea name="description_ar" dir="rtl">${escapeHtml(row.description_ar || "")}</textarea></div></div>
             </section>
             <section class="catalog-form-section">
               <div class="section-kicker">02</div><h3>${ui("Category behavior", "طريقة عمل التصنيف")}</h3>
@@ -1959,7 +2417,10 @@
     modal.querySelectorAll("[data-form-switch]").forEach((button) => button.onclick = () => { updateFormSwitch(button); schedulePreview(); });
     bindImageUploadFields();
     const syncType = (nextType) => { form.elements.category_type.value = nextType; modal.querySelectorAll("[data-category-type]").forEach((button) => button.classList.toggle("active", button.dataset.categoryType === nextType)); modal.querySelector("[data-smart-settings]").classList.toggle("is-visible", nextType === "smart"); schedulePreview(); };
-    modal.querySelectorAll("[data-category-type]").forEach((button) => button.onclick = () => syncType(button.dataset.categoryType));
+    modal.querySelectorAll("[data-category-type]").forEach((button) => button.onclick = () => { if (!form.elements.parent_id.value) syncType(button.dataset.categoryType); });
+    const syncParent = () => { const child=Boolean(form.elements.parent_id.value); modal.querySelector(".category-type-control").classList.toggle("is-disabled", child); if (child) syncType("manual"); };
+    form.elements.parent_id.addEventListener("change", syncParent);
+    syncParent();
     let previewTimer;
     const schedulePreview = () => { clearTimeout(previewTimer); previewTimer = setTimeout(async () => { if (form.elements.category_type.value !== "smart") return; const target = modal.querySelector("[data-category-preview]"); const productTarget = modal.querySelector("[data-category-preview-products]"); target.classList.add("is-loading"); try { const result = await api("/api/admin/categories/preview", {method:"POST",body:JSON.stringify(categoryRulePayload(form))}); target.querySelector("strong").textContent = Number(result.matched_product_count || 0); productTarget.innerHTML = (result.products || []).slice(0,6).map((product) => `<span>${product.image_url ? `<img src="${escapeHtml(product.image_url)}" alt="" />` : ""}<b>#${product.rank}</b>${escapeHtml(state.lang === "ar" ? (product.name_ar || product.name_en) : (product.name_en || product.name_ar))}</span>`).join("") || `<small>${ui("No products match this rule yet.", "لا توجد منتجات مطابقة لهذه القاعدة حاليًا.")}</small>`; } catch (error) { productTarget.innerHTML = `<small>${escapeHtml(error.message)}</small>`; } finally { target.classList.remove("is-loading"); } }, 280); };
     form.querySelectorAll("select,input[type='number']").forEach((input) => input.addEventListener("change", schedulePreview));
@@ -2008,21 +2469,44 @@
     document.getElementById("editorForm").onsubmit = (event) => saveRow(event, key, row.id);
   }
 
+  function renderProductTypeChooser(page) {
+    page.innerHTML = `
+      <div class="product-editor-head product-type-head"><div><button class="btn back-link" type="button" id="backToProducts">${i("arrow-left")}${ui("Back to products", "العودة للمنتجات")}</button><span class="section-kicker">NEW PRODUCT</span><h1>${ui("Choose the product type", "اختر نوع المنتج")}</h1><p>${ui("This choice controls where price, stock, images, and sellable options are managed.", "الاختيار ده بيحدد مكان إدارة السعر والمخزون والصور والخيارات القابلة للبيع.")}</p></div></div>
+      <section class="product-type-grid">
+        <button type="button" class="product-type-card" data-new-product-type="basic"><span class="product-type-icon">${i("box")}</span><div><b>01</b><h2>${ui("Basic product", "منتج ثابت")}</h2><p>${ui("One price, one inventory record, and one unified gallery. No colors or variants.", "سعر ومخزون ومعرض صور موحد، من غير ألوان أو متغيرات.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
+        <button type="button" class="product-type-card" data-new-product-type="variable"><span class="product-type-icon">${i("sliders-horizontal")}</span><div><b>02</b><h2>${ui("Variable product", "منتج بمتغيرات")}</h2><p>${ui("Every variant owns its price, cost, stock, SKU, weight, and image. Minimum two variants.", "كل متغير له سعره وتكلفته ومخزونه وكوده ووزنه وصورته. الحد الأدنى متغيران.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
+        <button type="button" class="product-type-card is-bundle" data-new-product-type="bundle"><span class="product-type-icon">${i("layers")}</span><div><b>03</b><h2>${ui("Bundle", "بندل")}</h2><p>${ui("Build bundle options and map each option to whole basic products or exact product variants.", "أنشئ خيارات للبندل واربط كل خيار بمنتجات ثابتة كاملة أو متغيرات محددة.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
+      </section>`;
+    document.getElementById("backToProducts").onclick = () => renderResource(page, "products");
+    page.querySelectorAll("[data-new-product-type]").forEach(button => button.onclick = () => {
+      const type = button.dataset.newProductType;
+      if (type === "bundle") { openBundleEditor(); return; }
+      renderProductEditorPage({ product_type:type });
+    });
+  }
+
   async function renderProductEditorPage(row = {}) {
     await loadCatalogChoices();
     const page = document.getElementById("page");
     const isEdit = Boolean(row.id);
+    if (!isEdit && !row.product_type) { renderProductTypeChooser(page); return; }
     const resource = resources.products;
+    const inferredType = row.product_type === "variable" || (!row.product_type && parseJsonArray(row.variants).length) ? "variable" : "basic";
+    row = { ...row, product_type:inferredType };
     const formGroups = groupedFields("products", resource.fields, row);
     const productTitle = isEdit
       ? ui(`Edit: ${row.name_en || row.name_ar || `#${row.id}`}`, `تعديل: ${row.name_ar || row.name_en || `#${row.id}`}`)
-      : ui("Add new product", "إضافة منتج جديد");
+      : inferredType === "variable" ? ui("Add variable product", "إضافة منتج بمتغيرات") : ui("Add basic product", "إضافة منتج ثابت");
+    const typeTitle = inferredType === "variable" ? ui("Variable product", "منتج بمتغيرات") : ui("Basic product", "منتج ثابت");
+    const typeHint = inferredType === "variable" ? ui("Commercial data belongs to each variant. Add at least two complete variants.", "بيانات البيع موجودة داخل كل متغير. أضف متغيرين كاملين على الأقل.") : ui("This product has one unified price, stock record, SKU, and gallery.", "المنتج له سعر ومخزون وكود ومعرض صور موحد.");
     page.innerHTML = `
       <div class="product-editor-head">
-        <div><button class="btn back-link" type="button" id="backToProducts">${i("arrow-left")}${ui("Back to products", "العودة للمنتجات")}</button><span class="section-kicker">${isEdit ? `PRODUCT #${row.id}` : "NEW PRODUCT"}</span><h1>${escapeHtml(productTitle)}</h1><p>${ui("Manage the product, its exact sellable variants, media, and customer feedback from one place.", "أدر بيانات المنتج واختياراته القابلة للبيع وصوره وتقييماته من مكان واحد.")}</p></div>
+        <div><button class="btn back-link" type="button" id="backToProducts">${i("arrow-left")}${ui("Back to products", "العودة للمنتجات")}</button><span class="section-kicker">${isEdit ? `PRODUCT #${row.id}` : "NEW PRODUCT"}</span><h1>${escapeHtml(productTitle)}</h1><p>${ui("Manage the product identity and the sellable data required by its type.", "أدر هوية المنتج وبيانات البيع المطلوبة حسب نوعه.")}</p></div>
         <div class="product-editor-head-actions"><span class="product-draft-state" id="productDraftState">${ui("No unsaved changes", "لا توجد تعديلات غير محفوظة")}</span><button class="btn" type="button" id="cancelProduct">${t("cancel")}</button><button class="btn primary" type="submit" form="editorForm">${i("check")}${t("save")}</button></div>
       </div>
+      <div class="product-type-summary is-${inferredType}"><span>${inferredType === "variable" ? i("sliders-horizontal") : i("box")}</span><div><small>${ui("Product type", "نوع المنتج")}</small><strong>${typeTitle}</strong><p>${typeHint}</p></div>${!isEdit ? `<button class="btn" type="button" id="changeProductType">${ui("Change type", "تغيير النوع")}</button>` : ""}</div>
       <form class="product-editor-page" id="editorForm">
+        <input type="hidden" name="product_type" value="${inferredType}" />
         <div class="catalog-form-layout">
           ${formGroups.map(group => `
             <section class="catalog-form-section ${group.accent ? "accent" : ""}" id="${group.id || ""}">
@@ -2039,20 +2523,22 @@
     `;
     const leave = () => renderResource(page, "products");
     document.getElementById("backToProducts").onclick = document.getElementById("cancelProduct").onclick = leave;
+    document.getElementById("changeProductType")?.addEventListener("click", () => renderProductTypeChooser(page));
     document.querySelectorAll("[data-form-switch]").forEach(btn => btn.onclick = () => updateFormSwitch(btn));
     bindImageUploadFields();
     bindColorChoiceFields();
-    bindVariantBuilder();
-    bindProductGallery(row);
-    bindProductInventory();
+    document.querySelectorAll("[data-label-choice]").forEach(button => button.onclick = () => { const hidden=button.closest(".field")?.querySelector("[data-label-values]"); const values=new Set(JSON.parse(hidden?.value || "[]")); const id=button.dataset.labelChoice; values.has(id)?values.delete(id):values.add(id); if(hidden) hidden.value=JSON.stringify([...values]); button.classList.toggle("selected",values.has(id)); });
+    bindProductSubcategoryField();
+    if (inferredType === "variable") bindVariantBuilder();
+    if (inferredType === "basic") { bindProductGallery(row); bindProductInventory(); }
     bindProductDirtyState();
     if (row.id) loadProductReviewsPanel(row);
     document.getElementById("editorForm").onsubmit = (event) => saveRow(event, "products", row.id);
   }
 
-  async function loadCatalogChoices() {
+async function loadCatalogChoices() {
     await Promise.all([
-      ...["categories", "brands", "colors", "options"].map(key => loadResource(key).catch(() => state.rows[key] || [])),
+      ...["categories", "brands", "colors", "options", "labels", "facets"].map(key => loadResource(key).catch(() => state.rows[key] || [])),
       loadProductShippingChoices()
     ]);
   }
@@ -2067,15 +2553,24 @@
     const fieldMap = Object.fromEntries(fields.map(field => [field[0], field]));
     const pick = names => names.map(name => fieldMap[name]).filter(Boolean);
     if (key === "products") {
+      const productType = row.product_type === "variable" ? "variable" : "basic";
+      const commonCatalog = pick(["category_slug", "subcategory_ids", "brand_slug", "facet_ids", "label_ids"]);
+      if (productType === "variable") return [
+        { kicker:"01", title:ui("Product identity", "هوية المنتج"), description:ui("Shared names, URL, visibility, and catalog placement only.", "الاسم والرابط وحالة الظهور وربط الكتالوج فقط.") , fields:pick(["name_en", "name_ar", "slug", "is_active"]) },
+        { kicker:"02", title:t("catalog"), description:ui("Categories, facets, and card labels remain shared by all variants.", "التصنيفات والفئات وليبل الكارت مشتركة بين كل المتغيرات."), fields:commonCatalog },
+        { kicker:"03", title:t("productVariants"), description:ui("Add at least two variants. Every row owns its image, price, cost, stock, code, and weight.", "أضف متغيرين على الأقل. كل سطر له صورته وسعره وتكلفته ومخزونه وكوده ووزنه."), single:true, fields:[], extra:variantsField(row) },
+        { kicker:"04", title:ui("Shared shipping details", "بيانات الشحن المشتركة"), description:ui("Package dimensions can stay shared; each variant keeps its own weight.", "أبعاد الطرد ممكن تفضل مشتركة، ووزن كل متغير موجود داخله."), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "length", "width", "height", "origin_country_code", "hs_code"]) },
+        { kicker:"05", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
+        { kicker:"06", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
+      ];
       return [
-        { id:"productMediaSection", kicker:"01", title:ui("Product gallery", "معرض صور المنتج"), description:ui("All images remain a draft until you save the product.", "كل تغييرات الصور تظل مسودة حتى حفظ المنتج."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
+        { id:"productMediaSection", kicker:"01", title:ui("Product gallery", "معرض صور المنتج"), description:ui("One unified gallery for this fixed product.", "معرض صور موحد للمنتج الثابت."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
         { kicker:"02", title:ui("Product details", "بيانات المنتج"), description:ui("Names, codes, visibility, and storefront identity.", "الأسماء والأكواد وحالة الظهور في المتجر."), fields:pick(["name_en", "name_ar", "slug", "sku", "barcode", "is_active"]) },
-        { kicker:"03", title:ui("Pricing & inventory", "السعر والمخزون"), description:ui("Choose an explicit stock mode instead of relying on an empty quantity.", "اختر حالة مخزون واضحة بدل الاعتماد على حقل كمية فارغ."), fields:pick(["price", "sale_price", "cost"]), extra:productInventoryField(row) },
-        { kicker:"04", title:t("catalog"), description:ui("Current linked values stay visible even when a catalog item is inactive.", "تظل القيم المرتبطة حاليًا ظاهرة حتى لو كان عنصر الكتالوج غير نشط."), fields:pick(["category_slug", "brand_slug", "color", "options"]) },
-        { kicker:"05", title:t("productVariants"), description:ui("Each row is one exact sellable color, option, or combination.", "كل سطر يمثل لونًا أو خيارًا أو تركيبة قابلة للبيع."), single:true, fields:[], extra:variantsField(row) },
-        { kicker:"06", title:ui("Shipping & fulfillment", "الشحن والتجهيز"), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
-        { kicker:"07", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
-        { kicker:"08", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
+        { kicker:"03", title:ui("Pricing & inventory", "السعر والمخزون"), description:ui("The price, cost, and stock belong to the product itself.", "السعر والتكلفة والمخزون تابعين للمنتج نفسه."), fields:pick(["price", "sale_price", "cost"]), extra:productInventoryField(row) },
+        { kicker:"04", title:t("catalog"), description:ui("A basic product does not use colors or variant options.", "المنتج الثابت لا يستخدم ألوان أو خيارات متغيرة."), fields:commonCatalog },
+        { kicker:"05", title:ui("Shipping & fulfillment", "الشحن والتجهيز"), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
+        { kicker:"06", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
+        { kicker:"07", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
       ];
     }
     if (key === "categories" || key === "brands") {
@@ -2119,9 +2614,12 @@
 
   function field(name, labelKey, type, value, required, resourceKey = "") {
     if (type === "image") return imageUploadField(name, labelKey, value, required);
-    if (type === "categorySelect") return choiceSelectField(name, labelKey, value, state.rows.categories || [], "category");
+    if (type === "categorySelect") return choiceSelectField(name, labelKey, value, (state.rows.categories || []).filter(row => !row.parent_id), "category");
+    if (type === "subcategorySelect") return subcategoryChoiceField(name, value, state.rows.categories || []);
     if (type === "brandSelect") return choiceSelectField(name, labelKey, value, state.rows.brands || [], "brand");
     if (type === "optionSelect") return choiceSelectField(name, labelKey, value, state.rows.options || [], "option");
+    if (type === "labelSelect") return labelChoiceField(name, labelKey, value, state.rows.labels || []);
+    if (type === "facetSelect") return labelChoiceField(name, labelKey, value, state.rows.facets || []);
     if (type === "colorSelect") return colorChoiceField(name, labelKey, value, state.rows.colors || []);
     if (type === "goodsTypeSelect") return marketChoiceField(name, labelKey, value, state.marketCatalog?.goods_types || [], "id");
     if (type === "shippingProfileSelect") return marketChoiceField(name, labelKey, value, state.marketCatalog?.shipping_profiles || [], "id");
@@ -2153,6 +2651,32 @@
         </div>
       </div>
     `;
+  }
+
+  function subcategoryChoiceField(name, value = [], rows = []) {
+    const current = new Set((Array.isArray(value) ? value : String(value || "").split(",")).map(item => Number(item)).filter(Boolean));
+    const children = rows.filter(row => row.parent_id && row.is_active !== false);
+    return `<div class="field full product-subcategory-field" data-product-subcategories><label>${ui("Subcategories", "التصنيفات الفرعية")}</label><input type="hidden" name="${name}" value="${escapeHtml(JSON.stringify([...current]))}" data-subcategory-values /><input type="hidden" name="primary_subcategory_id" value="${[...current][0] || ""}" data-primary-subcategory /><div class="choice-chip-grid">${children.map(row => { const parent=rows.find(item => Number(item.id) === Number(row.parent_id)); const id=Number(row.id); return `<button type="button" class="choice-chip ${current.has(id)?"selected":""}" data-subcategory-choice="${id}" data-parent-slug="${escapeHtml(parent?.slug || "")}">${escapeHtml(row.name_ar || row.name_en || row.slug)}</button>`; }).join("") || `<small class="muted">${ui("Create subcategories from the Categories page first.", "أضف التصنيفات الفرعية من صفحة التصنيفات أولًا.")}</small>`}</div><small data-subcategory-help>${ui("Only subcategories under the selected main category are shown.", "تظهر التصنيفات الفرعية التابعة للتصنيف الرئيسي المختار فقط.")}</small></div>`;
+  }
+
+  function bindProductSubcategoryField() {
+    const field=document.querySelector("[data-product-subcategories]");
+    const category=document.querySelector('select[name="category_slug"]');
+    if(!field||!category)return;
+    const hidden=field.querySelector("[data-subcategory-values]");
+    const primary=field.querySelector("[data-primary-subcategory]");
+    const buttons=[...field.querySelectorAll("[data-subcategory-choice]")];
+    const read=()=>new Set(parseJsonArray(hidden.value).map(Number));
+    const write=(values)=>{ hidden.value=JSON.stringify([...values]); primary.value=[...values][0]||""; buttons.forEach(button=>button.classList.toggle("selected",values.has(Number(button.dataset.subcategoryChoice)))); };
+    const sync=()=>{ const slug=category.value; const values=read(); buttons.forEach(button=>{ const visible=Boolean(slug)&&button.dataset.parentSlug===slug; button.hidden=!visible; if(!visible)values.delete(Number(button.dataset.subcategoryChoice)); }); write(values); field.classList.toggle("is-empty",!buttons.some(button=>!button.hidden)); };
+    buttons.forEach(button=>button.onclick=()=>{ const values=read(),id=Number(button.dataset.subcategoryChoice); values.has(id)?values.delete(id):values.add(id); write(values); });
+    category.addEventListener("change",sync);
+    sync();
+  }
+
+  function labelChoiceField(name, labelKey, value = [], rows = []) {
+    const current = new Set((Array.isArray(value) ? value : String(value || "").split(",")).map(item => String(item).trim()).filter(Boolean));
+    return `<div class="field full"><label>${t(labelKey)}</label><input type="hidden" name="${name}" value="${escapeHtml(JSON.stringify([...current]))}" data-label-values /> <div class="choice-chip-grid">${rows.filter(row => row.is_active !== false && row.isActive !== false).map(row => { const id=String(row.id || row.slug || row.name_en || row.nameEn); const selected=current.has(id); return `<button type="button" class="choice-chip ${selected?"selected":""}" data-label-choice="${escapeHtml(id)}">${escapeHtml(row.name_ar || row.nameAr || row.name_en || row.nameEn || id)}</button>`; }).join("")}</div></div>`;
   }
 
   function choiceSelectField(name, labelKey, value = "", rows = [], kind = "") {
@@ -2275,7 +2799,7 @@
       <input type="hidden" name="variants" value="${escapeHtml(JSON.stringify(variants))}" data-variants-value />
       <div class="variant-builder">
         <div class="variant-list" id="variantList">
-          ${(variants.length ? variants : [{ type: "color_option", color: row.color || "", option: row.options || "", value: "", price_adjustment: 0, stock: "", is_active: true, is_in_stock: true }]).map(variantRow).join("")}
+          ${(variants.length ? variants : [{ type: "color_option", color: "", option: "", value: "", price: "", stock: "", is_active: true, is_in_stock: true }, { type: "color_option", color: "", option: "", value: "", price: "", stock: "", is_active: true, is_in_stock: true }]).map(variantRow).join("")}
         </div>
         <div class="toolbar">
           <button class="btn" type="button" data-add-variant-type="color">${t("addColorVariant")}</button>
@@ -2844,12 +3368,23 @@
     new FormData(event.currentTarget).forEach((value, name) => {
       if (value === "true") payload[name] = true;
       else if (value === "false") payload[name] = false;
-      else if (["variants", "generated_images", "side_photos", "media_gallery"].includes(name)) payload[name] = parseJsonArray(value);
+      else if (["variants", "generated_images", "side_photos", "media_gallery", "label_ids", "facet_ids", "subcategory_ids"].includes(name)) payload[name] = parseJsonArray(value);
       else if (event.currentTarget.elements[name]?.type === "number") payload[name] = Number(value || 0);
       else payload[name] = value;
     });
     if (key === "products") {
-      payload.image_url = payload.main_photo_url || "";
+      if (payload.product_type === "variable") {
+        if (!Array.isArray(payload.variants) || payload.variants.length < 2) { toast(ui("Add at least two variants", "أضف متغيرين على الأقل"), "error"); return; }
+        const incomplete = payload.variants.findIndex(variant => variant.price === "" || variant.price === null || variant.price === undefined || !(variant.color || variant.option || variant.value));
+        if (incomplete >= 0) { toast(ui(`Complete variant ${incomplete + 1}: choose a color or option and enter its price.`, `أكمل المتغير رقم ${incomplete + 1}: اختر لونًا أو خيارًا وأدخل السعر.`), "error"); return; }
+        payload.main_photo_url = "";
+        payload.image_url = "";
+        payload.media_gallery = [];
+        payload.side_photos = [];
+      } else {
+        payload.variants = [];
+        payload.image_url = payload.main_photo_url || "";
+      }
       payload.gallery = [];
       payload.images = [];
     }
@@ -3704,7 +4239,7 @@
 
   function layoutPreview(values) {
     const message = values.messages.find(item=>item.is_active !== false) || {};
-    return `<div class="layout-preview"><div class="layout-preview-announcement ${values.announcement_active ? "" : "is-hidden"}">${escapeHtml(state.lang === "ar" ? (message.text_ar || "شريط الإعلان") : (message.text_en || "Announcement bar"))}</div><div class="layout-preview-header"><strong>SITEYFY</strong><nav><span>${ui("Home", "الرئيسية")}</span><span>${ui("Shop", "المتجر")}</span></nav><div>${values.show_search ? "⌕" : ""} ${values.show_account ? "◯" : ""} ${values.show_wishlist ? "♡" : ""} ${values.show_cart ? "▢" : ""}</div></div>${values.show_category_strip ? `<div class="layout-category-strip"><span>${ui("New", "جديد")}</span><span>${ui("Offers", "العروض")}</span><span>${ui("Collections", "المجموعات")}</span></div>` : ""}<div class="layout-preview-body"><span></span><span></span><span></span></div><div class="layout-preview-footer"><strong>SITEYFY</strong>${values.show_description ? `<p>${ui("Store description appears here.", "يظهر وصف المتجر هنا.")}</p>` : ""}<div>${[values.show_business_info&&ui("Business info", "بيانات المنشأة"),values.show_contact&&ui("Contact", "التواصل"),values.show_social&&ui("Social", "التواصل الاجتماعي"),values.show_policies&&ui("Policies", "السياسات")].filter(Boolean).map(x=>`<span>${x}</span>`).join("")}</div></div></div>`;
+    return `<div class="layout-preview"><div class="layout-preview-announcement ${values.announcement_active ? "" : "is-hidden"}">${escapeHtml(state.lang === "ar" ? (message.text_ar || "شريط الإعلان") : (message.text_en || "Announcement bar"))}</div><div class="layout-preview-header"><strong>SITEYFY</strong><nav><span>${ui("Home", "الرئيسية")}</span><span>${ui("Shop", "المتجر")}</span></nav><div>${values.show_search ? "⌕" : ""} ${values.show_account ? "◯" : ""} ${values.show_wishlist ? "♡" : ""} ${values.show_cart ? "▢" : ""}</div></div>${values.show_category_strip ? `<div class="layout-category-strip">${(values.shortcuts||[]).slice(0,5).map(item=>`<span>${escapeHtml(state.lang==="ar"?(item.title_ar||item.title_en||"—"):(item.title_en||item.title_ar||"—"))}</span>`).join("")}</div>` : ""}<div class="layout-preview-body"><span></span><span></span><span></span></div><div class="layout-preview-footer"><strong>SITEYFY</strong>${values.show_description ? `<p>${ui("Store description appears here.", "يظهر وصف المتجر هنا.")}</p>` : ""}<div>${[values.show_business_info&&ui("Business info", "بيانات المنشأة"),values.show_contact&&ui("Contact", "التواصل"),values.show_social&&ui("Social", "التواصل الاجتماعي"),values.show_policies&&ui("Policies", "السياسات")].filter(Boolean).map(x=>`<span>${x}</span>`).join("")}</div></div></div>`;
   }
 
   function announcementCard(message = {}, index = 0) {
@@ -3712,21 +4247,29 @@
     return `<article class="announcement-card" data-announcement-row data-id="${escapeHtml(message.id || `message-${Date.now()}-${index}`)}"><div class="builder-card-head"><span class="drag-handle">${String(index + 1).padStart(2,"0")}</span><strong>${ui("Announcement message", "رسالة إعلان")}</strong><div class="field compact-switch"><input type="hidden" name="is_active" value="${message.is_active !== false}" />${switchButton({ field:"is_active", value:message.is_active !== false, label:false })}</div><button class="btn icon-btn danger" type="button" data-remove-announcement title="${t("delete")}">${i("trash")}</button></div><div class="form-grid">${labeledField("text_en", ui("English message", "النص بالإنجليزية"), message.text_en, "text", {full:true})}${labeledField("text_ar", ui("Arabic message", "النص بالعربية"), message.text_ar, "text", {full:true})}<div class="field"><label>${ui("Icon", "الأيقونة")}</label><select name="icon">${icons.map(([value,label])=>`<option value="${value}" ${value===(message.icon||"gift")?"selected":""}>${label}</option>`).join("")}</select></div>${labeledField("link_label_ar", ui("Arabic link label", "عنوان الرابط بالعربية"), message.link_label_ar)}${labeledField("link_label_en", ui("English link label", "عنوان الرابط بالإنجليزية"), message.link_label_en)}${labeledField("link_url", ui("Link", "الرابط"), message.link_url, "text", {full:true})}</div></article>`;
   }
 
+  function headerShortcutCard(item = {}, categories = [], facets = []) {
+    const selected=`${item.type || "category"}:${item.ref || ""}`;
+    const targets=[["all:",ui("All products", "كل المنتجات")],...categories.filter(row=>row.is_active!==false).map(row=>[`category:${row.slug}`,`${ui("Category", "تصنيف")} · ${row.name_ar||row.name_en}`]),...facets.filter(row=>row.is_active!==false&&row.isActive!==false).map(row=>[`facet:${row.id}`,`${ui("Facet", "فئة")} · ${row.name_ar||row.nameAr||row.name_en||row.nameEn}`])];
+    return `<article class="header-shortcut-row" data-shortcut-row><div class="header-shortcut-image">${item.image_url?`<img src="${escapeHtml(item.image_url)}" alt=""/>`:i("image")}</div><div class="header-shortcut-fields"><label>${ui("Destination", "الوجهة")}<select name="target">${targets.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===selected?"selected":""}>${escapeHtml(label)}</option>`).join("")}</select></label><label>${ui("Arabic title", "العنوان بالعربية")}<input name="title_ar" value="${escapeHtml(item.title_ar||"")}" /></label><label>${ui("English title", "العنوان بالإنجليزية")}<input name="title_en" value="${escapeHtml(item.title_en||"")}" /></label><input type="hidden" name="image_url" value="${escapeHtml(item.image_url||"")}"/><label class="header-shortcut-upload">${ui("Change image", "تغيير الصورة")}<input type="file" accept="image/*" data-shortcut-image hidden /></label></div><div class="header-shortcut-actions"><button type="button" class="btn icon-btn" data-shortcut-up title="${ui("Move up", "تحريك لأعلى")}">${i("arrow-up")}</button><button type="button" class="btn icon-btn" data-shortcut-down title="${ui("Move down", "تحريك لأسفل")}">${i("arrow-down")}</button><button type="button" class="btn icon-btn danger" data-shortcut-remove title="${t("delete")}">${i("trash")}</button></div></article>`;
+  }
+
   async function renderStorefrontLayout(page) {
-    const data = await api("/api/admin/storefront-layout");
+    const [data,categories,facets] = await Promise.all([api("/api/admin/storefront-layout"),loadResource("categories").catch(()=>[]),loadResource("facets").catch(()=>[])]);
     page.innerHTML = pageTitle("storefrontLayout", "", `<button class="btn primary" type="submit" form="storefrontLayoutForm">${t("save")}</button>`);
     page.innerHTML += `<form id="storefrontLayoutForm" class="layout-workspace"><div class="layout-editor">
       <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">01</span><div><h2>${ui("Announcement bar", "شريط الإعلانات")}</h2><p>${ui("Create rotating bilingual notices above the header.", "أنشئ رسائل ثنائية اللغة تظهر بالتتابع أعلى الهيدر.")}</p></div><div class="field compact-switch"><input type="hidden" name="announcement_active" value="${data.announcement.is_active !== false}" />${switchButton({ field:"announcement_active", value:data.announcement.is_active !== false })}</div></div><div class="announcement-controls"><div class="field"><label>${ui("Change every", "التبديل كل")}</label><div class="input-suffix"><input name="rotation_interval_seconds" type="number" min="2" max="60" value="${Number(data.announcement.rotation_interval_seconds||5)}" /><span>${ui("sec", "ثانية")}</span></div></div><div class="field"><label>${ui("Transition", "حركة الانتقال")}</label><select name="transition"><option value="fade" ${data.announcement.transition!=="slide"?"selected":""}>${ui("Fade", "تلاشي")}</option><option value="slide" ${data.announcement.transition==="slide"?"selected":""}>${ui("Slide", "انزلاق")}</option></select></div><div class="setting-toggle"><div><strong>${ui("Pause on hover", "إيقاف عند المرور")}</strong><small>${ui("Keeps the current message readable", "يبقي الرسالة الحالية للقراءة")}</small></div><div class="field"><input type="hidden" name="pause_on_hover" value="${data.announcement.pause_on_hover!==false}" />${switchButton({field:"pause_on_hover",value:data.announcement.pause_on_hover!==false,label:false})}</div></div></div><div id="announcementList" class="builder-list">${data.announcement.messages.map(announcementCard).join("")}</div><button class="btn" type="button" id="addAnnouncement">${i("plus")}${ui("Add message", "إضافة رسالة")}</button></section>
-      <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">02</span><div><h2>${ui("Header behavior", "خصائص الهيدر")}</h2><p>${ui("Choose the tools customers can access from every page.", "حدد الأدوات المتاحة للعميل في جميع الصفحات.")}</p></div></div><div class="setting-toggle-grid">${[["sticky",ui("Sticky header", "هيدر ثابت")],["show_search",ui("Search", "البحث")],["show_account",ui("Account", "الحساب")],["show_wishlist",ui("Wishlist", "المفضلة")],["show_cart",ui("Cart", "السلة")],["show_category_strip",ui("Category strip", "شريط التصنيفات")]].map(([key,label])=>`<div class="setting-toggle"><div><strong>${label}</strong><small>${ui("Visible on the storefront", "ظاهر في واجهة المتجر")}</small></div><div class="field"><input type="hidden" name="${key}" value="${data.header[key] !== false}" />${switchButton({field:key,value:data.header[key] !== false,label:false})}</div></div>`).join("")}</div></section>
+      <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">02</span><div><h2>${ui("Header behavior", "خصائص الهيدر")}</h2><p>${ui("Choose the tools customers can access from every page.", "حدد الأدوات المتاحة للعميل في جميع الصفحات.")}</p></div></div><div class="setting-toggle-grid">${[["sticky",ui("Sticky header", "هيدر ثابت")],["show_search",ui("Search", "البحث")],["show_account",ui("Account", "الحساب")],["show_wishlist",ui("Wishlist", "المفضلة")],["show_cart",ui("Cart", "السلة")],["show_category_strip",ui("Category strip", "شريط التصنيفات")]].map(([key,label])=>`<div class="setting-toggle"><div><strong>${label}</strong><small>${ui("Visible on the storefront", "ظاهر في واجهة المتجر")}</small></div><div class="field"><input type="hidden" name="${key}" value="${data.header[key] !== false}" />${switchButton({field:key,value:data.header[key] !== false,label:false})}</div></div>`).join("")}</div><div class="category-strip-motion-controls"><div class="setting-toggle"><div><strong>${ui("Automatic category motion", "تحريك شريط التصنيفات تلقائيًا")}</strong><small>${ui("Pauses while customers hover or interact", "يتوقف عند مرور المؤشر أو التفاعل")}</small></div><div class="field"><input type="hidden" name="category_strip_auto_scroll" value="${data.header.category_strip_auto_scroll!==false}" />${switchButton({field:"category_strip_auto_scroll",value:data.header.category_strip_auto_scroll!==false,label:false})}</div></div><div class="field"><label>${ui("Motion speed", "سرعة الحركة")}</label><div class="home-motion-speed"><input type="range" name="category_strip_scroll_speed" min="8" max="36" step="1" value="${Number(data.header.category_strip_scroll_speed||18)}" /><output>${Number(data.header.category_strip_scroll_speed||18)}</output></div></div></div></section>
+      <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">03</span><div><h2>${ui("Header shortcuts", "روابط الشريط العلوي")}</h2><p>${ui("Mix categories and product facets; order, image and title stay under your control.", "اخلط التصنيفات والفئات وتحكم في ترتيب وصورة وعنوان كل عنصر.")}</p></div></div><div class="header-shortcut-list" id="headerShortcutList">${(data.header.shortcuts||[]).map(item=>headerShortcutCard(item,categories,facets)).join("")}</div><button class="btn" type="button" id="addHeaderShortcut">${i("plus")}${ui("Add shortcut", "إضافة عنصر")}</button></section>
       <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">03</span><div><h2>${ui("Footer content", "محتوى الفوتر")}</h2><p>${ui("Control content groups without rebuilding the footer.", "تحكم في مجموعات المحتوى بدون إعادة بناء الفوتر.")}</p></div></div><div class="setting-toggle-grid">${[["show_description",ui("Store description", "وصف المتجر")],["show_business_info",ui("Business information", "بيانات المنشأة")],["show_contact",ui("Contact details", "بيانات التواصل")],["show_social",ui("Social links", "روابط التواصل")],["show_policies",ui("Policy links", "روابط السياسات")]].map(([key,label])=>`<div class="setting-toggle"><div><strong>${label}</strong><small>${ui("Footer content group", "مجموعة محتوى في الفوتر")}</small></div><div class="field"><input type="hidden" name="${key}" value="${data.footer[key] !== false}" />${switchButton({field:key,value:data.footer[key] !== false,label:false})}</div></div>`).join("")}</div><div class="form-grid" style="margin-top:16px">${labeledField("copyright_en",ui("English copyright", "حقوق النشر بالإنجليزية"),data.footer.copyright_en)}${labeledField("copyright_ar",ui("Arabic copyright", "حقوق النشر بالعربية"),data.footer.copyright_ar)}${labeledField("store_policy_url",ui("Store policy URL", "رابط سياسة المتجر"),data.footer.store_policy_url)}${labeledField("shipping_policy_url",ui("Shipping policy URL", "رابط سياسة الشحن"),data.footer.shipping_policy_url)}${labeledField("privacy_policy_url",ui("Privacy policy URL", "رابط سياسة الخصوصية"),data.footer.privacy_policy_url)}<p class="muted small full">${ui("Policy links appear only when a destination is provided. Use a full URL or a local page path.", "تظهر روابط السياسات عند تحديد رابط فعلي فقط. استخدم رابطًا كاملًا أو مسار صفحة داخل المتجر.")}</p></div></section>
     </div><aside class="layout-preview-shell"><div class="brand-preview-head"><div><span>${ui("LIVE STRUCTURE", "معاينة مباشرة")}</span><strong>${ui("Header & footer", "الهيدر والفوتر")}</strong></div><span class="live-dot">${ui("Live", "مباشر")}</span></div><div id="layoutLivePreview"></div></aside></form>`;
     const form = document.getElementById("storefrontLayoutForm");
-    const values = () => { const all=Object.fromEntries(new FormData(form)); return {...all,announcement_active:all.announcement_active==="true",pause_on_hover:all.pause_on_hover==="true",rotation_interval_seconds:Number(all.rotation_interval_seconds||5),messages:[...form.querySelectorAll("[data-announcement-row]")].map(row=>{const item=namedValues(row);return {...item,id:row.dataset.id,is_active:item.is_active==="true"};}),...Object.fromEntries(Object.entries(all).filter(([key])=>key.startsWith("show_")||key==="sticky").map(([key,value])=>[key,value==="true"]))}; };
+    const values = () => { const all=Object.fromEntries(new FormData(form)); return {...all,announcement_active:all.announcement_active==="true",pause_on_hover:all.pause_on_hover==="true",rotation_interval_seconds:Number(all.rotation_interval_seconds||5),category_strip_auto_scroll:all.category_strip_auto_scroll==="true",category_strip_scroll_speed:Number(all.category_strip_scroll_speed||18),messages:[...form.querySelectorAll("[data-announcement-row]")].map(row=>{const item=namedValues(row);return {...item,id:row.dataset.id,is_active:item.is_active==="true"};}),shortcuts:[...form.querySelectorAll("[data-shortcut-row]")].map(row=>{const item=namedValues(row);const [type,...parts]=String(item.target||"").split(":");return {type,ref:parts.join(":"),title_ar:item.title_ar||"",title_en:item.title_en||"",image_url:item.image_url||"",is_active:true};}),...Object.fromEntries(Object.entries(all).filter(([key])=>key.startsWith("show_")||key==="sticky").map(([key,value])=>[key,value==="true"]))}; };
     const refresh = () => { document.getElementById("layoutLivePreview").innerHTML=layoutPreview(values()); };
-    const bind = () => { form.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);refresh();});form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",refresh));form.querySelectorAll("[data-remove-announcement]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-announcement-row]").remove();refresh();}); };
+    const bind = () => { form.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);refresh();});form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",()=>{const output=input.closest(".home-motion-speed")?.querySelector("output");if(output)output.textContent=input.value;refresh();}));form.querySelectorAll("[data-remove-announcement]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-announcement-row]").remove();refresh();});form.querySelectorAll("[data-shortcut-remove]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-shortcut-row]").remove();refresh();});for(const [direction,step] of [["up",-1],["down",1]])form.querySelectorAll(`[data-shortcut-${direction}]`).forEach(btn=>btn.onclick=()=>{const row=btn.closest("[data-shortcut-row]"),peer=step<0?row.previousElementSibling:row.nextElementSibling;if(!peer)return;step<0?peer.before(row):peer.after(row);refresh();});form.querySelectorAll("[data-shortcut-image]").forEach(input=>input.onchange=async()=>{if(!input.files?.[0])return;const row=input.closest("[data-shortcut-row]"),body=new FormData();body.append("file",input.files[0]);input.disabled=true;try{const result=await api("/api/admin/upload/single",{method:"POST",body});row.querySelector('[name="image_url"]').value=result.url||"";row.querySelector(".header-shortcut-image").innerHTML=`<img src="${escapeHtml(result.url||"")}" alt=""/>`;refresh();}catch(error){toast(error.message,"error")}finally{input.disabled=false;}}); };
     document.getElementById("addAnnouncement").onclick=()=>{document.getElementById("announcementList").insertAdjacentHTML("beforeend",announcementCard({},document.querySelectorAll("[data-announcement-row]").length));bind();refresh();};
+    document.getElementById("addHeaderShortcut").onclick=()=>{document.getElementById("headerShortcutList").insertAdjacentHTML("beforeend",headerShortcutCard({type:"all",ref:""},categories,facets));bind();refresh();};
     bind();refresh();
-    form.onsubmit=async event=>{event.preventDefault();const all=values();const header={sticky:all.sticky,show_search:all.show_search,show_account:all.show_account,show_wishlist:all.show_wishlist,show_cart:all.show_cart,show_category_strip:all.show_category_strip};const footer={show_description:all.show_description,show_business_info:all.show_business_info,show_contact:all.show_contact,show_social:all.show_social,show_policies:all.show_policies,copyright_en:all.copyright_en,copyright_ar:all.copyright_ar,store_policy_url:all.store_policy_url,shipping_policy_url:all.shipping_policy_url,privacy_policy_url:all.privacy_policy_url};await api("/api/admin/storefront-layout",{method:"PUT",body:JSON.stringify({announcement:{is_active:all.announcement_active,rotation_interval_seconds:all.rotation_interval_seconds,transition:all.transition,pause_on_hover:all.pause_on_hover,messages:all.messages},header,footer})});toast(t("saved"));};
+    form.onsubmit=async event=>{event.preventDefault();const all=values();const header={sticky:all.sticky,show_search:all.show_search,show_account:all.show_account,show_wishlist:all.show_wishlist,show_cart:all.show_cart,show_category_strip:all.show_category_strip,category_strip_auto_scroll:all.category_strip_auto_scroll,category_strip_scroll_speed:all.category_strip_scroll_speed,shortcuts:all.shortcuts};const footer={show_description:all.show_description,show_business_info:all.show_business_info,show_contact:all.show_contact,show_social:all.show_social,show_policies:all.show_policies,copyright_en:all.copyright_en,copyright_ar:all.copyright_ar,store_policy_url:all.store_policy_url,shipping_policy_url:all.shipping_policy_url,privacy_policy_url:all.privacy_policy_url};await api("/api/admin/storefront-layout",{method:"PUT",body:JSON.stringify({announcement:{is_active:all.announcement_active,rotation_interval_seconds:all.rotation_interval_seconds,transition:all.transition,pause_on_hover:all.pause_on_hover,messages:all.messages},header,footer})});toast(t("saved"));};
   }
 
   function shippingRuleCard(rule = {}, index = 0) {
@@ -4189,6 +4732,10 @@
     const oto = settings.oto || {};
     const smartship = settings.smartship || {};
     const oms = settings.oms_connector || {};
+    const omsPaused = oms.sync_paused === true;
+    const omsMasterEnabled = imile.is_enabled === true;
+    const omsStatusLabel = !omsMasterEnabled ? ui("Stopped with iMile", "متوقفة مع iMile") : omsPaused ? ui("Paused for security", "متوقفة للحماية") : oms.is_enabled && oms.has_password ? ui("Ready", "جاهز") : ui("Setup required", "يحتاج إعداد");
+    const omsStatusClass = omsPaused ? "warn" : omsMasterEnabled && oms.is_enabled && oms.has_password ? "good" : "empty";
     const spl = settings.spl_address || {};
     const pricing = settings.customer_pricing || {};
     const sender = imile.sender || {};
@@ -4287,8 +4834,9 @@
           <div class="studio-card-head">
             <span class="section-kicker">OMS REPORTS</span>
             <div><h2>${ui("OMS closing reports", "تقارير تقفيلات OMS")}</h2><p>${ui("Reads fee reports from the iMile dashboard and matches actual carrier costs to store shipments.", "يقرأ تقارير الرسوم من لوحة iMile ويربط التكلفة الفعلية بشحنات المتجر.")}</p></div>
-            <span class="status-pill ${oms.is_enabled && oms.has_password ? "good" : "empty"}">${oms.is_enabled && oms.has_password ? ui("Ready", "جاهز") : ui("Setup required", "يحتاج إعداد")}</span>
+            <span class="status-pill ${omsStatusClass}">${omsStatusLabel}</span>
           </div>
+          ${!omsMasterEnabled ? `<div class="integration-inline-result error"><strong>${ui("OMS sync is stopped", "مزامنة OMS متوقفة")}</strong><span>${ui("Enable the main iMile integration before scheduled or manual OMS synchronization can run.", "فعّل تكامل iMile الرئيسي أولًا حتى تعمل مزامنة OMS المجدولة أو اليدوية.")}</span></div>` : omsPaused ? `<div class="integration-inline-result error"><strong>${ui("Synchronization paused after a login security error", "تم إيقاف المزامنة بعد خطأ أمني في تسجيل الدخول")}</strong><span>${ui("Automatic retries have stopped. Enter a new password and test the login to resume safely.", "تم إيقاف المحاولات التلقائية. أدخل كلمة مرور جديدة واختبر الدخول لاستئناف المزامنة بأمان.")} ${ui("Attempts", "المحاولات")}: ${Number(oms.auth_failure_count||0)}/${Number(oms.max_auth_failures||3)}</span></div>` : ""}
           <div class="oms-connector-grid">
             <div class="setting-toggle oms-toggle"><div><strong>${ui("Enable OMS connector", "تفعيل موصل OMS")}</strong><small>${ui("Allows read-only fee report synchronization.", "يسمح بمزامنة تقارير الرسوم للقراءة فقط.")}</small></div><input type="hidden" name="oms_enabled" value="${oms.is_enabled ? "true" : "false"}" />${switchButton({ field: "oms_enabled", value: oms.is_enabled, label: false })}</div>
             <div class="setting-toggle oms-toggle"><div><strong>${ui("Scheduled incremental sync", "المزامنة التزايدية المجدولة")}</strong><small>${ui("The server checks for changes in the background; opening Closings never starts a new download.", "يفحص السيرفر التغييرات في الخلفية، وفتح التقفيلات لا يبدأ تنزيلًا جديدًا.")}</small></div><input type="hidden" name="oms_auto_sync" value="${oms.auto_sync_on_open !== false ? "true" : "false"}" />${switchButton({ field: "oms_auto_sync", value: oms.auto_sync_on_open !== false, label: false })}</div>
@@ -4305,8 +4853,8 @@
             </div>
           </div>
           <div class="oms-connector-foot">
-            <div><span>${ui("Last successful sync", "آخر مزامنة ناجحة")}</span><strong>${oms.last_success_at ? formatDateTime(oms.last_success_at) : ui("Not synced yet", "لم تتم المزامنة بعد")}</strong>${oms.last_error ? `<small class="negative">${escapeHtml(oms.last_error)}</small>` : ""}</div>
-            <button class="btn" type="button" id="testOmsConnector">${i("check")}${ui("Test OMS login", "اختبار دخول OMS")}</button>
+            <div><span>${ui("Last successful sync", "آخر مزامنة ناجحة")}</span><strong>${oms.last_success_at ? formatDateTime(oms.last_success_at) : ui("Not synced yet", "لم تتم المزامنة بعد")}</strong>${oms.last_error ? `<small class="negative">${escapeHtml(oms.last_error)}</small>` : ""}${omsPaused && oms.paused_at ? `<small>${ui("Paused at", "توقفت في")}: ${formatDateTime(oms.paused_at)}</small>` : ""}</div>
+            <button class="btn" type="button" id="testOmsConnector">${i("check")}${omsPaused ? ui("Save password and retry", "حفظ كلمة المرور وإعادة الاختبار") : ui("Test OMS login", "اختبار دخول OMS")}</button>
           </div>
         </section>
         <section class="card card-pad full-span">
@@ -4559,7 +5107,7 @@
       renderSettlements(settlements.settlements||[]);
       renderSyncRuns(syncRuns.runs||[]);
     };
-    document.getElementById("syncOmsReports").onclick=async event=>{event.currentTarget.disabled=true;try{const result=await api("/api/admin/shipping/reports/sync",{method:"POST",body:JSON.stringify({force:true,trigger:"manual"})});await load();toast(`${ui("Incremental sync complete", "اكتملت المزامنة التزايدية")}: +${result.new_shipments||0} / Δ${result.updated_shipments||0}`);}catch(error){toast(error.message,"error");}finally{event.currentTarget.disabled=false;}};
+    document.getElementById("syncOmsReports").onclick=async event=>{event.currentTarget.disabled=true;try{const result=await api("/api/admin/shipping/reports/sync",{method:"POST",body:JSON.stringify({force:true,trigger:"manual"})});await load();if(result.skipped){const reasons={imile_integration_disabled:ui("Enable iMile first", "فعّل iMile أولًا"),oms_connector_disabled:ui("Enable the OMS connector first", "فعّل موصل OMS أولًا"),forced_offline:ui("Sync is paused until the OMS password is updated", "المزامنة متوقفة حتى تحديث كلمة مرور OMS"),authentication_retries_exhausted:ui("Sync is paused after repeated login failures", "المزامنة متوقفة بعد تكرار فشل تسجيل الدخول")};toast(reasons[result.reason]||result.reason,"error");}else toast(`${ui("Incremental sync complete", "اكتملت المزامنة التزايدية")}: +${result.new_shipments||0} / Δ${result.updated_shipments||0}`);}catch(error){toast(error.message,"error");}finally{event.currentTarget.disabled=false;}};
     document.getElementById("openCodBills").onclick=()=>location.hash="shippingCodBills";
     document.getElementById("openFeeBills").onclick=()=>location.hash="shippingFeeBills";
     document.getElementById("previewSettlement").onclick=previewSettlement;
@@ -4572,21 +5120,26 @@
   const shippingAuditRuleLabels = {
     weight_variance:["Weight variance","فرق الوزن"], missing_expected_weight:["Missing expected weight","وزن متوقع ناقص"],
     cancelled_before_pickup_fee:["Cancelled before pickup","إلغاء قبل الاستلام"], cancelled_after_pickup_fee_review:["Cancelled after pickup","إلغاء بعد الاستلام"], cancelled_timeline_incomplete:["Incomplete cancellation timeline","تسلسل إلغاء ناقص"],
-    duplicate_fee:["Duplicate fee","رسم مكرر"], unexpected_pos_fee:["POS fee notice","تنبيه رسوم POS"], unexpected_cod_fee:["Unexpected COD fee","رسم تحصيل غير متوقع"],
+    duplicate_fee:["Duplicate fee","رسم مكرر"], duplicate_fee_corrected:["Duplicate fee corrected","تم تصحيح الرسم المكرر"], unexpected_pos_fee:["POS fee notice","تنبيه رسوم POS"], unexpected_cod_fee:["Unexpected COD fee","رسم تحصيل غير متوقع"],
     payment_method_changed:["Payment change notice","تنبيه تغير طريقة الدفع"], delivery_fee_variance:["Pricing variance","فرق التسعير"], settlement_overdue:["Closing overdue","التقفيل متأخر"]
   };
   function shippingAuditRuleLabel(code){const label=shippingAuditRuleLabels[code]||[String(code||"").replaceAll("_"," "),String(code||"").replaceAll("_"," ")];return state.lang==="ar"?label[1]:label[0];}
   function shippingAuditSeverityLabel(value){const labels={critical:["Critical","حرج"],high:["High","مرتفع"],medium:["Medium","متوسط"],low:["Low","منخفض"],review:["Review","مراجعة"],info:["Information","معلومة"]};const label=labels[value]||[value,value];return state.lang==="ar"?label[1]:label[0];}
-  function shippingAuditStatusLabel(value){const labels={open:["Open","مفتوحة"],notice:["Notice only","تنبيه فقط"],reviewing:["Reviewing","قيد المراجعة"],disputed:["Disputed","تم الاعتراض"],resolved:["Resolved","محلولة"],ignored:["Ignored","مستبعدة"],resolved_automatically:["Auto resolved","حلت تلقائيًا"],draft:["Draft","مسودة"],submitted:["Submitted","مرسلة"],carrier_review:["Carrier review","مراجعة الشركة"],accepted:["Accepted","مقبولة"],rejected:["Rejected","مرفوضة"],closed:["Closed","مغلقة"]};const label=labels[value]||[value,value];return state.lang==="ar"?label[1]:label[0];}
-  function shippingAuditStatusClass(value){return ["resolved","resolved_automatically","accepted","closed"].includes(value)?"good":["critical","rejected"].includes(value)?"bad":["disputed","submitted","carrier_review","reviewing"].includes(value)?"warn":"empty";}
+  function shippingAuditStatusLabel(value){const labels={open:["Open","مفتوحة"],notice:["Notice only","تنبيه فقط"],reviewing:["Reviewing","قيد المراجعة"],disputed:["Disputed","تم الاعتراض"],resolved:["Resolved","محلولة"],ignored:["Ignored","مستبعدة"],resolved_automatically:["Auto resolved","حلت تلقائيًا"],resolved_by_correction:["Resolved by carrier correction","حُلّت بتصحيح من الشركة"],draft:["Draft","مسودة"],submitted:["Submitted","مرسلة"],carrier_review:["Carrier review","مراجعة الشركة"],accepted:["Accepted","مقبولة"],rejected:["Rejected","مرفوضة"],closed:["Closed","مغلقة"]};const label=labels[value]||[value,value];return state.lang==="ar"?label[1]:label[0];}
+  function shippingAuditStatusClass(value){return ["resolved","resolved_automatically","resolved_by_correction","accepted","closed"].includes(value)?"good":["critical","rejected"].includes(value)?"bad":["disputed","submitted","carrier_review","reviewing"].includes(value)?"warn":"empty";}
 
   function shippingAuditExplanationMarkup(finding,shipment){
-    const c=finding.calculation||{},currency=finding.currency||shipment.currency||"SAR",bill=(finding.source?.bills||[]).find(row=>row.bill_type==="feeBill")||finding.source?.bills?.[0];
+    const corrected=finding.status==="resolved_by_correction",c=(corrected?finding.resolution_evidence:finding.calculation)||{},currency=finding.currency||shipment.currency||"SAR",bill=(finding.source?.bills||[]).find(row=>row.bill_type==="feeBill")||finding.source?.bills?.[0];
     const metric=(label,value,caption="")=>`<div><span>${label}</span><strong>${value}</strong>${caption?`<small>${caption}</small>`:""}</div>`;
     const formulaStep=(label,value,source="",tone="")=>`<div class="formula-step ${tone}"><span>${label}</span><b dir="ltr">${value}</b>${source?`<small>${source}</small>`:""}</div>`;
     const formulaOperator=value=>`<span class="formula-operator" aria-hidden="true">${value}</span>`;
     let title=ui("What happened?","ماذا حدث؟"),summary=state.lang==="ar"?finding.reason_ar:finding.reason_en,metrics="",formula="",note="";
-    if(finding.rule_code==="duplicate_fee"){
+    if(finding.rule_code==="duplicate_fee_corrected"||corrected){
+      title=ui("How iMile reversed the duplicate charge","كيف عكست iMile الرسم المكرر");
+      metrics=[metric(ui("Positive charges","الرسوم الموجبة"),shippingMoney(c.charged_total??finding.actual_amount,currency)),metric(ui("Negative corrections","التصحيحات السالبة"),shippingMoney(c.correction_total,currency)),metric(ui("Net carrier fee","صافي رسوم الشركة"),shippingMoney(c.net_total??finding.expected_amount,currency)),metric(ui("Correction rows","عدد حركات التصحيح"),String(c.correction_count||0))].join("");
+      formula=`<div class="audit-formula-lane">${formulaStep(ui("Positive fee rows","بنود الرسوم الموجبة"),shippingMoney(c.charged_total,currency),ui("Original Fee Bills","فواتير المصاريف الأصلية"))}${formulaOperator("−")}${formulaStep(ui("Negative correction rows","بنود التصحيح السالبة"),shippingMoney(c.correction_total,currency),ui("Later iMile correction","تصحيح iMile اللاحق"))}${formulaOperator("=")}${formulaStep(ui("Net charged","الصافي المحتسب"),shippingMoney(c.net_total,currency),ui("Stored movement ledger","سجل الحركات المحفوظ"),"result")}</div>`;
+      note=ui("The original duplicate finding remains in history. It is resolved only because a later negative carrier movement offsets the extra charge.","تظل ملاحظة التكرار الأصلية محفوظة في السجل، وتم حلها فقط لأن حركة سالبة لاحقة من الشركة عكست الرسم الزائد.");
+    }else if(finding.rule_code==="duplicate_fee"){
       title=ui("How the duplicate was counted","كيف تم احتساب التكرار");
       metrics=[metric(ui("Single fee row","قيمة السطر الواحد"),shippingMoney(c.unit_amount??finding.expected_amount,currency)),metric(ui("Rows found","عدد مرات الظهور"),`${c.row_count||finding.duplicate_count||0}`),metric(ui("Expected once","المتوقع مرة واحدة"),shippingMoney(c.expected_total??finding.expected_amount,currency)),metric(ui("Total of repeated rows","إجمالي الصفوف المكررة"),shippingMoney(c.charged_total??finding.actual_amount,currency))].join("");
       formula=`<div class="audit-formula-lane">${formulaStep(ui("Single fee row","قيمة بند الرسم"),shippingMoney(c.unit_amount??finding.expected_amount,currency),ui("From the Fee Bill row","من صف Fee Bill"))}${formulaOperator("×")}${formulaStep(ui("Identical rows","عدد الصفوف المتطابقة"),String(c.row_count||finding.duplicate_count||0),escapeHtml(c.bill_code||bill?.bill_code||"-"))}${formulaOperator("=")}${formulaStep(ui("Repeated rows total","إجمالي الصفوف"),shippingMoney(c.charged_total??finding.actual_amount,currency),ui("Same Fee Bill","نفس فاتورة المصاريف"),"result")}</div><div class="audit-formula-result"><span>${ui("Expected one row","المتوقع صف واحد")}</span><b dir="ltr">${shippingMoney(c.expected_total??finding.expected_amount,currency)}</b><span>${ui("Extra counted","الزيادة المحتسبة")}</span><strong dir="ltr">${shippingMoney(c.duplicate_difference??finding.exposure_amount,currency)}</strong></div>`;
@@ -4619,7 +5172,13 @@
     const byBill=new Map();
     fees.forEach((fee,index)=>{const code=String(fee.bill_code||ui("Without bill code","بدون كود فاتورة"));const group=byBill.get(code)||{code,date:fee.bill_date||"",rows:[]};group.rows.push({...fee,row_number:index+1});byBill.set(code,group);});
     const overall=fees.reduce((sum,row)=>sum+Number(row.amount||0),0);
-    return `<div class="fee-breakdown-head"><div><span class="section-kicker">FEE ROW BREAKDOWN</span><h3>${ui("How the carrier fee total was formed","كيف تكوّن إجمالي رسوم الشركة")}</h3><p>${ui("Rows are grouped by the exact Fee Bill code. COD Bills are not counted as fee rows.","تم تجميع الصفوف حسب كود فاتورة المصاريف نفسه. فاتورة COD لا تدخل ضمن بنود المصاريف.")}</p></div><div><span>${ui("All stored fee rows","إجمالي كل البنود المحفوظة")}</span><strong>${shippingMoney(overall,currency)}</strong><small>${fees.length} ${ui("raw rows","صف خام")}</small></div></div>${[...byBill.values()].map(group=>{const billTotal=group.rows.reduce((sum,row)=>sum+Number(row.amount||0),0),byName=new Map();group.rows.forEach(row=>{const key=String(row.name||"-");byName.set(key,[...(byName.get(key)||[]),row]);});return `<article class="fee-bill-group"><header><div><span>${ui("Fee Bill","فاتورة المصاريف")}</span><code>${escapeHtml(group.code)}</code><small>${escapeHtml(group.date||ui("No bill date","بدون تاريخ فاتورة"))}</small></div><div><span>${ui("Shipment total in this bill","إجمالي الشحنة في هذه الفاتورة")}</span><strong>${shippingMoney(billTotal,currency)}</strong><small>${group.rows.length} ${ui("rows","بنود")}</small></div></header><div class="fee-kind-list">${[...byName.entries()].map(([name,rows])=>{const total=rows.reduce((sum,row)=>sum+Number(row.amount||0),0),same=rows.every(row=>Number(row.amount||0)===Number(rows[0].amount||0));return `<div class="fee-kind-row"><div><strong>${escapeHtml(omsFeeLabel(name))}</strong><small>${same?`${shippingMoney(rows[0].amount,rows[0].currency||currency)} × ${rows.length}`:rows.map(row=>shippingMoney(row.amount,row.currency||currency)).join(" + ")}</small></div><div class="fee-raw-rows">${rows.map((row,index)=>`<span>#${index+1} · ${shippingMoney(row.amount,row.currency||currency)}</span>`).join("")}</div><b>${shippingMoney(total,rows[0].currency||currency)}</b></div>`;}).join("")}</div><footer><span>${ui("Bill-row equation","معادلة بنود الفاتورة")}</span><strong>${[...byName.entries()].map(([name,rows])=>`${escapeHtml(omsFeeLabel(name))} ${shippingMoney(rows.reduce((sum,row)=>sum+Number(row.amount||0),0),rows[0]?.currency||currency)}`).join(" + ")} = ${shippingMoney(billTotal,currency)}</strong></footer></article>`;}).join("")}`;
+    return `<div class="fee-breakdown-head"><div><span class="section-kicker">FEE MOVEMENT BREAKDOWN</span><h3>${ui("How the carrier fee total was formed","كيف تكوّن إجمالي رسوم الشركة")}</h3><p>${ui("Positive rows are charges and negative rows are later corrections. Nothing is discarded.","البنود الموجبة رسوم، والبنود السالبة تصحيحات لاحقة. لا يتم حذف أي حركة.")}</p></div><div><span>${ui("Net of all stored movements","صافي كل الحركات المحفوظة")}</span><strong>${shippingMoney(overall,currency)}</strong><small>${fees.length} ${ui("movements","حركة")}</small></div></div>${[...byBill.values()].map(group=>{const billTotal=group.rows.reduce((sum,row)=>sum+Number(row.amount||0),0),byName=new Map();group.rows.forEach(row=>{const key=String(row.name||"-");byName.set(key,[...(byName.get(key)||[]),row]);});return `<article class="fee-bill-group"><header><div><span>${ui("Fee Bill","فاتورة المصاريف")}</span><code>${escapeHtml(group.code)}</code><small>${escapeHtml(group.date||ui("No bill date","بدون تاريخ فاتورة"))}</small></div><div><span>${ui("Net shipment movement in this bill","صافي حركة الشحنة في الفاتورة")}</span><strong>${shippingMoney(billTotal,currency)}</strong><small>${group.rows.length} ${ui("movements","حركات")}</small></div></header><div class="fee-kind-list">${[...byName.entries()].map(([name,rows])=>{const total=rows.reduce((sum,row)=>sum+Number(row.amount||0),0),same=rows.every(row=>Number(row.amount||0)===Number(rows[0].amount||0));return `<div class="fee-kind-row"><div><strong>${escapeHtml(omsFeeLabel(name))}</strong><small>${same?`${shippingMoney(rows[0].amount,rows[0].currency||currency)} × ${rows.length}`:rows.map(row=>shippingMoney(row.amount,row.currency||currency)).join(" + ")}</small></div><div class="fee-raw-rows">${rows.map((row,index)=>`<span class="${Number(row.amount)<0?"correction":"charge"}">#${index+1} · ${Number(row.amount)<0?ui("Correction","تصحيح"):ui("Charge","رسم")} · ${shippingMoney(row.amount,row.currency||currency)}</span>`).join("")}</div><b class="${total<0?"positive":""}">${shippingMoney(total,rows[0].currency||currency)}</b></div>`;}).join("")}</div><footer><span>${ui("Bill movement equation","معادلة حركات الفاتورة")}</span><strong>${[...byName.entries()].map(([name,rows])=>`${escapeHtml(omsFeeLabel(name))} ${shippingMoney(rows.reduce((sum,row)=>sum+Number(row.amount||0),0),rows[0]?.currency||currency)}`).join(" + ")} = ${shippingMoney(billTotal,currency)}</strong></footer></article>`;}).join("")}`;
+  }
+
+  function shippingAuditHistoryMarkup(history=[]){
+    if(!history.length) return "";
+    const eventLabel=value=>({detected:ui("Detected","تم الاكتشاف"),detected_again:ui("Detected again","ظهر مرة أخرى"),resolved_automatically:ui("No longer detected","لم يعد ظاهرًا"),resolved_by_correction:ui("Resolved by negative correction","حُلّ بتصحيح سالب")}[value]||String(value||"").replaceAll("_"," "));
+    return `<section class="card card-pad audit-finding-history"><div class="audit-section-head compact"><div><span class="section-kicker">IMMUTABLE HISTORY</span><h2>${ui("Finding history","سجل الملاحظة")}</h2><p>${ui("Old detections remain visible after a carrier correction or later sync.","تظل الاكتشافات القديمة ظاهرة بعد تصحيح الشركة أو أي مزامنة لاحقة.")}</p></div></div><div>${history.map(row=>`<article><span class="status-pill ${shippingAuditStatusClass(row.next_status)}">${escapeHtml(eventLabel(row.event_type))}</span><div><strong>${escapeHtml(shippingAuditStatusLabel(row.previous_status))} → ${escapeHtml(shippingAuditStatusLabel(row.next_status))}</strong><small>${row.related_finding_id?`${ui("Correction finding","ملاحظة التصحيح")} #${row.related_finding_id}`:ui("Audit run","تشغيل المراجعة")+` #${row.run_id||"-"}`}</small></div><time>${formatDateTime(row.occurred_at||row.created_at)}</time></article>`).join("")}</div></section>`;
   }
 
   function shippingAuditSourceTraceMarkup(finding){
@@ -4665,7 +5224,7 @@
 
   async function renderShippingAuditFinding(page,findingId){
     if(!findingId){location.hash="shippingAudit";return;}
-    const result=await api(`/api/admin/shipping/audit/findings/${findingId}`),finding=result.finding||{},shipment=result.shipment||{},order=result.order||{},contents=result.order_contents||{},fees=shipment.carrier_fee_breakdown||[],events=result.unified_timeline||[],timelineEvidence=result.timeline_evidence||{},isNotice=finding.finding_kind==="informational"||finding.severity==="info"||finding.status==="notice";
+    const result=await api(`/api/admin/shipping/audit/findings/${findingId}`),finding=result.finding||{},shipment=result.shipment||{},order=result.order||{},contents=result.order_contents||{},fees=shipment.carrier_fee_breakdown||[],events=result.unified_timeline||[],history=result.history||[],timelineEvidence=result.timeline_evidence||{},isNotice=finding.finding_kind==="informational"||finding.severity==="info"||finding.status==="notice"||finding.status==="resolved_by_correction";
     const timelineTitle=event=>event.type==="tracking"?omsStatusLabel(state.lang==="ar"?event.title_ar:event.title_en):event.type==="latest_status"?`${ui("Latest status","آخر حالة")}: ${shippingStatusLabel(event.detail?.status_group||shipment.status_group)}`:(state.lang==="ar"?event.title_ar:event.title_en);
     page.innerHTML=`<div class="audit-detail-head"><div><button class="btn back-link" id="backToShippingAudit">${i("arrow-left")}${ui("Back to fee audit","العودة لمراجعة الرسوم")}</button><span class="section-kicker">AUDIT FINDING #${finding.id}</span><h1>${escapeHtml(state.lang==="ar"?finding.title_ar:finding.title_en)}</h1><p>${escapeHtml(state.lang==="ar"?finding.reason_ar:finding.reason_en)}</p></div><div><span class="audit-priority ${escapeHtml(finding.severity)}">${shippingAuditSeverityLabel(finding.severity)}</span><strong>${shippingMoney(finding.exposure_amount,finding.currency)}</strong><small>${ui("potential exposure","فرق محتمل")}</small></div></div>
       <div class="audit-detail-grid"><section class="card card-pad"><div class="audit-section-head compact"><div><span class="section-kicker">EVIDENCE</span><h2>${ui("Shipment and bill evidence","دليل الشحنة والفاتورة")}</h2></div></div><dl class="audit-evidence"><div><dt>${ui("Waybill","البوليصة")}</dt><dd>${escapeHtml(finding.waybill_no||"-")}</dd></div><div><dt>${ui("Order","الطلب")}</dt><dd>${escapeHtml(finding.client_order_no||order.legacy_order_number||order.id||"-")}</dd></div><div><dt>${ui("Carrier status","حالة الشركة")}</dt><dd>${escapeHtml(omsStatusLabel(shipment.status_label||shipment.status_code||shipment.status_group))}</dd></div><div><dt>${ui("Requested payment","الدفع المطلوب")}</dt><dd>${escapeHtml(omsPaymentLabel(shipment.payment_method)||"-")}</dd></div><div><dt>${ui("Actual payment","الدفع الفعلي")}</dt><dd>${escapeHtml(omsPaymentLabel(shipment.metadata?.actual_payment_method)||"-")}</dd></div><div><dt>${ui("Expected / billed weight","الوزن المتوقع / المحتسب")}</dt><dd>${finding.expected_weight??order.shipping_package?.gross_weight??"-"} / ${finding.billed_weight??shipment.carrier_billable_weight??"-"} kg</dd></div><div><dt>${ui("Expected amount","المبلغ المتوقع")}</dt><dd>${shippingMoney(finding.expected_amount,finding.currency)}</dd></div><div><dt>${ui("Charged amount","المبلغ المحتسب")}</dt><dd>${shippingMoney(finding.actual_amount??shipment.carrier_actual_cost,finding.currency)}</dd></div></dl><div class="audit-fee-list"><h3>${ui("Fee rows","بنود الرسوم")}</h3>${fees.length?fees.map(fee=>`<div><span>${escapeHtml(omsFeeLabel(fee.name))}<small>${escapeHtml(fee.bill_code||"")}</small></span><strong>${shippingMoney(fee.amount,fee.currency||finding.currency)}</strong></div>`).join(""):`<p class="muted">${ui("No fee rows stored","لا توجد بنود رسوم محفوظة")}</p>`}</div><div class="audit-provenance"><div class="audit-section-head compact"><div><span class="section-kicker">HOW IT WAS FOUND</span><h2>${ui("Source and detection method","المصدر وطريقة اكتشاف المشكلة")}</h2></div><span class="status-pill ${finding.financially_confirmed?"good":"warn"}">${finding.financially_confirmed?ui("Confirmed closed bill","فاتورة مقفلة مؤكدة"):ui("Operational alert","تنبيه تشغيلي")}</span></div><ol>${(finding.detection_steps||[]).map(step=>`<li>${escapeHtml(state.lang==="ar"?step.ar:step.en)}</li>`).join("")}</ol><div class="audit-source-links">${(finding.source?.bills||[]).map(bill=>`<button class="btn" type="button" data-detail-source-bill="${bill.id}">${i("file")}<span>${bill.bill_type==="codBill"?"COD Bill":"Fee Bill"}<small>${escapeHtml(bill.bill_code||"")}</small></span></button>`).join("")}${(finding.source?.reports||[]).map(report=>`<button class="btn" type="button" data-detail-source-report="${report.id}">${i("file")}<span>OMS Report<small>${escapeHtml(report.report_date||"")}</small></span></button>`).join("")}${(finding.source?.reconciliations||[]).map(row=>`<button class="btn" type="button" data-detail-source-week="${row.id}">${i("layers")}<span>${ui("Weekly closing","التقفيل الأسبوعي")}<small>${escapeHtml(row.cycle_start)} → ${escapeHtml(row.cycle_end)}</small></span></button>`).join("")||(!finding.source?.bills?.length&&!finding.source?.reports?.length?`<span class="muted small">${ui("No closing source is linked yet.","لا يوجد مصدر تقفيل مرتبط حتى الآن.")}</span>`:"")}</div></div></section>
@@ -4675,6 +5234,7 @@
     document.querySelector(".audit-fee-list").innerHTML=shippingAuditFeeBreakdownMarkup(fees,finding.currency||shipment.currency||"SAR");
     document.querySelector(".audit-order-contents")?.insertAdjacentHTML("beforebegin",shippingAuditExplanationMarkup(finding,shipment));
     document.querySelector(".audit-explanation")?.insertAdjacentHTML("afterend",shippingAuditSourceTraceMarkup(finding));
+    document.querySelector(".audit-source-trace, .audit-explanation")?.insertAdjacentHTML("afterend",shippingAuditHistoryMarkup(history));
     document.querySelectorAll(".audit-timeline>div:not(.audit-section-head):not(.audit-evidence-gap)").forEach((row,index)=>{
       const title=row.querySelector("strong");
       if(title&&events[index]) title.textContent=timelineTitle(events[index]);
@@ -4682,8 +5242,9 @@
     if(!timelineEvidence.tracking_event_count) document.querySelector(".audit-timeline .audit-section-head")?.insertAdjacentHTML("afterend",`<div class="audit-evidence-gap compact-gap">${i("info")}<div><strong>${ui("Detailed tracking events were not stored for this historical shipment","أحداث التتبع التفصيلية غير محفوظة لهذه الشحنة التاريخية")}</strong><p>${ui("The timeline below uses the stored latest status, OMS report, carrier bills and weekly closing only.","يعتمد التسلسل أدناه على آخر حالة محفوظة وتقرير OMS وفواتير الشركة والتقفيلة الأسبوعية فقط.")}</p></div></div>`);
     if(order.id) document.querySelector(".audit-source-links")?.insertAdjacentHTML("beforeend",`<button class="btn" type="button" data-detail-store-order="${order.id}">${i("shopping-bag")}<span>${ui("Store order","طلب المتجر")}<small>#${escapeHtml(order.legacy_order_number||order.id)}</small></span></button>`);
     if(isNotice){
-      document.querySelector(".audit-detail-head>div:last-child").innerHTML=`<span class="audit-priority info">${shippingAuditSeverityLabel("info")}</span><strong>${ui("Notice only","تنبيه فقط")}</strong><small>${ui("No financial exposure or review required","لا توجد فروق مالية ولا يحتاج إلى مراجعة")}</small>`;
-      document.querySelector(".audit-case-panel").innerHTML=`<span class="section-kicker">INFORMATION</span><h2>${ui("No action required","لا يلزم اتخاذ إجراء")}</h2><div class="audit-evidence-gap compact-gap">${i("info")}<div><strong>${ui("Stored for reference only","محفوظ للرجوع فقط")}</strong><p>${ui("Payment can change from cash to card when the courier arrives. This notice is excluded from problems, exposure and disputes.","قد يغيّر العميل الدفع من الكاش إلى البطاقة عند وصول المندوب. هذا التنبيه مستبعد من المشاكل والفروقات والاعتراضات.")}</p></div></div>`;
+      const corrected=finding.status==="resolved_by_correction"||finding.rule_code==="duplicate_fee_corrected";
+      document.querySelector(".audit-detail-head>div:last-child").innerHTML=corrected?`<span class="audit-priority info">${shippingAuditStatusLabel("resolved_by_correction")}</span><strong>${shippingMoney(finding.resolution_evidence?.net_total??finding.actual_amount,finding.currency)}</strong><small>${ui("current net after correction","الصافي الحالي بعد التصحيح")}</small>`:`<span class="audit-priority info">${shippingAuditSeverityLabel("info")}</span><strong>${ui("Notice only","تنبيه فقط")}</strong><small>${ui("No financial exposure or review required","لا توجد فروق مالية ولا يحتاج إلى مراجعة")}</small>`;
+      document.querySelector(".audit-case-panel").innerHTML=corrected?`<span class="section-kicker">CARRIER CORRECTION</span><h2>${ui("Resolved without deleting history","تم الحل مع الاحتفاظ بالسجل")}</h2><div class="audit-evidence-gap compact-gap">${i("check")}<div><strong>${ui("A later negative movement offset the duplicate","حركة سالبة لاحقة عكست الرسم المكرر")}</strong><p>${ui("The original finding, its source bill, and every detection event remain available for audit.","تظل الملاحظة الأصلية وفاتورتها وكل مرات اكتشافها متاحة للمراجعة.")}</p></div></div>`:`<span class="section-kicker">INFORMATION</span><h2>${ui("No action required","لا يلزم اتخاذ إجراء")}</h2><div class="audit-evidence-gap compact-gap">${i("info")}<div><strong>${ui("Stored for reference only","محفوظ للرجوع فقط")}</strong><p>${ui("Payment can change from cash to card when the courier arrives. This notice is excluded from problems, exposure and disputes.","قد يغيّر العميل الدفع من الكاش إلى البطاقة عند وصول المندوب. هذا التنبيه مستبعد من المشاكل والفروقات والاعتراضات.")}</p></div></div>`;
     }
     document.getElementById("backToShippingAudit").onclick=()=>location.hash="shippingAudit";
     document.querySelectorAll("[data-detail-source-bill]").forEach(btn=>btn.onclick=()=>location.hash=`shippingCarrierBill/${btn.dataset.detailSourceBill}`);
@@ -4732,17 +5293,184 @@
   async function renderShippingReconciliation(page,reconciliationId){
     if(!reconciliationId){location.hash="shippingClosings";return;}
     const data=await api(`/api/admin/shipping/weekly-reconciliations/${reconciliationId}`),row=data.reconciliation||{},bills=data.bills||[],findings=data.findings||[],shipments=data.shipments||[];
-    const cod=bills.find(b=>b.bill_type==="codBill"),fee=bills.find(b=>b.bill_type==="feeBill");
+    const codBills=bills.filter(b=>b.bill_type==="codBill"),feeBills=bills.filter(b=>b.bill_type==="feeBill");
     const issueText=issue=>({missing_cod_bill:ui("COD bill was not issued for this cycle.","لم تصدر فاتورة COD لهذه الدورة."),missing_fee_bill:ui("Fee bill was not issued for this cycle.","لم تصدر فاتورة المصاريف لهذه الدورة."),cod_not_completed:ui("COD bill exists but is not completed.","فاتورة COD موجودة لكنها غير مقفلة."),fee_not_completed:ui("Fee bill exists but is not completed.","فاتورة المصاريف موجودة لكنها غير مقفلة."),fees_exceed_collections:ui("Carrier fees are greater than collected COD.","مصاريف الشحن أكبر من مبالغ COD المحصلة."),fee_detail_mismatch:ui("Fee bill total differs from the sum of linked shipment fee details.","إجمالي فاتورة المصاريف يختلف عن مجموع تفاصيل رسوم الشحنات المرتبطة.")}[issue]||issue);
     page.innerHTML=`<div class="oms-full-page-head"><div><button class="btn back-link" id="backFromReconciliation">${i("arrow-left")}${ui("Back to closings","العودة للتقفيلات")}</button><span class="section-kicker">iMile · WEEKLY RECONCILIATION</span><h1>${escapeHtml(row.cycle_start||"")} → ${escapeHtml(row.cycle_end||"")}</h1><p>${ui("COD collections minus carrier fees equals the expected weekly transfer.","تحصيلات COD ناقص مصاريف الشحن تساوي التحويل الأسبوعي المتوقع.")}</p></div><span class="status-pill ${row.status==="completed"?"good":"warn"}">${row.status==="completed"?ui("Completed","مكتملة"):ui("Needs review","تحتاج مراجعة")}</span></div>
       <section class="weekly-reconciliation-kpis"><div><span>${ui("COD collections","التحصيلات")}</span><strong>${shippingMoney(row.cod_amount,row.currency)}</strong></div><div><span>${ui("Carrier fees","مصاريف الشحن")}</span><strong>${shippingMoney(row.fee_amount,row.currency)}</strong></div><div class="net"><span>${ui("Expected transfer","التحويل المتوقع")}</span><strong>${shippingMoney(row.expected_transfer,row.currency)}</strong></div><div><span>${ui("Linked fee detail","مجموع التفاصيل")}</span><strong>${shippingMoney(row.linked_fee_total,row.currency)}</strong></div></section>
-      <div class="bill-output-grid">${[[cod,"COD BILL",ui("Customer collections","تحصيلات العملاء")],[fee,"FEE BILL",ui("Shipping expenses","مصاريف الشحن")]].map(([bill,kicker,label])=>bill?`<article class="card bill-output-card"><span class="section-kicker">${kicker}</span><h2>${label}</h2><strong>${shippingMoney(bill.amount,bill.currency)}</strong><code>${escapeHtml(bill.bill_code||"")}</code><div><span class="status-pill ${bill.settlement_status==="Completed"?"good":"warn"}">${escapeHtml(bill.settlement_status||"-")}</span><button class="btn" data-week-bill="${bill.id}">${i("eye")}${ui("Open bill","فتح الفاتورة")}</button></div></article>`:`<article class="card bill-output-card missing"><span class="section-kicker">${kicker}</span><h2>${label}</h2><p>${ui("This output is missing for the cycle.","هذا المخرج غير موجود لهذه الدورة.")}</p></article>`).join("")}</div>
+      <div class="bill-output-grid">${[[codBills,"COD BILL",ui("Customer collections","تحصيلات العملاء")],[feeBills,"FEE BILL",ui("Shipping expenses","مصاريف الشحن")]].map(([billRows,kicker,label])=>billRows.length?billRows.map((bill,index)=>`<article class="card bill-output-card"><span class="section-kicker">${kicker} ${billRows.length>1?`${index+1}/${billRows.length}`:""}</span><h2>${label}</h2><strong>${shippingMoney(bill.amount,bill.currency)}</strong><code>${escapeHtml(bill.bill_code||"")}</code><div><span class="status-pill ${bill.settlement_status==="Completed"?"good":"warn"}">${escapeHtml(bill.settlement_status||"-")}</span><button class="btn" data-week-bill="${bill.id}">${i("eye")}${ui("Open bill","فتح الفاتورة")}</button></div></article>`).join(""):`<article class="card bill-output-card missing"><span class="section-kicker">${kicker}</span><h2>${label}</h2><p>${ui("This output is missing for the cycle.","هذا المخرج غير موجود لهذه الدورة.")}</p></article>`).join("")}</div>
       <section class="card card-pad reconciliation-explanation"><div class="audit-section-head compact"><div><span class="section-kicker">RECONCILIATION LOGIC</span><h2>${ui("What is wrong and how it was calculated","ما المشكلة وكيف تم حسابها")}</h2></div></div>${(row.issues||[]).length?`<div class="reconciliation-issue-list">${row.issues.map(issue=>`<div>${i("file")}<div><strong>${escapeHtml(shippingAuditRuleLabel(issue))}</strong><p>${escapeHtml(issueText(issue))}</p></div></div>`).join("")}</div>`:`<div class="audit-evidence-gap">${i("check")}<div><strong>${ui("The weekly outputs reconcile","مخرجات الأسبوع متطابقة")}</strong><p>${ui("Both bills are completed and the linked fee detail matches the fee bill total.","الفاتورتان مقفلتان ومجموع تفاصيل الرسوم مطابق لفاتورة المصاريف.")}</p></div></div>`}</section>
       ${findings.length?`<section class="card card-pad carrier-bill-findings"><div class="audit-section-head compact"><div><span class="section-kicker">SHIPMENT FINDINGS</span><h2>${ui("Shipment-level problems in this cycle","مشاكل الشحنات داخل هذه الدورة")}</h2></div></div><div class="carrier-bill-finding-list">${findings.map(f=>`<button data-week-finding="${f.id}"><span class="audit-severity ${escapeHtml(f.severity)}"></span><div><strong>${escapeHtml(state.lang==="ar"?f.title_ar:f.title_en)}</strong><small>${escapeHtml(f.waybill_no)} · ${escapeHtml(state.lang==="ar"?f.detection_steps?.[1]?.ar:f.detection_steps?.[1]?.en)}</small></div><b>${shippingMoney(f.exposure_amount,f.currency)}</b>${i("eye")}</button>`).join("")}</div></section>`:""}
       <section class="card oms-full-table"><div class="audit-section-head"><div><span class="section-kicker">WEEK SHIPMENTS</span><h2>${ui("All linked shipments","كل الشحنات المرتبطة")}</h2></div><span class="pill">${shipments.length}</span></div>${shippingShipmentsTable(shipments)}</section>`;
     document.getElementById("backFromReconciliation").onclick=()=>location.hash="shippingClosings";
     document.querySelectorAll("[data-week-bill]").forEach(btn=>btn.onclick=()=>location.hash=`shippingCarrierBill/${btn.dataset.weekBill}`);
     document.querySelectorAll("[data-week-finding]").forEach(btn=>btn.onclick=()=>location.hash=`shippingAuditFinding/${btn.dataset.weekFinding}`);
+  }
+
+  async function renderFinance(page) {
+    const now = new Date();
+    const firstDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+    const today = now.toISOString().slice(0, 10);
+    let dateFrom = sessionStorage.getItem("finance_date_from") || firstDay;
+    let dateTo = sessionStorage.getItem("finance_date_to") || today;
+    page.innerHTML = pageTitle("finance", "financeSub", `<button class="btn" type="button" id="syncFinanceImile">${i("download")}${ui("Sync iMile period", "مزامنة فترة iMile")}</button><button class="btn" type="button" id="reconcileFinanceProviders">${i("refresh")}${ui("Match OTO and iMile", "مطابقة OTO وiMile")}</button><button class="btn primary" type="button" id="refreshFinance">${i("refresh")}${ui("Refresh", "تحديث")}</button>`);
+    page.innerHTML += `<section class="finance-filterbar"><div class="field"><label>${ui("From", "من")}</label><input id="financeFrom" type="date" value="${dateFrom}" /></div><div class="field"><label>${ui("To", "إلى")}</label><input id="financeTo" type="date" value="${dateTo}" /></div><div class="field finance-tolerance"><label>${ui("Carrier variance tolerance", "حد فرق شركات الشحن")}</label><div><input id="financeTolerance" type="number" min="0" step="0.25" /><span>SAR</span></div></div></section><div id="financeWorkspace" class="finance-loading"><span class="spinner"></span>${ui("Calculating recognized revenue and costs...", "يتم حساب الإيراد والتكاليف المعترف بها...")}</div>`;
+
+    const money=(value,currency="SAR")=>shippingMoney(value,currency);
+    const confidenceLabel=value=>({actual_fifo:ui("Actual FIFO", "تكلفة فعلية FIFO"),actual:ui("Actual", "فعلية"),estimated_current_cost:ui("Current-cost estimate", "تقدير بالتكلفة الحالية"),partial_estimate:ui("Partial estimate", "تقدير جزئي"),estimated_quote:ui("Carrier estimate", "تقدير شركة الشحن"),estimated_order:ui("Order estimate", "تقدير الطلب"),missing:ui("Missing", "غير متوفرة")}[value]||value||"-");
+    const integrationName=value=>({imile:"iMile",oto:"OTO",smartship:"SmartShip",cash_on_delivery:ui("Cash on delivery","الدفع عند الاستلام"),tamara:"Tamara",tabby:"Tabby",edfapay:"EdfaPay",unknown:ui("Unknown","غير محدد"),unmatched:ui("Unmatched","غير مرتبط")}[value]||value||"-");
+    const load=async()=>{
+      const workspace=document.getElementById("financeWorkspace");
+      workspace.className="finance-loading";
+      workspace.innerHTML=`<span class="spinner"></span>${ui("Calculating recognized revenue and costs...", "يتم حساب الإيراد والتكاليف المعترف بها...")}`;
+      try {
+        const [data,movementData]=await Promise.all([
+          api(`/api/admin/finance/overview?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&recognized=true&limit=100`),
+          api("/api/admin/shipping/fee-movements?direction=correction")
+        ]);
+        const s=data.summary||{},currency=s.currency||"SAR",quality=data.data_quality||{},comparisons=data.provider_comparisons||[],corrections=movementData.movements||[];
+        document.getElementById("financeTolerance").value=data.settings?.shipping_variance_tolerance??1;
+        const qualityTotal=Number(quality.missing_cogs||0)+Number(quality.estimated_cogs||0)+Number(quality.missing_shipping_cost||0)+Number(quality.missing_payment_fees||0);
+        const integrationMarkup=(data.active_integrations?.shipping||[]).concat(data.active_integrations?.payments||[]).map(row=>`<span class="finance-integration ${row.enabled?"on":"off"}"><i></i>${escapeHtml(integrationName(row.provider))}<small>${row.enabled?ui("Active","مفعل"):ui("Inactive","غير مفعل")}</small></span>`).join("");
+        const aggregateTable=(rows,type)=>rows?.length?`<div class="table-scroll"><table class="data-table finance-aggregate-table"><thead><tr><th>${type}</th><th>${ui("Orders","الطلبات")}</th><th>${ui("Revenue","الإيراد")}</th><th>${ui("Discount","الخصم")}</th><th>${ui("Shipping cost","تكلفة الشحن")}</th><th>${ui("Contribution","المساهمة")}</th></tr></thead><tbody>${rows.map(row=>`<tr><td><strong>${escapeHtml(type===ui("Payment method","وسيلة الدفع")?integrationName(row.key):row.key)}</strong></td><td>${row.orders}</td><td>${money(row.revenue,currency)}</td><td>${money(row.discount,currency)}</td><td>${money(row.shipping_cost,currency)}</td><td class="${Number(row.profit)<0?"negative":"positive"}">${money(row.profit,currency)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state compact"><p>${ui("No recognized transactions in this period.","لا توجد معاملات معترف بها في هذه الفترة.")}</p></div>`;
+        workspace.className="finance-workspace";
+        workspace.innerHTML=`
+          <section class="finance-hero">
+            <div><span class="section-kicker">CONTRIBUTION PROFIT</span><strong>${money(s.contribution_profit,currency)}</strong><p>${ui("Sales and collected shipping minus product cost, actual carrier cost, and recorded payment fees.","المبيعات والشحن المحصل ناقص تكلفة البضاعة وتكلفة شركة الشحن الفعلية ورسوم الدفع المسجلة.")}</p></div>
+            <dl><div><dt>${ui("Recognized orders","طلبات معترف بها")}</dt><dd>${s.recognized_orders||0}</dd></div><div><dt>${ui("Negative-profit orders","طلبات خاسرة")}</dt><dd class="${s.negative_profit_orders?"negative":""}">${s.negative_profit_orders||0}</dd></div><div><dt>${ui("Actual shipping costs","تكاليف شحن فعلية")}</dt><dd>${s.actual_shipping_orders||0}</dd></div><div><dt>${ui("Actual FIFO costs","تكاليف FIFO فعلية")}</dt><dd>${s.actual_cogs_orders||0}</dd></div></dl>
+          </section>
+          <section class="finance-kpis">
+            <article><span>${ui("Product revenue","إيراد المنتجات")}</span><strong>${money(s.product_revenue,currency)}</strong><small>${ui("After product discounts","بعد خصومات المنتجات")}</small></article>
+            <article><span>${ui("Cost of goods","تكلفة البضاعة")}</span><strong>${money(s.cogs,currency)}</strong><small>${quality.missing_cogs||0} ${ui("orders missing cost","طلب دون تكلفة")}</small></article>
+            <article><span>${ui("Carrier cost","تكلفة شركات الشحن")}</span><strong>${money(s.shipping_cost,currency)}</strong><small>${s.actual_shipping_orders||0} ${ui("with actual cost","بتكلفة فعلية")}</small></article>
+            <article><span>${ui("Discounts and offers","الخصومات والعروض")}</span><strong>${money(Number(s.product_discounts||0)+Number(s.free_shipping_benefit||0)+Number(s.bundle_discount||0),currency)}</strong><small>${ui("Codes, free shipping, and bundles","أكواد وشحن مجاني وبندلز")}</small></article>
+            <article><span>${ui("Free shipping cost","تكلفة الشحن المجاني")}</span><strong>${money(s.free_shipping_benefit,currency)}</strong><small>${s.free_shipping_orders||0} ${ui("orders · avg", "طلب · متوسط")} ${money(s.average_free_shipping_cost,currency)}</small></article>
+            <article><span>${ui("Payment fees","رسوم الدفع")}</span><strong>${money(s.payment_fees,currency)}</strong><small>${quality.missing_payment_fees||0} ${ui("orders need fee data","طلب يحتاج بيانات الرسوم")}</small></article>
+          </section>
+          <section class="finance-quality ${qualityTotal?"warn":"good"}">${i(qualityTotal?"alert":"check")}<div><strong>${qualityTotal?ui("Some totals still use estimates","بعض الإجماليات ما زالت تستخدم تقديرات"):ui("All required cost evidence is available","كل أدلة التكلفة المطلوبة متوفرة")}</strong><p>${ui("Missing COGS","تكلفة بضاعة مفقودة")}: ${quality.missing_cogs||0} · ${ui("Estimated COGS","تكلفة بضاعة تقديرية")}: ${quality.estimated_cogs||0} · ${ui("Missing shipping","شحن مفقود")}: ${quality.missing_shipping_cost||0} · ${ui("Missing payment fees","رسوم دفع مفقودة")}: ${quality.missing_payment_fees||0}</p><p>${ui("Official iMile export","تصدير iMile الرسمي")}: ${s.official_export_rows||0} ${ui("rows","صف")} · ${ui("last checked","آخر فحص")} ${s.official_export_last_synced_at?formatDateTime(s.official_export_last_synced_at):ui("Not yet","لم يتم بعد")} · ${s.official_export_negative_rows||0} ${ui("negative rows","صف سالب")}</p></div></section>
+          <section class="finance-integrations"><div><span class="section-kicker">LIVE CONFIGURATION</span><h2>${ui("Enabled providers in this period","التكاملات المفعلة حاليًا")}</h2></div><div>${integrationMarkup}</div></section>
+          <div class="finance-grid">
+            <section class="card finance-panel"><header><div><span class="section-kicker">PROMOTIONS</span><h2>${ui("Offer cost and profitability","تكلفة وربحية العروض")}</h2></div><strong>${money(Number(s.product_discounts||0)+Number(s.free_shipping_benefit||0)+Number(s.bundle_discount||0),currency)}</strong></header>${aggregateTable(data.promotions,ui("Promotion","العرض"))}</section>
+            <section class="card finance-panel"><header><div><span class="section-kicker">PAYMENTS</span><h2>${ui("Revenue by payment method","الإيراد حسب وسيلة الدفع")}</h2></div></header>${aggregateTable(data.payments,ui("Payment method","وسيلة الدفع"))}</section>
+          </div>
+          <section class="card finance-panel finance-provider-panel"><header><div><span class="section-kicker">OTO → ACTUAL CARRIER</span><h2>${ui("OTO and iMile cost reconciliation","مطابقة تكلفة OTO وiMile")}</h2><p>${ui("OTO is the booking platform; iMile is treated as the actual carrier when the waybill or order reference matches.","OTO منصة الحجز، ويتم اعتبار iMile الناقل الفعلي عند تطابق البوليصة أو مرجع الطلب.")}</p></div><div><strong>${s.provider_link_count||0}</strong><small>${ui("matched shipments","شحنة مرتبطة")}</small></div></header>${comparisons.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>${ui("Order / waybill","الطلب / البوليصة")}</th><th>${ui("Match evidence","دليل الربط")}</th><th>${ui("OTO estimate","تقدير OTO")}</th><th>${ui("iMile actual","فعلي iMile")}</th><th>${ui("Variance","الفرق")}</th><th>${ui("Status","الحالة")}</th></tr></thead><tbody>${comparisons.slice(0,100).map(row=>`<tr><td><strong>#${escapeHtml(row.store_order_id||"-")}</strong><small>${escapeHtml(row.waybill_no||"-")}</small></td><td>${(row.match_evidence||[]).map(value=>`<span class="status-pill good">${escapeHtml(value.replaceAll("_"," "))}</span>`).join(" ")}</td><td>${money(row.oto_estimated_cost,currency)}</td><td>${money(row.imile_actual_cost,currency)}</td><td class="${row.needs_review?"negative":""}">${row.cost_variance==null?"-":money(row.cost_variance,currency)}</td><td><span class="status-pill ${row.needs_review?"warn":"good"}">${row.needs_review?ui("Review","مراجعة"):ui("Matched","متطابقة")}</span></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state compact"><p>${ui("No OTO shipment has matched an iMile record yet. Matching runs automatically after either source syncs.","لا توجد شحنة OTO مرتبطة بسجل iMile بعد. تتم المطابقة تلقائيًا بعد مزامنة أي مصدر.")}</p></div>`}</section>
+          <section class="card finance-panel"><header><div><span class="section-kicker">IMILE CORRECTIONS</span><h2>${ui("Historical charges and negative corrections","الرسوم التاريخية والتصحيحات السالبة")}</h2><p>${ui("Corrections remain immutable and are never removed when an audit finding is resolved.","تظل التصحيحات محفوظة ولا يتم حذفها عند حل ملاحظة المراجعة.")}</p></div><div><strong>${money(s.imile_correction_total,currency)}</strong><small>${s.imile_correction_rows||0} ${ui("correction movements","حركة تصحيح")}</small></div></header>${corrections.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>${ui("Waybill","البوليصة")}</th><th>${ui("Fee","البند")}</th><th>${ui("Bill","الفاتورة")}</th><th>${ui("Date","التاريخ")}</th><th>${ui("Correction","التصحيح")}</th></tr></thead><tbody>${corrections.slice(0,100).map(row=>`<tr><td><strong>${escapeHtml(row.waybill_no||"-")}</strong></td><td>${escapeHtml(omsFeeLabel(row.fee_name))}</td><td>${escapeHtml(row.bill_code||"-")}</td><td>${formatDateTime(row.movement_date||row.last_seen_at)}</td><td class="positive">${money(row.amount,row.currency||currency)}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state compact"><p>${ui("No negative iMile correction movement is stored yet. Historical reprocessing will keep any one it finds.","لا توجد حركة تصحيح سالبة محفوظة حتى الآن. إعادة معالجة التاريخ ستحفظ أي حركة يتم العثور عليها.")}</p></div>`}</section>
+          <section class="card finance-panel"><header><div><span class="section-kicker">ORDER ECONOMICS</span><h2>${ui("Order-level profitability","ربحية كل طلب")}</h2></div></header>${data.orders?.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>${ui("Order","الطلب")}</th><th>${ui("Revenue","الإيراد")}</th><th>${ui("COGS","تكلفة البضاعة")}</th><th>${ui("Shipping","الشحن")}</th><th>${ui("Payment fee","رسوم الدفع")}</th><th>${ui("Contribution","المساهمة")}</th><th>${ui("Evidence","الدليل")}</th></tr></thead><tbody>${data.orders.map(row=>`<tr><td><button class="table-link" data-finance-order="${row.order_id}">#${escapeHtml(row.order_number)}</button><small>${formatDateTime(row.date)}</small></td><td>${money(Number(row.product_revenue||0)+Number(row.shipping_revenue||0),row.currency)}</td><td>${money(row.cogs,row.currency)}</td><td>${money(row.shipping_cost,row.currency)}</td><td>${money(row.payment_fee,row.currency)}</td><td class="${Number(row.contribution_profit)<0?"negative":"positive"}"><strong>${money(row.contribution_profit,row.currency)}</strong><small>${row.margin_percent}%</small></td><td>${(row.data_confidence||[]).map(value=>`<span class="finance-confidence ${String(value).includes("missing")?"bad":String(value).includes("estimate")?"warn":"good"}">${escapeHtml(confidenceLabel(value))}</span>`).join("")}</td></tr>`).join("")}</tbody></table></div>`:`<div class="empty-state compact"><p>${ui("No recognized orders in the selected dates.","لا توجد طلبات معترف بها في التواريخ المحددة.")}</p></div>`}</section>`;
+        workspace.querySelectorAll("[data-finance-order]").forEach(btn=>btn.onclick=()=>location.hash=`orderDetail/${btn.dataset.financeOrder}`);
+      } catch(error) {
+        workspace.className="empty-state";
+        workspace.innerHTML=`<div><h2>${ui("Finance data could not be calculated","تعذر حساب البيانات المالية")}</h2><p>${escapeHtml(error.message||String(error))}</p></div>`;
+      }
+    };
+    document.getElementById("refreshFinance").onclick=async()=>{dateFrom=document.getElementById("financeFrom").value;dateTo=document.getElementById("financeTo").value;sessionStorage.setItem("finance_date_from",dateFrom);sessionStorage.setItem("finance_date_to",dateTo);await load();};
+    document.getElementById("syncFinanceImile").onclick=async event=>{dateFrom=document.getElementById("financeFrom").value;dateTo=document.getElementById("financeTo").value;event.currentTarget.disabled=true;try{const result=await api("/api/admin/shipping/reports/sync",{method:"POST",body:JSON.stringify({date_from:dateFrom,date_to:dateTo,force:true,sync_official_export:true,trigger:"finance_history_reprocess"})});if(result.skipped)toast(ui("iMile OMS synchronization is currently stopped", "مزامنة iMile OMS متوقفة حاليًا"),"error");else toast(`${ui("iMile period and official export synchronized","تمت مزامنة فترة iMile والتصدير الرسمي")}: ${result.fetched_rows||0}`);await load();}catch(error){toast(error.message,"error");}finally{event.currentTarget.disabled=false;}};
+    document.getElementById("reconcileFinanceProviders").onclick=async()=>{await api("/api/admin/shipping/reconcile-providers",{method:"POST",body:"{}"});toast(ui("Provider matching refreshed","تم تحديث مطابقة شركات الشحن"));await load();};
+    document.getElementById("financeTolerance").onchange=async event=>{await api("/api/admin/finance/settings",{method:"PUT",body:JSON.stringify({shipping_variance_tolerance:Number(event.target.value||0)})});toast(ui("Tolerance saved","تم حفظ حد الفرق"));await load();};
+    await load();
+  }
+
+  const notificationRulePermission = module => ({ inventory:"inventory.view", orders:"orders.view", finance:"finance.view", shipping:"shipping.view", settlements:"shipping.view", integrations:"integrations.view" }[module] || "notifications.view");
+
+  async function renderNotifications(page) {
+    page.innerHTML=pageTitle("notifications","notificationsSub",`<button class="btn" type="button" id="markNotificationsRead">${i("check")}${ui("Mark all read","تحديد الكل كمقروء")}</button>${can("notifications.resolve")?`<button class="btn primary" type="button" id="runNotificationScan">${i("refresh")}${ui("Run checks now","تشغيل الفحص الآن")}</button>`:""}`);
+    page.innerHTML+=`<div id="notificationWorkspace" class="finance-loading"><span class="spinner"></span>${ui("Loading notification rules and recent events...","تحميل قواعد الإشعارات والأحداث الحديثة...")}</div>`;
+    const severityLabel=(value)=>({info:ui("Information","معلومة"),warning:ui("Warning","تنبيه"),high:ui("High","مهم"),critical:ui("Critical","حرج")}[value]||value);
+    const moduleLabel=(value)=>({inventory:ui("Inventory","المخزون"),orders:ui("Orders","الطلبات"),finance:ui("Finance","المالية"),shipping:ui("Shipping","الشحن"),settlements:ui("Settlements","التقفيلات"),integrations:ui("Integrations","التكاملات")}[value]||value);
+    const statusLabel=(value)=>({unread:ui("Unread","غير مقروء"),read:ui("Read","مقروء"),acknowledged:ui("In review","قيد المراجعة"),snoozed:ui("Snoozed","مؤجل"),resolved:ui("Resolved","تم الحل"),resolved_automatically:ui("Resolved automatically","تم الحل تلقائيًا"),archived:ui("Archived","مؤرشف")}[value]||value);
+    const notificationPageSize=25;
+    let notificationPage=1;
+    const load=async()=>{
+      const workspace=document.getElementById("notificationWorkspace");
+      const data=await api("/api/admin/notifications?limit=300");
+      const summary=data.summary||{},settings=data.settings||{},email=settings.email||{},rules=data.rules||[],notifications=data.notifications||[],staffRoles=data.staff_roles||[],notificationPermissions=data.permissions||[];
+      state.notificationUnread=Number(summary.unread||0);
+      document.getElementById("notificationBadge")?.classList.toggle("hidden",!state.notificationUnread);
+      if(document.getElementById("notificationBadge")) document.getElementById("notificationBadge").textContent=state.notificationUnread>99?"99+":String(state.notificationUnread);
+      workspace.className="notification-workspace";
+      workspace.innerHTML=`
+        <section class="notification-kpis">
+          <article><span>${ui("Unread","غير مقروء")}</span><strong>${summary.unread||0}</strong><small>${ui("Needs attention","يحتاج متابعة")}</small></article>
+          <article><span>${ui("Active","نشط")}</span><strong>${summary.active||0}</strong><small>${ui("Across all modules","في كل أجزاء النظام")}</small></article>
+          <article class="critical"><span>${ui("Critical","حرج")}</span><strong>${summary.critical||0}</strong><small>${ui("Highest priority","أعلى أولوية")}</small></article>
+          <article><span>${ui("Email failures","فشل البريد")}</span><strong>${summary.email_failures||0}</strong><small>${email.has_password&&settings.channels?.email?ui("Email connected","البريد مربوط"):ui("Email not active","البريد غير مفعل")}</small></article>
+        </section>
+        <nav class="notification-tabs" aria-label="${ui("Notification sections","أقسام الإشعارات")}">
+          <button class="is-active" type="button" data-notification-tab="inbox">${i("bell")}${ui("Inbox","صندوق الإشعارات")}</button>
+          ${can("notifications.resolve")?`<button type="button" data-notification-tab="rules">${i("settings")}${ui("Rules","القواعد")}</button><button type="button" data-notification-tab="email">${i("mail")}${ui("Email delivery","إرسال البريد")}</button>`:""}
+        </nav>
+        <section data-notification-panel="inbox" class="notification-panel is-active">
+          <div class="notification-filterbar"><select id="notificationStatus"><option value="all">${ui("All statuses","كل الحالات")}</option><option value="unread">${ui("Unread","غير مقروء")}</option><option value="acknowledged">${ui("In review","قيد المراجعة")}</option></select><select id="notificationSeverity"><option value="all">${ui("All priorities","كل الأولويات")}</option>${["critical","high","warning","info"].map(value=>`<option value="${value}">${severityLabel(value)}</option>`).join("")}</select><select id="notificationModule"><option value="all">${ui("All modules","كل الأقسام")}</option>${["orders","inventory","finance","shipping","settlements","integrations"].map(value=>`<option value="${value}">${moduleLabel(value)}</option>`).join("")}</select></div>
+          <div class="notification-list" id="notificationList"></div>
+          <div class="notification-pagination" id="notificationPagination"></div>
+        </section>
+        <section data-notification-panel="rules" class="notification-panel">
+          <div class="notification-section-head"><div><span class="section-kicker">AUTOMATION RULES</span><h2>${ui("When should the system notify you?","متى ينبهك النظام؟")}</h2><p>${ui("Thresholds, repetition windows, channels and recipients are editable per event.","يمكن تعديل الحد وفترة التكرار والقنوات والمستلمين لكل حدث.")}</p></div></div>
+          <div class="notification-rule-grid">${rules.map(rule=>`<form class="notification-rule-card" data-notification-rule="${rule.id}"><header><div><span>${escapeHtml(moduleLabel(rule.module))}</span><h3>${escapeHtml(state.lang==='ar'?rule.name_ar:rule.name_en)}</h3></div><div class="field"><input type="hidden" name="is_active" value="${rule.is_active!==false}" />${switchButton({field:"is_active",value:rule.is_active!==false,label:false})}</div></header><div class="notification-rule-controls"><label>${ui("Priority","الأولوية")}<select name="severity">${["info","warning","high","critical"].map(value=>`<option value="${value}" ${rule.severity===value?"selected":""}>${severityLabel(value)}</option>`).join("")}</select></label><label>${ui("Threshold","الحد")}<div class="input-suffix"><input name="threshold" type="number" step="0.01" value="${Number(rule.threshold||0)}"/><span>${escapeHtml(rule.threshold_unit||"")}</span></div></label><label>${ui("Repeat after","التذكير بعد")}<div class="input-suffix"><input name="cooldown_minutes" type="number" min="1" value="${Number(rule.cooldown_minutes||1440)}"/><span>${ui("min","دقيقة")}</span></div></label></div><div class="notification-rule-channels"><label><input type="checkbox" name="dashboard" ${rule.dashboard!==false?"checked":""}/>${i("bell")}${ui("Dashboard","الداشبورد")}</label><label><input type="checkbox" name="email" ${rule.email===true?"checked":""}/>${i("mail")}${ui("Email","البريد")}</label></div><div class="notification-audience-grid"><label>${ui("Required permission","الصلاحية المطلوبة")}<select name="required_permission">${notificationPermissions.map(permission=>`<option value="${permission.key}" ${(rule.required_permission||notificationRulePermission(rule.module))===permission.key?"selected":""}>${escapeHtml(staffPermissionLabel(permission))}</option>`).join("")}</select></label><label>${ui("Target roles (optional)","أدوار محددة (اختياري)")}<select name="audience_role_ids" multiple>${staffRoles.map(role=>`<option value="${role.id}" ${(rule.audience_role_ids||[]).map(Number).includes(Number(role.id))?"selected":""}>${escapeHtml(staffRoleLabel(role))}</option>`).join("")}</select></label></div><label class="notification-recipient-field">${ui("Additional email recipients","مستلمون إضافيون بالبريد")}<input name="recipients" type="text" value="${escapeHtml((rule.recipients||[]).join(", "))}" placeholder="finance@example.com, owner@example.com"/></label><footer><small>${escapeHtml(rule.code)}</small><button class="btn primary" type="submit">${ui("Save rule","حفظ القاعدة")}</button></footer></form>`).join("")}</div>
+        </section>
+        <section data-notification-panel="email" class="notification-panel">
+          <form class="notification-email-layout" id="notificationSettingsForm">
+            <section class="card card-pad"><div class="notification-section-head"><div><span class="section-kicker">SMTP</span><h2>${ui("Outgoing email","البريد المرسل")}</h2><p>${ui("Credentials are encrypted on the server and never returned to the browser.","يتم تشفير بيانات الدخول في السيرفر ولا تعود للمتصفح.")}</p></div><div class="field"><input type="hidden" name="email_enabled" value="${settings.channels?.email===true}"/>${switchButton({field:"email_enabled",value:settings.channels?.email===true,label:true})}</div></div><div class="form-grid"><div class="field"><label>SMTP Host</label><input name="host" value="${escapeHtml(email.host||"")}" placeholder="smtp.example.com"/></div><div class="field"><label>Port</label><input name="port" type="number" value="${Number(email.port||587)}"/></div><div class="field"><label>${ui("Username","اسم المستخدم")}</label><input name="username" value="${escapeHtml(email.username||"")}" autocomplete="off"/></div><div class="field"><label>${ui("Password","كلمة المرور")}</label><input name="password" type="password" placeholder="${email.has_password?"••••••••":ui("Enter password","أدخل كلمة المرور")}" autocomplete="new-password"/></div><div class="field"><label>${ui("From name","اسم المرسل")}</label><input name="from_name" value="${escapeHtml(email.from_name||"")}"/></div><div class="field"><label>${ui("From email","بريد المرسل")}</label><input name="from_email" type="email" value="${escapeHtml(email.from_email||"")}"/></div><div class="field"><label>Reply-To</label><input name="reply_to" type="email" value="${escapeHtml(email.reply_to||"")}"/></div><div class="field"><label>${ui("Default recipients","المستلمون الافتراضيون")}</label><input name="default_recipients" value="${escapeHtml((email.default_recipients||[]).join(", "))}" placeholder="owner@example.com"/></div></div><div class="notification-inline-options"><label><input name="secure" type="checkbox" ${email.secure?"checked":""}/> SSL/TLS</label><label><input name="quiet_enabled" type="checkbox" ${settings.quiet_hours?.enabled?"checked":""}/>${ui("Quiet hours","ساعات الهدوء")}</label><label>${ui("From","من")} <input name="quiet_start" type="time" value="${escapeHtml(settings.quiet_hours?.start||"22:00")}"/></label><label>${ui("To","إلى")} <input name="quiet_end" type="time" value="${escapeHtml(settings.quiet_hours?.end||"08:00")}"/></label></div><div class="notification-schedule"><div class="notification-section-head"><div><span class="section-kicker">SCHEDULE</span><h2>${ui("Checks and summaries","الفحص والملخصات")}</h2></div><div class="field"><input type="hidden" name="notifications_enabled" value="${settings.enabled!==false}"/>${switchButton({field:"notifications_enabled",value:settings.enabled!==false,label:true})}</div></div><div class="form-grid"><div class="field"><label>${ui("Scan every (minutes)","الفحص كل (دقيقة)")}</label><input name="scan_interval_minutes" type="number" min="1" max="1440" value="${Number(settings.scan_interval_minutes||5)}"/></div><div class="field"><label>${ui("Keep history (days)","الاحتفاظ بالسجل (يوم)")}</label><input name="retention_days" type="number" min="30" max="3650" value="${Number(settings.retention_days||365)}"/></div></div><div class="notification-inline-options"><label><input name="daily_enabled" type="checkbox" ${settings.digest?.daily_enabled?"checked":""}/>${ui("Daily summary","ملخص يومي")}</label><label>${ui("At","الساعة")} <input name="daily_hour" type="number" min="0" max="23" value="${Number(settings.digest?.daily_hour??9)}"/></label><label><input name="weekly_enabled" type="checkbox" ${settings.digest?.weekly_enabled?"checked":""}/>${ui("Weekly summary","ملخص أسبوعي")}</label><label>${ui("Day","اليوم")} <select name="weekly_day">${[ui("Sunday","الأحد"),ui("Monday","الاثنين"),ui("Tuesday","الثلاثاء"),ui("Wednesday","الأربعاء"),ui("Thursday","الخميس"),ui("Friday","الجمعة"),ui("Saturday","السبت")].map((label,index)=>`<option value="${index}" ${Number(settings.digest?.weekly_day??1)===index?"selected":""}>${label}</option>`).join("")}</select></label><label>${ui("At","الساعة")} <input name="weekly_hour" type="number" min="0" max="23" value="${Number(settings.digest?.weekly_hour??9)}"/></label></div></div><div class="toolbar end"><button class="btn primary" type="submit">${ui("Save notification settings","حفظ إعدادات الإشعارات")}</button></div></section>
+            <aside class="card card-pad notification-test-card"><span class="section-kicker">DELIVERY TEST</span><h2>${ui("Send a real test","إرسال اختبار حقيقي")}</h2><p>${ui("Save SMTP first, then send one message to verify delivery.","احفظ SMTP أولًا ثم أرسل رسالة واحدة للتأكد من وصول البريد.")}</p><div class="field"><label>${ui("Test recipient","بريد الاختبار")}</label><input id="notificationTestRecipient" type="email" value="${escapeHtml(email.default_recipients?.[0]||"")}"/></div><button class="btn" type="button" id="sendNotificationTest">${i("mail")}${ui("Send test email","إرسال بريد تجريبي")}</button><hr/><dl><div><dt>${ui("Password","كلمة المرور")}</dt><dd>${email.has_password?ui("Stored securely","محفوظة بأمان"):ui("Not configured","غير مضبوطة")}</dd></div><div><dt>${ui("Last scan","آخر فحص")}</dt><dd>${data.latest_run?formatDateTime(data.latest_run.completed_at||data.latest_run.started_at):ui("Not yet","ليس بعد")}</dd></div></dl></aside>
+          </form>
+        </section>`;
+      document.querySelectorAll("[data-notification-tab]").forEach(button=>button.onclick=()=>{document.querySelectorAll("[data-notification-tab]").forEach(item=>item.classList.toggle("is-active",item===button));document.querySelectorAll("[data-notification-panel]").forEach(panel=>panel.classList.toggle("is-active",panel.dataset.notificationPanel===button.dataset.notificationTab));});
+      document.querySelectorAll("[data-form-switch]").forEach(button=>button.onclick=()=>updateFormSwitch(button));
+      const renderInbox=()=>{const status=document.getElementById("notificationStatus").value,severity=document.getElementById("notificationSeverity").value,module=document.getElementById("notificationModule").value;const filtered=notifications.filter(row=>(status==="all"||row.status===status)&&(severity==="all"||row.severity===severity)&&(module==="all"||row.module===module));const pages=Math.max(1,Math.ceil(filtered.length/notificationPageSize));notificationPage=Math.min(notificationPage,pages);const visible=filtered.slice((notificationPage-1)*notificationPageSize,notificationPage*notificationPageSize);document.getElementById("notificationList").innerHTML=visible.length?visible.map(row=>`<article class="notification-item severity-${escapeHtml(row.severity)} status-${escapeHtml(row.status)}"><span class="notification-severity-mark"></span><div class="notification-copy"><div><span class="notification-module">${escapeHtml(moduleLabel(row.module))}</span><span class="status-pill ${row.severity==='critical'?'bad':row.severity==='high'?'warn':'good'}">${escapeHtml(severityLabel(row.severity))}</span><span class="status-pill">${escapeHtml(statusLabel(row.status))}</span></div><h3>${escapeHtml(state.lang==='ar'?row.title_ar:row.title_en)}</h3><p>${escapeHtml(state.lang==='ar'?row.message_ar:row.message_en)}</p><small>${formatDateTime(row.last_seen_at||row.created_at)} · ${ui("seen","ظهر")} ${Number(row.occurrence_count||1)}×</small></div><div class="notification-actions">${row.action_url?`<a class="btn icon-btn" href="${escapeHtml(row.action_url)}" title="${ui("Open source","فتح المصدر")}">${i("eye")}</a>`:""}${row.status==='unread'?`<button class="btn icon-btn" data-notification-action="read" data-id="${row.id}" title="${ui("Mark read","تحديد كمقروء")}">${i("check")}</button>`:""}<button class="btn" data-notification-action="acknowledged" data-id="${row.id}">${ui("Review","مراجعة")}</button><button class="btn primary" data-notification-action="resolved" data-id="${row.id}">${ui("Resolve","حل")}</button></div></article>`).join(""):`<div class="empty-state compact"><div><h2>${ui("No matching notifications","لا توجد إشعارات مطابقة")}</h2><p>${ui("Try another filter or run the checks again.","جرّب فلترًا آخر أو شغّل الفحص مرة أخرى.")}</p></div></div>`;document.getElementById("notificationPagination").innerHTML=`<span>${filtered.length} ${ui("results","نتيجة")} · ${ui("page","صفحة")} ${notificationPage} / ${pages}</span><div><button class="btn icon-btn" type="button" data-notification-page="prev" ${notificationPage<=1?"disabled":""}>${i("arrow-left")}</button><button class="btn icon-btn" type="button" data-notification-page="next" ${notificationPage>=pages?"disabled":""}>${i("arrow-right")}</button></div>`;document.querySelectorAll("[data-notification-page]").forEach(button=>button.onclick=()=>{notificationPage+=button.dataset.notificationPage==="next"?1:-1;renderInbox();document.getElementById("notificationList")?.scrollIntoView({behavior:"smooth",block:"start"});});document.querySelectorAll("[data-notification-action]").forEach(button=>button.onclick=async()=>{await api(`/api/admin/notifications/${button.dataset.id}`,{method:"PATCH",body:JSON.stringify({action:button.dataset.notificationAction})});toast(ui("Notification updated","تم تحديث الإشعار"));await load();});};
+      ["notificationStatus","notificationSeverity","notificationModule"].forEach(id=>document.getElementById(id)?.addEventListener("change",()=>{notificationPage=1;renderInbox();}));
+      renderInbox();
+      document.querySelectorAll("[data-notification-rule]").forEach(form=>form.onsubmit=async event=>{event.preventDefault();const values=new FormData(form);await api(`/api/admin/notifications/rules/${form.dataset.notificationRule}`,{method:"PUT",body:JSON.stringify({is_active:values.get("is_active")==="true",severity:values.get("severity"),threshold:Number(values.get("threshold")||0),cooldown_minutes:Number(values.get("cooldown_minutes")||1440),dashboard:values.get("dashboard")==="on",email:values.get("email")==="on",recipients:values.get("recipients"),required_permission:values.get("required_permission"),audience_role_ids:values.getAll("audience_role_ids").map(Number)})});toast(ui("Rule saved","تم حفظ القاعدة"));});
+      document.getElementById("notificationSettingsForm").onsubmit=async event=>{event.preventDefault();const values=new FormData(event.currentTarget);await api("/api/admin/notifications/settings",{method:"PUT",body:JSON.stringify({enabled:values.get("notifications_enabled")==="true",scan_interval_minutes:Number(values.get("scan_interval_minutes")||5),retention_days:Number(values.get("retention_days")||365),channels:{dashboard:true,email:values.get("email_enabled")==="true"},email:{host:values.get("host"),port:Number(values.get("port")||587),secure:values.get("secure")==="on",username:values.get("username"),password:values.get("password"),from_name:values.get("from_name"),from_email:values.get("from_email"),reply_to:values.get("reply_to"),default_recipients:values.get("default_recipients")},quiet_hours:{enabled:values.get("quiet_enabled")==="on",start:values.get("quiet_start"),end:values.get("quiet_end"),timezone:"Asia/Riyadh",critical_bypass:true},digest:{daily_enabled:values.get("daily_enabled")==="on",daily_hour:Number(values.get("daily_hour")||9),weekly_enabled:values.get("weekly_enabled")==="on",weekly_day:Number(values.get("weekly_day")||1),weekly_hour:Number(values.get("weekly_hour")||9)}})});toast(ui("Notification settings saved","تم حفظ إعدادات الإشعارات"));await load();};
+      document.getElementById("sendNotificationTest").onclick=async event=>{event.currentTarget.disabled=true;try{await api("/api/admin/notifications/test-email",{method:"POST",body:JSON.stringify({recipient:document.getElementById("notificationTestRecipient").value})});toast(ui("Test email sent","تم إرسال البريد التجريبي"));}catch(error){toast(error.message,"error");}finally{event.currentTarget.disabled=false;}};
+    };
+    document.getElementById("runNotificationScan")?.addEventListener("click",async event=>{event.currentTarget.disabled=true;try{await api("/api/admin/notifications/scan",{method:"POST",body:JSON.stringify({trigger:"admin_manual"})});toast(ui("All notification checks completed","اكتمل فحص كل الإشعارات"));await load();}catch(error){toast(error.message,"error");}finally{event.currentTarget.disabled=false;}});
+    document.getElementById("markNotificationsRead").onclick=async()=>{await api("/api/admin/notifications/mark-all-read",{method:"POST",body:"{}"});toast(ui("All notifications marked as read","تم تحديد كل الإشعارات كمقروءة"));await load();};
+    await load();
+  }
+
+  async function renderDashboardIdentity(page) {
+    const saved=await api("/api/admin/dashboard-identity");
+    const draft=JSON.parse(JSON.stringify(saved));
+    let editingMode="light";
+    const colorFields=[
+      ["primary",ui("Primary action","اللون الأساسي")],["secondary",ui("Brand navy / indigo","اللون الثانوي")],
+      ["accent",ui("Accent","اللون المميز")],["canvas",ui("Page canvas","خلفية الصفحة")],
+      ["surface",ui("Main surface","سطح المحتوى")],["surface_soft",ui("Soft surface","السطح الهادئ")],
+      ["heading",ui("Headings","العناوين")],["text",ui("Body text","النص الأساسي")],
+      ["muted",ui("Muted text","النص الثانوي")],["border",ui("Borders","الحدود")]
+    ];
+    const assetFields=[
+      ["logo_horizontal",ui("Horizontal logo","الشعار الأفقي"),ui("Used in wide navigation and headers.","يستخدم في المساحات الأفقية والهيدر.")],
+      ["logo_vertical",ui("Vertical logo","الشعار الرأسي"),ui("Used on sign-in and spacious brand areas.","يستخدم في تسجيل الدخول ومساحات الهوية الكبيرة.")],
+      ["icon",ui("Brand icon","أيقونة الهوية"),ui("Used in compact navigation and small controls.","تستخدم في القائمة المصغرة والمساحات الصغيرة.")]
+    ];
+    const identityAssetPreview=(key,mode)=>key==="icon"&&mode.icon_crop
+      ? `<span class="identity-asset-crop" style="--brand-image:url('${escapeHtml(mode[key])}')"></span>`
+      : `<img src="${escapeHtml(mode[key])}" alt="" />`;
+    const previewMarkup=mode=>`<div class="identity-live" style="--preview-canvas:${mode.canvas};--preview-surface:${mode.surface};--preview-soft:${mode.surface_soft};--preview-heading:${mode.heading};--preview-text:${mode.text};--preview-muted:${mode.muted};--preview-border:${mode.border};--preview-primary:${mode.primary};--preview-secondary:${mode.secondary};--preview-accent:${mode.accent}">
+      <aside><div class="identity-preview-brand">${identityAssetPreview("icon",mode)}<strong>${escapeHtml(draft.brand_name)}</strong></div><i></i><i></i><i class="active"></i><i></i><i></i></aside>
+      <section><header><div><b>${ui("Operations overview","نظرة عامة على التشغيل")}</b><small>${ui("Sunday, 21 September","الأحد، 21 سبتمبر")}</small></div><span></span></header><main><div class="identity-preview-kpis"><article><small>${ui("Revenue","الإيرادات")}</small><b>48,260</b><em>+12.4%</em></article><article><small>${ui("Orders","الطلبات")}</small><b>186</b><em>+8.1%</em></article><article><small>${ui("Stock alerts","تنبيهات المخزون")}</small><b>14</b><em class="accent">${ui("Review","مراجعة")}</em></article></div><div class="identity-preview-chart"><div><b>${ui("Sales performance","أداء المبيعات")}</b><small>${ui("Last 7 days","آخر 7 أيام")}</small></div><svg viewBox="0 0 480 100" preserveAspectRatio="none"><path d="M0 84 C55 75 62 45 116 55 S180 80 230 42 S315 64 360 30 S430 38 480 12" fill="none" stroke="var(--preview-primary)" stroke-width="4"/></svg></div><div class="identity-preview-table"><b>${ui("Recent orders","أحدث الطلبات")}</b><span></span><span></span><span></span></div></main></section></div>`;
+    const draw=()=>{
+      const mode=draft[editingMode];
+      page.innerHTML=pageTitle("dashboardIdentity","",`<button class="btn primary" id="saveDashboardIdentity">${i("check")}${t("save")}</button>`)+`
+        <div class="identity-intro"><div><span class="section-kicker">SITEYFY SYSTEM</span><h2>${ui("A dedicated identity for the operating workspace","هوية مستقلة لمساحة تشغيل المتجر")}</h2><p>${ui("Dashboard colors and assets are isolated from storefront branding. Each theme keeps its own complete visual system.","ألوان وشعارات لوحة التحكم منفصلة عن هوية واجهة المتجر، ولكل وضع نظام بصري كامل خاص به.")}</p></div><div class="identity-theme-tabs"><button class="${editingMode==="light"?"active":""}" data-identity-mode="light">${i("sun")}${ui("Light","فاتح")}</button><button class="${editingMode==="dark"?"active":""}" data-identity-mode="dark">${i("moon")}${ui("Dark","داكن")}</button></div></div>
+        <div class="identity-workspace">
+          <form class="identity-editor" id="dashboardIdentityForm">
+            <section class="identity-section"><header><span>01</span><div><h2>${ui("Brand foundation","أساس الهوية")}</h2><p>${ui("Shared name, tagline and theme behavior.","الاسم والوصف وسلوك الوضع الافتراضي.")}</p></div></header><div class="form-grid"><div class="field"><label>${ui("Brand name","اسم الهوية")}</label><input name="brand_name" value="${escapeHtml(draft.brand_name)}" /></div><div class="field"><label>${ui("Default theme","الوضع الافتراضي")}</label><select name="default_theme"><option value="light" ${draft.default_theme==="light"?"selected":""}>${ui("Light","فاتح")}</option><option value="dark" ${draft.default_theme==="dark"?"selected":""}>${ui("Dark","داكن")}</option></select></div><div class="field"><label>${ui("English tagline","الوصف بالإنجليزية")}</label><input name="tagline_en" value="${escapeHtml(draft.tagline_en)}" /></div><div class="field"><label>${ui("Arabic tagline","الوصف بالعربية")}</label><input name="tagline_ar" value="${escapeHtml(draft.tagline_ar)}" /></div><div class="identity-switch full"><div><strong>${ui("Allow theme switch","السماح بتغيير الوضع")}</strong><small>${ui("Show the light/dark control to dashboard users.","إظهار زر التبديل بين الوضعين لمستخدمي الداشبورد.")}</small></div><input type="checkbox" name="allow_theme_switch" ${draft.allow_theme_switch!==false?"checked":""} /></div></div></section>
+            <section class="identity-section"><header><span>02</span><div><h2>${editingMode==="light"?ui("Light palette","ألوان الوضع الفاتح"):ui("Dark palette","ألوان الوضع الداكن")}</h2><p>${ui("Semantic colors keep every screen consistent.","ألوان وظيفية تحافظ على اتساق كل الشاشات.")}</p></div></header><div class="identity-colors">${colorFields.map(([key,label])=>`<label><span>${label}</span><div><input type="color" data-color-picker="${key}" value="${mode[key]}"/><input name="${key}" data-color-text="${key}" value="${mode[key]}" maxlength="7" /></div></label>`).join("")}</div></section>
+            <section class="identity-section"><header><span>03</span><div><h2>${ui("Logo system","نظام الشعارات")}</h2><p>${ui("Upload a purpose-built asset for every available space.","ارفع نسخة مناسبة لكل مساحة استخدام.")}</p></div></header><div class="identity-assets">${assetFields.map(([key,label,help])=>`<article data-identity-asset="${key}"><div class="identity-asset-preview ${key}">${identityAssetPreview(key,mode)}</div><div><strong>${label}</strong><small>${help}</small><input type="hidden" name="${key}" value="${escapeHtml(mode[key])}"/><input type="file" accept="image/png,image/jpeg,image/webp,image/avif" hidden/><div class="toolbar"><button class="btn" type="button" data-upload-identity="${key}">${i("image")}${ui("Choose file","اختيار ملف")}</button>${key==="icon"?`<label class="identity-crop-option"><input type="checkbox" name="icon_crop" ${mode.icon_crop?"checked":""}/><span>${ui("Crop mark from full logo","قص العلامة من الشعار الكامل")}</span></label>`:""}</div></div></article>`).join("")}</div></section>
+          </form>
+          <aside class="identity-preview-column"><div class="identity-preview-head"><div><span class="section-kicker">LIVE PREVIEW</span><h2>${ui("Dashboard example","مثال من لوحة التحكم")}</h2></div><button class="btn icon-btn" id="previewThemeSwap" title="${ui("Switch preview","تبديل المعاينة")}">${i(editingMode==="light"?"moon":"sun")}</button></div><div id="identityPreview">${previewMarkup(mode)}</div><p>${ui("The preview updates while you edit. Changes reach the real dashboard after saving.","تتحدث المعاينة أثناء التعديل، وتصل التغييرات للداشبورد الفعلية بعد الحفظ.")}</p></aside>
+        </div>`;
+      const form=document.getElementById("dashboardIdentityForm");
+      const syncShared=()=>{const values=new FormData(form);draft.brand_name=String(values.get("brand_name")||"");draft.tagline_en=String(values.get("tagline_en")||"");draft.tagline_ar=String(values.get("tagline_ar")||"");draft.default_theme=String(values.get("default_theme")||"light");draft.allow_theme_switch=form.elements.allow_theme_switch.checked;};
+      const refreshPreview=()=>{syncShared();document.getElementById("identityPreview").innerHTML=previewMarkup(draft[editingMode]);};
+      form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",()=>{if(input.dataset.colorPicker){form.querySelector(`[data-color-text='${input.dataset.colorPicker}']`).value=input.value.toUpperCase();draft[editingMode][input.dataset.colorPicker]=input.value.toUpperCase();}else if(input.dataset.colorText&&/^#[0-9a-f]{6}$/i.test(input.value)){draft[editingMode][input.dataset.colorText]=input.value.toUpperCase();form.querySelector(`[data-color-picker='${input.dataset.colorText}']`).value=input.value;}else if(input.name==="icon_crop")draft[editingMode].icon_crop=input.checked;refreshPreview();}));
+      document.querySelectorAll("[data-identity-mode]").forEach(button=>button.onclick=()=>{syncShared();colorFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});assetFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});draft[editingMode].icon_crop=form.elements.icon_crop.checked;editingMode=button.dataset.identityMode;draw();});
+      document.getElementById("previewThemeSwap").onclick=()=>{syncShared();editingMode=editingMode==="light"?"dark":"light";draw();};
+      document.querySelectorAll("[data-upload-identity]").forEach(button=>button.onclick=()=>button.closest("[data-identity-asset]").querySelector("input[type=file]").click());
+      document.querySelectorAll("[data-identity-asset] input[type=file]").forEach(input=>input.onchange=async()=>{if(!input.files?.[0])return;const card=input.closest("[data-identity-asset]");const key=card.dataset.identityAsset;const body=new FormData();body.append("file",input.files[0]);card.classList.add("is-uploading");try{const result=await api("/api/admin/dashboard-identity/assets",{method:"POST",body});draft[editingMode][key]=result.url;form.elements[key].value=result.url;card.querySelector(".identity-asset-preview").innerHTML=identityAssetPreview(key,draft[editingMode]);refreshPreview();toast(ui("Asset uploaded","تم رفع الملف"));}catch(error){toast(error.message,"error");}finally{card.classList.remove("is-uploading");}});
+      document.getElementById("saveDashboardIdentity").onclick=async()=>{syncShared();colorFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});assetFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});draft[editingMode].icon_crop=form.elements.icon_crop.checked;const result=await api("/api/admin/dashboard-identity",{method:"PUT",body:JSON.stringify(draft)});state.dashboardIdentity=result;if(!result.allow_theme_switch&&state.theme!==result.default_theme){state.theme=result.default_theme;localStorage.setItem(STORAGE_THEME,state.theme);}applyDashboardIdentity();toast(t("saved"));render();};
+    };
+    draw();
   }
 
   async function renderSettings(page) {
@@ -4843,32 +5571,65 @@
     `;
   }
 
-  function homeSlideCard(slide = {}, index = 0) {
-    const id = slide.id || `slide-${Date.now()}-${index}`;
-    return `<article class="builder-card" data-home-slide data-id="${escapeHtml(id)}"><div class="builder-card-head"><span class="drag-handle">${String(index + 1).padStart(2,"0")}</span><div><strong>${ui("Hero slide", "شريحة رئيسية")}</strong><small>${ui("Desktop and mobile artwork", "صور منفصلة للكمبيوتر والموبايل")}</small></div><div class="field compact-switch"><input type="hidden" name="is_active" value="${slide.is_active !== false}" />${switchButton({field:"is_active",value:slide.is_active !== false,label:false})}</div><button class="btn icon-btn danger" type="button" data-remove-slide title="${t("delete")}">${i("trash")}</button></div><div class="form-grid">${labeledField("title_en",ui("English title", "العنوان بالإنجليزية"),slide.title_en)}${labeledField("title_ar",ui("Arabic title", "العنوان بالعربية"),slide.title_ar)}${labeledField("subtitle_en",ui("English subtitle", "الوصف بالإنجليزية"),slide.subtitle_en)}${labeledField("subtitle_ar",ui("Arabic subtitle", "الوصف بالعربية"),slide.subtitle_ar)}${labeledField("cta_en",ui("English button", "الزر بالإنجليزية"),slide.cta_en)}${labeledField("cta_ar",ui("Arabic button", "الزر بالعربية"),slide.cta_ar)}${labeledField("link_url",ui("Destination", "الرابط"),slide.link_url,"text",{full:true})}</div><div class="builder-image-grid"><div><h4>${ui("Desktop artwork", "صورة الكمبيوتر")}</h4><p class="muted small">${ui("Wide artwork · shown in full", "صورة عريضة · تظهر كاملة دون قص")}</p>${imageUploadField("desktop_image_url","image",slide.desktop_image_url)}</div><div><h4>${ui("Mobile artwork", "صورة الموبايل")}</h4><p class="muted small">${ui("Independent mobile artwork · desktop fallback if empty", "صورة مستقلة للموبايل · صورة الكمبيوتر بديل عند تركها فارغة")}</p>${imageUploadField("mobile_image_url","image",slide.mobile_image_url)}</div></div></article>`;
+  function homeSlideCard(slide = {}, index = 0, isNew = false) {
+    const id=slide.id||`slide-${Date.now()}-${index}`;
+    const status=isNew?ui("Not saved yet","غير محفوظة بعد"):ui("Saved","تم الحفظ");
+    return `<article class="builder-card home-slide-card" data-home-slide data-id="${escapeHtml(id)}" data-persisted="${isNew?"false":"true"}">
+      <div class="builder-card-head"><span class="drag-handle">${String(index+1).padStart(2,"0")}</span><div><strong>${ui("Hero slide","شريحة رئيسية")}</strong><small>${ui("Desktop and mobile artwork","صور منفصلة للكمبيوتر والموبايل")}</small></div><div class="field compact-switch"><input type="hidden" name="is_active" value="${slide.is_active!==false}" />${switchButton({field:"is_active",value:slide.is_active!==false,label:false})}</div><button class="btn icon-btn danger" type="button" data-remove-slide title="${t("delete")}">${i("trash")}</button></div>
+      <div class="form-grid">${labeledField("title_en",ui("English title","العنوان بالإنجليزية"),slide.title_en)}${labeledField("title_ar",ui("Arabic title","العنوان بالعربية"),slide.title_ar)}${labeledField("subtitle_en",ui("English subtitle","الوصف بالإنجليزية"),slide.subtitle_en)}${labeledField("subtitle_ar",ui("Arabic subtitle","الوصف بالعربية"),slide.subtitle_ar)}${labeledField("cta_en",ui("English button","الزر بالإنجليزية"),slide.cta_en)}${labeledField("cta_ar",ui("Arabic button","الزر بالعربية"),slide.cta_ar)}${labeledField("link_url",ui("Destination","الرابط"),slide.link_url,"text",{full:true})}</div>
+      <div class="builder-image-grid"><div><h4>${ui("Desktop artwork","صورة الكمبيوتر")}</h4><p class="muted small">${ui("Wide artwork · shown in full","صورة عريضة · تظهر كاملة دون قص")}</p>${imageUploadField("desktop_image_url","image",slide.desktop_image_url)}</div><div><h4>${ui("Mobile artwork","صورة الموبايل")}</h4><p class="muted small">${ui("Independent mobile artwork · desktop fallback if empty","صورة مستقلة للموبايل · صورة الكمبيوتر بديل عند تركها فارغة")}</p>${imageUploadField("mobile_image_url","image",slide.mobile_image_url)}</div></div>
+      <div class="home-builder-card-footer"><span data-home-save-status>${status}</span><button class="btn primary" type="button" data-save-home-item="slide">${i("save")}${ui("Save slide","حفظ الشريحة")}</button></div>
+    </article>`;
   }
 
-  function homeSectionCard(section = {}, index = 0) {
-    const id=section.id || `section-${Date.now()}-${index}`;
-    const collections = state.rows.collections || [];
-    const collectionSource = section.source === "collection" || section.type === "collection";
-    return `<article class="builder-card compact" data-home-section data-id="${escapeHtml(id)}"><div class="builder-card-head"><span class="drag-handle">${String(index + 1).padStart(2,"0")}</span><div><strong>${ui("Homepage section", "قسم في الرئيسية")}</strong><small>${ui("Ordered content block", "بلوك محتوى مرتب")}</small></div><div class="field compact-switch"><input type="hidden" name="is_active" value="${section.is_active !== false}" />${switchButton({field:"is_active",value:section.is_active !== false,label:false})}</div><button class="btn icon-btn danger" type="button" data-remove-section title="${t("delete")}">${i("trash")}</button></div><div class="form-grid"><div class="field"><label>${ui("Section type", "نوع القسم")}</label><select name="type" data-home-section-type><option value="products" ${section.type==="products"?"selected":""}>${ui("Products", "منتجات")}</option><option value="collection" ${section.type==="collection"?"selected":""}>${ui("Collection rail", "قسم مجموعة")}</option><option value="categories" ${section.type==="categories"?"selected":""}>${ui("Categories", "تصنيفات")}</option><option value="banner" ${section.type==="banner"?"selected":""}>${ui("Promotional banner", "بانر ترويجي")}</option><option value="newsletter" ${section.type==="newsletter"?"selected":""}>${ui("Newsletter", "النشرة البريدية")}</option></select></div><div class="field"><label>${ui("Content source", "مصدر المحتوى")}</label><select name="source" data-home-section-source><option value="latest" ${section.source==="latest"?"selected":""}>${ui("Latest products", "أحدث المنتجات")}</option><option value="sale" ${section.source==="sale"?"selected":""}>${ui("Sale products", "منتجات عليها خصم")}</option><option value="categories" ${section.source==="categories"?"selected":""}>${ui("Categories", "التصنيفات")}</option><option value="collection" ${collectionSource?"selected":""}>${ui("Collection", "مجموعة")}</option><option value="manual" ${section.source==="manual"?"selected":""}>${ui("Manual", "يدوي")}</option></select></div>${labeledField("title_en",ui("English title", "العنوان بالإنجليزية"),section.title_en)}${labeledField("title_ar",ui("Arabic title", "العنوان بالعربية"),section.title_ar)}${labeledField("order",ui("Display order", "ترتيب العرض"),section.order || index+1,"number",{min:1})}<div class="home-collection-settings full" data-home-collection-settings ${collectionSource?"":"hidden"}><div class="field"><label>${ui("Collection", "المجموعة")}</label><select name="collection_id"><option value="">${ui("Choose collection", "اختر مجموعة")}</option>${collections.map(collection=>`<option value="${escapeHtml(collection.id)}" ${String(section.collection_id||section.collectionId||"")===String(collection.id)?"selected":""}>${escapeHtml(collectionName(collection))}</option>`).join("")}</select></div><div class="field"><label>${ui("Display style", "شكل العرض")}</label><select name="display_style"><option value="slider" ${(section.display_style||"slider")==="slider"?"selected":""}>${ui("Slider rail", "سلايدر أفقي")}</option><option value="grid" ${section.display_style==="grid"?"selected":""}>${ui("Product grid", "شبكة منتجات")}</option></select></div><div class="field"><label>${ui("Item limit", "عدد العناصر")}</label><input name="limit" type="number" min="1" max="48" value="${Math.max(1,Number(section.limit||8))}" /></div><div class="field home-view-all-field"><label>${ui("View all link", "رابط مشاهدة الكل")}</label><input type="hidden" name="show_view_all" value="${section.show_view_all!==false}" />${switchButton({field:"show_view_all",value:section.show_view_all!==false,label:true})}</div></div><div class="full" data-home-banner-settings ${section.type==="banner"?"":"hidden"}>${labeledField("link_url",ui("Banner destination", "رابط البانر"),section.link_url)}<div class="builder-image-grid"><div><h4>${ui("Desktop artwork", "صورة الكمبيوتر")}</h4>${imageUploadField("desktop_image_url","image",section.desktop_image_url)}</div><div><h4>${ui("Mobile artwork", "صورة الموبايل")}</h4>${imageUploadField("mobile_image_url","image",section.mobile_image_url)}</div></div></div></div></article>`;
+  function homeSectionCard(section = {}, index = 0, isNew = false) {
+    const id=section.id||`section-${Date.now()}-${index}`;
+    const collections=state.rows.collections||[];
+    const collectionSource=section.source==="collection"||section.type==="collection";
+    const status=isNew?ui("Not saved yet","غير محفوظ بعد"):ui("Saved","تم الحفظ");
+    const scrollSpeed=Math.min(36,Math.max(8,Number(section.auto_scroll_speed||18)));
+    const expanded=isNew;
+    const sectionType=section.type||"products";
+    const sectionSource=collectionSource?"collection":(section.source||"latest");
+    const typeLabels={products:ui("Products","منتجات"),collection:ui("Collection rail","قسم مجموعة"),categories:ui("Categories","تصنيفات"),banner:ui("Promotional banner","بانر ترويجي"),newsletter:ui("Newsletter","النشرة البريدية")};
+    const sourceLabels={latest:ui("Latest products","أحدث المنتجات"),sale:ui("Sale products","منتجات عليها خصم"),categories:ui("Categories","التصنيفات"),collection:ui("Collection","مجموعة"),manual:ui("Manual","يدوي")};
+    const summaryTitle=section.title_ar||section.title_en||`${ui("Homepage section","قسم في الرئيسية")} ${index+1}`;
+    return `<article class="builder-card compact home-section-card ${expanded?"is-expanded":""}" data-home-section data-id="${escapeHtml(id)}" data-persisted="${isNew?"false":"true"}">
+      <div class="home-section-summary">
+        <span class="drag-handle">${String(index+1).padStart(2,"0")}</span>
+        <div class="home-section-summary-copy"><span>${ui("Homepage section","قسم في الرئيسية")}</span><strong data-home-section-summary-title>${escapeHtml(summaryTitle)}</strong><div class="home-section-summary-meta"><em data-home-section-type-label>${escapeHtml(typeLabels[sectionType]||typeLabels.products)}</em><em data-home-section-source-label>${escapeHtml(sourceLabels[sectionSource]||sourceLabels.latest)}</em></div></div>
+        <div class="home-section-summary-status"><span>${ui("Visible","ظاهر")}</span><div class="field compact-switch"><input type="hidden" name="is_active" value="${section.is_active!==false}" />${switchButton({field:"is_active",value:section.is_active!==false,label:false})}</div></div>
+        <button class="btn home-section-edit-toggle" type="button" data-toggle-home-section aria-expanded="${expanded}">${i("edit")}<span>${ui("Edit section","تعديل القسم")}</span>${i("chevron-down")}</button>
+        <button class="btn icon-btn danger" type="button" data-remove-section title="${t("delete")}">${i("trash")}</button>
+      </div>
+      <div class="home-section-card-body" ${expanded?"":"hidden"}>
+        <div class="home-section-editor-grid">
+          <section class="home-section-panel home-section-main-panel"><div class="home-section-panel-title"><span>01</span><div><h3>${ui("Content and source","المحتوى والمصدر")}</h3><p>${ui("Choose what this block displays and how it is titled.","حدد محتوى القسم والعنوان الظاهر في الصفحة الرئيسية.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Section type","نوع القسم")}</label><select name="type" data-home-section-type><option value="products" ${section.type==="products"?"selected":""}>${ui("Products","منتجات")}</option><option value="collection" ${section.type==="collection"?"selected":""}>${ui("Collection rail","قسم مجموعة")}</option><option value="categories" ${section.type==="categories"?"selected":""}>${ui("Categories","تصنيفات")}</option><option value="banner" ${section.type==="banner"?"selected":""}>${ui("Promotional banner","بانر ترويجي")}</option><option value="newsletter" ${section.type==="newsletter"?"selected":""}>${ui("Newsletter","النشرة البريدية")}</option></select></div><div class="field"><label>${ui("Content source","مصدر المحتوى")}</label><select name="source" data-home-section-source><option value="latest" ${section.source==="latest"?"selected":""}>${ui("Latest products","أحدث المنتجات")}</option><option value="sale" ${section.source==="sale"?"selected":""}>${ui("Sale products","منتجات عليها خصم")}</option><option value="categories" ${section.source==="categories"?"selected":""}>${ui("Categories","التصنيفات")}</option><option value="collection" ${collectionSource?"selected":""}>${ui("Collection","مجموعة")}</option><option value="manual" ${section.source==="manual"?"selected":""}>${ui("Manual","يدوي")}</option></select></div>${labeledField("title_en",ui("English title","العنوان بالإنجليزية"),section.title_en)}${labeledField("title_ar",ui("Arabic title","العنوان بالعربية"),section.title_ar)}${labeledField("order",ui("Display order","ترتيب العرض"),section.order||index+1,"number",{min:1,step:"any"})}</div>
+          <div class="home-collection-settings full" data-home-collection-settings ${collectionSource?"":"hidden"}><div class="field"><label>${ui("Collection","المجموعة")}</label><select name="collection_id"><option value="">${ui("Choose collection","اختر مجموعة")}</option>${collections.map(collection=>`<option value="${escapeHtml(collection.id)}" ${String(section.collection_id||section.collectionId||"")===String(collection.id)?"selected":""}>${escapeHtml(collectionName(collection))}</option>`).join("")}</select></div><div class="field"><label>${ui("Display style","شكل العرض")}</label><select name="display_style"><option value="slider" ${(section.display_style||"slider")==="slider"?"selected":""}>${ui("Slider rail","سلايدر أفقي")}</option><option value="grid" ${section.display_style==="grid"?"selected":""}>${ui("Product grid","شبكة منتجات")}</option></select></div><div class="field"><label>${ui("Item limit","عدد العناصر")}</label><input name="limit" type="number" min="1" max="48" step="1" value="${Math.max(1,Number(section.limit||8))}" /></div><div class="field home-view-all-field"><label>${ui("View all link","رابط مشاهدة الكل")}</label><input type="hidden" name="show_view_all" value="${section.show_view_all!==false}" />${switchButton({field:"show_view_all",value:section.show_view_all!==false,label:true})}</div></div>
+          <div class="full home-banner-settings" data-home-banner-settings ${section.type==="banner"?"":"hidden"}>${labeledField("link_url",ui("Banner destination","رابط البانر"),section.link_url)}<div class="builder-image-grid"><div><h4>${ui("Desktop artwork","صورة الكمبيوتر")}</h4>${imageUploadField("desktop_image_url","image",section.desktop_image_url)}</div><div><h4>${ui("Mobile artwork","صورة الموبايل")}</h4>${imageUploadField("mobile_image_url","image",section.mobile_image_url)}</div></div></div></section>
+          <aside class="home-section-panel home-section-motion-panel"><div class="home-section-panel-title"><span>02</span><div><h3>${ui("Display behavior","سلوك العرض")}</h3><p>${ui("Control movement and customer interaction.","تحكم في الحركة وطريقة تفاعل العميل مع القسم.")}</p></div></div><div class="home-motion-settings full"><div class="setting-toggle"><div><strong>${ui("Automatic movement","الحركة التلقائية")}</strong><small>${ui("For horizontal product and category rails","للأشرطة الأفقية للمنتجات والتصنيفات")}</small></div><div class="field"><input type="hidden" name="auto_scroll" value="${section.auto_scroll!==false}" />${switchButton({field:"auto_scroll",value:section.auto_scroll!==false,label:false})}</div></div><label class="home-motion-speed"><span>${ui("Movement speed","سرعة الحركة")}</span><output data-scroll-speed-output>${scrollSpeed}</output><input name="auto_scroll_speed" type="range" min="8" max="36" step="1" value="${scrollSpeed}" /><small>${ui("Pauses while a customer hovers or focuses the rail","تتوقف عند مرور المؤشر أو التركيز على الشريط")}</small></label></div></aside>
+        </div>
+        <div class="home-builder-card-footer"><span data-home-save-status>${status}</span><button class="btn primary" type="button" data-save-home-item="section">${i("save")}${ui("Save section","حفظ القسم")}</button></div>
+      </div>
+    </article>`;
   }
 
   async function renderHomeSections(page) {
     const [data] = await Promise.all([api("/api/admin/home-builder"), loadCollections().catch(() => [])]);
-    page.innerHTML = pageTitle("homeSections", "", `<button class="btn primary" type="submit" form="homeBuilderForm">${t("save")}</button>`);
-    page.innerHTML += `<form id="homeBuilderForm" class="home-builder-workspace"><section class="builder-zone"><div class="builder-zone-head"><div><span class="section-kicker">01</span><h2>${ui("Hero slider", "السلايدر الرئيسي")}</h2><p>${ui("Build responsive campaign slides with independent mobile artwork.", "أنشئ شرائح متجاوبة بصورة مستقلة للموبايل.")}</p></div><button class="btn" type="button" id="addHomeSlide">${i("plus")}${ui("Add slide", "إضافة شريحة")}</button></div><div class="builder-list" id="homeSlides">${data.slides.length?data.slides.map(homeSlideCard).join(""):`<div class="builder-empty" data-slides-empty>${i("image")}<strong>${ui("No slides yet", "لا توجد شرائح بعد")}</strong><span>${ui("Add the first hero slide when its artwork is ready.", "أضف أول شريحة عندما تكون صورها جاهزة.")}</span></div>`}</div></section><section class="builder-zone"><div class="builder-zone-head"><div><span class="section-kicker">02</span><h2>${ui("Content sections", "أقسام المحتوى")}</h2><p>${ui("Define the sequence and source of every homepage block.", "حدد ترتيب ومصدر كل قسم في الصفحة الرئيسية.")}</p></div><button class="btn" type="button" id="addHomeSection">${i("plus")}${ui("Add section", "إضافة قسم")}</button></div><div class="builder-list two-up" id="homeSectionsList">${data.sections.map(homeSectionCard).join("")}</div></section></form>`;
-    const form=document.getElementById("homeBuilderForm");
-    const renumber=()=>{form.querySelectorAll("[data-home-slide] .drag-handle").forEach((el,index)=>el.textContent=String(index+1).padStart(2,"0"));form.querySelectorAll("[data-home-section] .drag-handle").forEach((el,index)=>el.textContent=String(index+1).padStart(2,"0"));};
-    const syncCollectionSettings = card => { const source=card.querySelector("[data-home-section-source]"); const type=card.querySelector("[data-home-section-type]"); const enabled=source?.value==="collection"||type?.value==="collection"; card.querySelector("[data-home-collection-settings]").hidden=!enabled; card.querySelector("[data-home-banner-settings]").hidden=type?.value!=="banner"; if(type&&type.value==="collection"&&source)source.value="collection"; };
-    const bind=()=>{bindImageUploadFields();form.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>updateFormSwitch(btn));form.querySelectorAll("[data-remove-slide]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-home-slide]").remove();renumber();});form.querySelectorAll("[data-remove-section]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-home-section]").remove();renumber();});form.querySelectorAll("[data-home-section]").forEach(card=>{card.querySelectorAll("[data-home-section-source],[data-home-section-type]").forEach(select=>select.onchange=()=>syncCollectionSettings(card));syncCollectionSettings(card);});};
-    document.getElementById("addHomeSlide").onclick=()=>{document.querySelector("[data-slides-empty]")?.remove();document.getElementById("homeSlides").insertAdjacentHTML("beforeend",homeSlideCard({},document.querySelectorAll("[data-home-slide]").length));bind();renumber();};
-    document.getElementById("addHomeSection").onclick=()=>{document.getElementById("homeSectionsList").insertAdjacentHTML("beforeend",homeSectionCard({},document.querySelectorAll("[data-home-section]").length));bind();renumber();};
+    page.innerHTML = pageTitle("homeSections", "");
+    page.innerHTML += `<div id="homeBuilderForm" class="home-builder-workspace"><section class="builder-zone"><div class="builder-zone-head"><div><span class="section-kicker">01</span><h2>${ui("Hero slider", "السلايدر الرئيسي")}</h2><p>${ui("Build responsive campaign slides with independent mobile artwork.", "أنشئ شرائح متجاوبة بصورة مستقلة للموبايل.")}</p></div><button class="btn" type="button" id="addHomeSlide">${i("plus")}${ui("Add slide", "إضافة شريحة")}</button></div><div class="builder-list home-slide-list" id="homeSlides">${data.slides.length?data.slides.map((slide,index)=>homeSlideCard(slide,index,false)).join(""):`<div class="builder-empty" data-slides-empty>${i("image")}<strong>${ui("No slides yet", "لا توجد شرائح بعد")}</strong><span>${ui("Add the first hero slide when its artwork is ready.", "أضف أول شريحة عندما تكون صورها جاهزة.")}</span></div>`}</div></section><section class="builder-zone"><div class="builder-zone-head"><div><span class="section-kicker">02</span><h2>${ui("Content sections", "أقسام المحتوى")}</h2><p>${ui("Define the sequence and source of every homepage block.", "حدد ترتيب ومصدر كل قسم في الصفحة الرئيسية.")}</p></div><button class="btn" type="button" id="addHomeSection">${i("plus")}${ui("Add section", "إضافة قسم")}</button></div><div class="builder-list home-section-list" id="homeSectionsList">${data.sections.map((section,index)=>homeSectionCard(section,index,false)).join("")}</div></section></div>`;
+    const root=document.getElementById("homeBuilderForm");
+    const renumber=()=>{root.querySelectorAll("[data-home-slide] .drag-handle").forEach((el,index)=>el.textContent=String(index+1).padStart(2,"0"));root.querySelectorAll("[data-home-section] .drag-handle").forEach((el,index)=>el.textContent=String(index+1).padStart(2,"0"));};
+    const markDirty=card=>{const status=card.querySelector("[data-home-save-status]");if(status){status.textContent=card.dataset.persisted==="true"?ui("Unsaved changes","تعديلات غير محفوظة"):ui("Not saved yet","غير محفوظ بعد");status.dataset.state="dirty";}};
+    const syncCollectionSettings=card=>{const source=card.querySelector("[data-home-section-source]"),type=card.querySelector("[data-home-section-type]"),enabled=source?.value==="collection"||type?.value==="collection";card.querySelector("[data-home-collection-settings]").hidden=!enabled;card.querySelector("[data-home-banner-settings]").hidden=type?.value!=="banner";if(type&&type.value==="collection"&&source)source.value="collection";};
+    const syncSectionSummary=card=>{const titleAr=card.querySelector('[name="title_ar"]')?.value.trim(),titleEn=card.querySelector('[name="title_en"]')?.value.trim(),title=card.querySelector("[data-home-section-summary-title]"),type=card.querySelector("[data-home-section-type]"),source=card.querySelector("[data-home-section-source]");if(title)title.textContent=titleAr||titleEn||ui("Untitled section","قسم بدون عنوان");const typeLabel=card.querySelector("[data-home-section-type-label]"),sourceLabel=card.querySelector("[data-home-section-source-label]");if(typeLabel)typeLabel.textContent=type?.selectedOptions?.[0]?.textContent||"";if(sourceLabel)sourceLabel.textContent=source?.selectedOptions?.[0]?.textContent||"";};
+    const saveItem=async(card,kind)=>{const button=card.querySelector(`[data-save-home-item="${kind}"]`),status=card.querySelector("[data-home-save-status]"),invalid=[...card.querySelectorAll("input,select,textarea")].find(input=>input.willValidate&&!input.checkValidity());if(invalid){invalid.reportValidity();return;}const values=namedValues(card),item={...values,id:card.dataset.id,is_active:values.is_active==="true"};if(kind==="section"){item.order=Number(values.order||1);item.limit=Number(values.limit||8);item.collection_id=values.collection_id?Number(values.collection_id):null;item.show_view_all=values.show_view_all!=="false";item.auto_scroll=values.auto_scroll!=="false";item.auto_scroll_speed=Number(values.auto_scroll_speed||18);}button.disabled=true;if(status)status.textContent=ui("Saving…","جاري الحفظ…");try{await api("/api/admin/home-builder/item",{method:"PUT",body:JSON.stringify({kind,item})});card.dataset.persisted="true";if(status){status.textContent=ui("Saved","تم الحفظ");status.dataset.state="saved";}toast(t("saved"));}catch(error){if(status){status.textContent=ui("Could not save","تعذر الحفظ");status.dataset.state="error";}toast(error.message,"error");}finally{button.disabled=false;}};
+    const removeItem=async(card,kind)=>{if(card.dataset.persisted==="true"&&!window.confirm(ui("Delete this saved homepage item?","حذف هذا العنصر المحفوظ من الصفحة الرئيسية؟")))return;try{if(card.dataset.persisted==="true")await api("/api/admin/home-builder/item",{method:"DELETE",body:JSON.stringify({kind,id:card.dataset.id})});card.remove();renumber();if(kind==="slide"&&!root.querySelector("[data-home-slide]"))document.getElementById("homeSlides").innerHTML=`<div class="builder-empty" data-slides-empty>${i("image")}<strong>${ui("No slides yet","لا توجد شرائح بعد")}</strong><span>${ui("Add the first hero slide when its artwork is ready.","أضف أول شريحة عندما تكون صورها جاهزة.")}</span></div>`;toast(t("deleted"));}catch(error){toast(error.message,"error");}};
+    const bind=()=>{bindImageUploadFields();root.querySelectorAll("[data-home-slide],[data-home-section]").forEach(card=>{if(card.dataset.dirtyBound!=="true"){card.dataset.dirtyBound="true";card.querySelectorAll("input,select,textarea").forEach(input=>{input.addEventListener("input",()=>markDirty(card));input.addEventListener("change",()=>markDirty(card));});}card.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);markDirty(card);});if(card.matches("[data-home-section]")){card.querySelectorAll("[data-home-section-source],[data-home-section-type]").forEach(select=>select.onchange=()=>{syncCollectionSettings(card);syncSectionSummary(card);markDirty(card);});card.querySelectorAll('[name="title_ar"],[name="title_en"]').forEach(input=>input.addEventListener("input",()=>syncSectionSummary(card)));const toggle=card.querySelector("[data-toggle-home-section]"),body=card.querySelector(".home-section-card-body");if(toggle&&body)toggle.onclick=()=>{const expanded=toggle.getAttribute("aria-expanded")!=="true";toggle.setAttribute("aria-expanded",String(expanded));body.hidden=!expanded;card.classList.toggle("is-expanded",expanded);};const speed=card.querySelector('[name="auto_scroll_speed"]'),output=card.querySelector("[data-scroll-speed-output]");if(speed&&output)speed.oninput=()=>{output.value=speed.value;output.textContent=speed.value;markDirty(card);};syncCollectionSettings(card);syncSectionSummary(card);}const kind=card.matches("[data-home-slide]")?"slide":"section";card.querySelector(`[data-save-home-item="${kind}"]`).onclick=()=>saveItem(card,kind);card.querySelector(`[data-remove-${kind}]`).onclick=()=>removeItem(card,kind);});};
+    document.getElementById("addHomeSlide").onclick=()=>{document.querySelector("[data-slides-empty]")?.remove();document.getElementById("homeSlides").insertAdjacentHTML("beforeend",homeSlideCard({},document.querySelectorAll("[data-home-slide]").length,true));bind();renumber();};
+    document.getElementById("addHomeSection").onclick=()=>{document.getElementById("homeSectionsList").insertAdjacentHTML("beforeend",homeSectionCard({},document.querySelectorAll("[data-home-section]").length,true));bind();renumber();};
     bind();
-    form.onsubmit=async event=>{event.preventDefault();const slides=[...form.querySelectorAll("[data-home-slide]")].map(row=>{const item=namedValues(row);return {...item,id:row.dataset.id,is_active:item.is_active==="true"};});const sections=[...form.querySelectorAll("[data-home-section]")].map((row,index)=>{const item=namedValues(row);return {...item,id:row.dataset.id,order:Number(item.order||index+1),limit:Number(item.limit||8),is_active:item.is_active==="true",show_view_all:item.show_view_all!=="false"};});await api("/api/admin/home-builder",{method:"PUT",body:JSON.stringify({slides,sections})});toast(t("saved"));renderHomeSections(page);};
   }
-
   async function renderGallery(page) {
     const data = await api("/api/admin/image-gallery");
     const images = data.images || [];
@@ -5696,5 +6457,5 @@
     if (event.key === "Escape") closeTopDialog();
   });
 
-  render();
+  loadDashboardIdentity().finally(render);
 })();

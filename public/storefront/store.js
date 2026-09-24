@@ -11,11 +11,20 @@ const state = {
   products:[],
   bundles:[],
   collections:[],
+  labels:[],
+  facets:[],
+  showAllColors:false,
   pages:[],
   cart:readLocalCart(),
   page:1,
   category:new URLSearchParams(location.search).get("category") || "",
-  maxPrice:Infinity,
+  subcategory:new URLSearchParams(location.search).get("subcategory") || "",
+  facet:new URLSearchParams(location.search).get("facet") || new URLSearchParams(location.search).get("label") || "",
+  option:new URLSearchParams(location.search).get("option") || "",
+  color:new URLSearchParams(location.search).get("color") || "",
+  collection:new URLSearchParams(location.search).get("collection") || "",
+  minPrice:Number(new URLSearchParams(location.search).get("min_price") || 0),
+  maxPrice:Number(new URLSearchParams(location.search).get("max_price")) || Infinity,
   sort:"default",
   announcementTimer:null
   ,checkoutQuote:null,checkoutQuotes:[],
@@ -214,9 +223,19 @@ function productMedia(product) {
     .filter(item => item.url && !seen.has(item.url) && seen.add(item.url));
 }
 
-function productText(value="") {
-  const documentValue = new DOMParser().parseFromString(String(value || ""), "text/html");
-  return String(documentValue.body.textContent || "").replace(/\s+/g, " ").trim();
+function productText(value = "") {
+  const html = String(value || "")
+    .replace(/\\r\\n|\\n|\\r/g, "\n")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, "\n");
+  const documentValue = new DOMParser().parseFromString(html, "text/html");
+  return String(documentValue.body.textContent || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function uniqueColors(product) {
@@ -236,9 +255,11 @@ function productCard(product, home = false) {
   const compare = comparePrice(product);
   const sale = compare > productPrice(product);
   const soldOut = !productInStock(product);
-  return `<article class="product-card" data-product-card="${product.id}">
+  const badges=(product.labels||[]).filter(label=>label.is_active!==false&&label.isActive!==false).map(label=>({text:label.nameAr||label.name_ar||label.nameEn||label.name_en||String(label),color:/^#[0-9a-f]{3,8}$/i.test(String(label.backgroundColor||""))?label.backgroundColor:"#513b82"})).filter(label=>!sale||!/^(تخفيض|sale)$/i.test(label.text)).slice(0,2);
+  return `<article class="product-card" data-product-card="${product.id}" data-card-href="/product/${product.id}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}">
     <div class="product-media ${soldOut ? "is-out-of-stock" : ""}">
       ${sale ? `<span class="sale-badge">تخفيض</span>` : ""}
+      ${badges.length?`<div class="product-card-badges ${sale?"under-sale":""}">${badges.map(label=>`<span style="--badge-bg:${esc(label.color)}">${esc(label.text)}</span>`).join("")}</div>`:""}
       ${soldOut ? `<span class="stock-badge">Out of Stock</span>` : ""}
       <button class="wish-button" type="button" aria-label="إضافة للمفضلة">${icon("heart",17)}</button>
       <a href="/product/${product.id}" aria-label="${esc(product.name_ar)}"><img src="${esc(product.main_photo_url || product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a>
@@ -298,7 +319,7 @@ function collectionItemCard(item, collection, home = false) {
   const { product, variant, link, price, compare, image, color, hex, option, value } = data;
   const soldOut = !productInStock(product) || (variant && !variantInStock(variant));
   const labels = [option && value ? `${option}: ${value}` : value].filter(Boolean);
-  return `<article class="product-card collection-product-card" data-product-card="${product.id}">
+  return `<article class="product-card collection-product-card" data-product-card="${product.id}" data-card-href="${esc(link)}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}">
     <div class="product-media ${soldOut ? "is-out-of-stock" : ""}">
       ${compare ? `<span class="sale-badge">تخفيض</span>` : ""}
       ${soldOut ? `<span class="stock-badge">Out of Stock</span>` : ""}
@@ -360,16 +381,33 @@ function headerHtml() {
   return `${announcementHtml()}<header class="store-header ${layout.sticky ? "is-sticky" : ""}"><div class="container header-main">
     <a class="header-logo" href="/"><img src="${esc(company.logo_url)}" alt="${esc(company.site_name_ar || "رداء الحشمة")}" /></a>
     <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a><a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المتجر</a><a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="/page/about-us" class="${pathname==="/page/about-us"?"active":""}">من نحن</a></nav>
-    <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<button class="round-action" aria-label="المفضلة">${icon("heart")}</button>`:""}<button class="login-button" type="button"><span>تسجيل الدخول</span>${icon("user-round",18)}</button></div>
+    <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<button class="round-action" aria-label="المفضلة">${icon("heart")}</button>`:""}<a class="login-button" href="${state.customer?"/account":"/login.html"}"><span>${state.customer?"حسابي":"تسجيل الدخول"}</span>${icon("user-round",18)}</a></div>
     <button class="round-action mobile-only" type="button" data-menu-open aria-label="القائمة">${icon("menu")}</button>
     <div class="header-actions mobile-only"><button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button><a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a></div>
   </div></header>${layout.show_category_strip!==false ? categoryStripHtml() : ""}`;
 }
 
+function repeatingScrollTrack(itemHtml, enabled) {
+  if (!enabled) return itemHtml;
+  return `<div class="auto-scroll-segment" data-scroll-segment>${itemHtml}</div><div class="auto-scroll-segment" data-scroll-segment data-scroll-clone aria-hidden="true">${itemHtml}</div><div class="auto-scroll-segment" data-scroll-segment data-scroll-clone aria-hidden="true">${itemHtml}</div>`;
+}
+
 function categoryStripHtml() {
-  const categories=state.categories.filter(category=>category.show_in_category_strip!==false);
-  if(!categories.length)return "";
-  return `<div class="category-strip"><div class="container category-strip-inner" data-drag-scroll>${categories.map(category=>`<a class="category-shortcut" href="/products?category=${encodeURIComponent(category.slug)}"><span>${esc(category.name_ar || category.name_en)}</span>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}</a>`).join("")}</div></div>`;
+  const saved=state.appearance?.layout?.header?.shortcuts;
+  const items=Array.isArray(saved)?saved.filter(item=>item.is_active!==false):state.categories.filter(category=>!category.parent_id&&category.show_in_category_strip!==false).map(category=>({type:"category",ref:category.slug,title_ar:category.name_ar,title_en:category.name_en,image_url:category.image_url}));
+  const visible=items.map(item=>{
+    const type=String(item.type||"category"),ref=String(item.ref||"");
+    const source=type==="facet"?state.facets.find(facet=>String(facet.id)===ref):state.categories.find(category=>String(category.slug)===ref||String(category.id)===ref);
+    if(type!=="all"&&(!source||source.is_active===false||source.isActive===false))return null;
+    const href=type==="all"?"/products":type==="facet"?`/products?facet=${encodeURIComponent(ref)}`:`/products?category=${encodeURIComponent(source.slug)}`;
+    return {href,title:item.title_ar||source?.name_ar||source?.nameAr||source?.name_en||source?.nameEn||"كل المنتجات",image:item.image_url||source?.image_url||""};
+  }).filter(Boolean);
+  if(!visible.length)return "";
+  const header = state.appearance?.layout?.header || {};
+  const autoScroll = header.category_strip_auto_scroll !== false;
+  const scrollSpeed = Math.max(8, Math.min(36, Number(header.category_strip_scroll_speed || 18)));
+  const shortcuts = visible.map(item=>`<a class="category-shortcut" href="${esc(item.href)}"><span>${esc(item.title)}</span>${item.image?`<img src="${esc(item.image)}" alt="" />`:""}</a>`).join("");
+  return `<div class="category-strip"><div class="container category-strip-inner" data-drag-scroll data-auto-scroll="${autoScroll}" data-scroll-speed="${scrollSpeed}">${repeatingScrollTrack(shortcuts, autoScroll)}</div></div>`;
 }
 
 function footerLinkUrl(value = "") {
@@ -445,7 +483,7 @@ function closeOverlay() {
 
 function openMenu() {
   const company=state.appearance.company||{};
-  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a><a href="/products">المتجر</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
+  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a><a href="/products">المتجر</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="${state.customer?"/account":"/login.html"}">${state.customer?"حسابي وعناويني":"تسجيل الدخول"}</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
   overlayRoot.querySelectorAll("[data-overlay-close]").forEach(button=>button.onclick=closeOverlay);
 }
 
@@ -464,6 +502,8 @@ function bindGlobal() {
   document.querySelectorAll("[data-search-open]").forEach(button=>button.onclick=openSearch);
   document.querySelectorAll("[data-card-product]").forEach(button=>button.onclick=()=>{const product=state.products.find(item=>String(item.id)===button.dataset.cardProduct);if(!product)return;const pinnedVariant=button.dataset.cardVariant?activeVariants(product).find(item=>String(item.id)===button.dataset.cardVariant):null;const purchase=pinnedVariant?{mode:variantInStock(pinnedVariant)?"direct":"sold_out",variant:pinnedVariant}:productCardPurchase(product);if(purchase.mode==="sold_out"){toast("نفدت كمية هذا المنتج");return;}if(purchase.mode==="select"){location.href=button.dataset.cardLink||`/product/${product.id}`;return;}addToCart(product,purchase.variant,1,button.dataset.cardAction!=="buy");if(button.dataset.cardAction==="buy")location.href="/cart";});
   bindDragScroll();
+  bindAutoScroll();
+  bindProductCardNavigation();
   bindScrollTop();
   hydrateIcons();
 }
@@ -476,7 +516,7 @@ function bindDragScroll() {
     let active=false,moved=false,startX=0,startScrollLeft=0,pointerId=null,suppressClickUntil=0;
     rail.addEventListener("dragstart",event=>event.preventDefault());
     rail.addEventListener("pointerdown",event=>{
-      if(event.pointerType!=="mouse"||event.button!==0||rail.scrollWidth<=rail.clientWidth+1||event.target.closest("button,input,select,textarea"))return;
+      if(event.pointerType!=="mouse"||event.button!==0||rail.scrollWidth<=rail.clientWidth+1||event.target.closest("a,button,input,select,textarea,[data-card-href],[role='button']"))return;
       active=true;moved=false;startX=event.clientX;startScrollLeft=rail.scrollLeft;pointerId=event.pointerId;
       rail.classList.add("is-drag-ready");
       rail.setPointerCapture?.(pointerId);
@@ -521,8 +561,11 @@ function breadcrumbs(current) {
   return `<div class="container breadcrumbs"><a href="/">الرئيسية</a> <b>‹</b> <span>${esc(current)}</span></div>`;
 }
 
-function homeRail(rows, id, renderer = product => productCard(product, true)) {
-  return `<div class="home-rail-shell"><button class="rail-arrow rail-prev" type="button" data-rail-target="${id}" data-rail-direction="1" aria-label="السابق">${icon("chevron-right",24)}</button><div class="home-rail" id="${id}" data-drag-scroll>${rows.map(renderer).join("")}</div><button class="rail-arrow rail-next" type="button" data-rail-target="${id}" data-rail-direction="-1" aria-label="التالي">${icon("chevron-left",24)}</button></div>`;
+function homeRail(rows, id, renderer = product => productCard(product, true), settings = {}) {
+  const autoScroll = settings.auto_scroll !== false;
+  const scrollSpeed = Math.max(8, Math.min(36, Number(settings.auto_scroll_speed || 18)));
+  const cards = rows.map(renderer).join("");
+  return `<div class="home-rail-shell"><button class="rail-arrow rail-prev" type="button" data-rail-target="${id}" data-rail-direction="1" aria-label="السابق">${icon("chevron-right",24)}</button><div class="home-rail" id="${id}" data-drag-scroll data-auto-scroll="${autoScroll}" data-scroll-speed="${scrollSpeed}">${repeatingScrollTrack(cards, autoScroll)}</div><button class="rail-arrow rail-next" type="button" data-rail-target="${id}" data-rail-direction="-1" aria-label="التالي">${icon("chevron-left",24)}</button></div>`;
 }
 
 function homeCategory(category) {
@@ -532,7 +575,7 @@ function homeCategory(category) {
 function featuredProductCard(product) {
   const compare=comparePrice(product);
   const soldOut=!productInStock(product);
-  return `<article class="featured-product-card"><a class="featured-product-image ${soldOut?"is-out-of-stock":""}" href="/product/${product.id}">${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>${productCardActions(product)}</div></article>`;
+  return `<article class="featured-product-card" data-card-href="/product/${product.id}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}"><a class="featured-product-image ${soldOut?"is-out-of-stock":""}" href="/product/${product.id}">${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>${productCardActions(product)}</div></article>`;
 }
 
 function eidShowcase(products) {
@@ -550,6 +593,82 @@ function bindHomeRails() {
   });
 }
 
+function bindAutoScroll() {
+  document.querySelectorAll('[data-auto-scroll="true"]').forEach((rail) => {
+    if (rail.dataset.autoScrollBound === "true") return;
+    rail.dataset.autoScrollBound = "true";
+    rail.querySelectorAll("[data-scroll-clone] a,[data-scroll-clone] button,[data-scroll-clone] input,[data-scroll-clone] select,[data-scroll-clone] textarea,[data-scroll-clone] [tabindex]").forEach((element) => {
+      element.tabIndex = -1;
+    });
+    let paused = false;
+    const isRtl = getComputedStyle(rail).direction === "rtl";
+    const segments = [...rail.querySelectorAll(":scope > [data-scroll-segment]")];
+    const loopSpan = segments.length > 1 ? Math.abs(segments[1].offsetLeft - segments[0].offsetLeft) : 0;
+    let direction = isRtl ? -1 : 1;
+    let position = rail.scrollLeft;
+    let lastFrame = performance.now();
+    const speed = Math.max(8, Math.min(36, Number(rail.dataset.scrollSpeed || 18)));
+    const normalizeLoop = () => {
+      if (loopSpan <= 1) return;
+      if (isRtl) {
+        while (position <= -loopSpan) position += loopSpan;
+        while (position > 0) position -= loopSpan;
+      } else {
+        while (position >= loopSpan) position -= loopSpan;
+        while (position < 0) position += loopSpan;
+      }
+    };
+    const pause = () => { paused = true; };
+    const resume = () => { paused = false; position = rail.scrollLeft; normalizeLoop(); rail.scrollLeft = position; lastFrame = performance.now(); };
+    rail.addEventListener("pointerenter", pause);
+    rail.addEventListener("pointerleave", resume);
+    rail.addEventListener("focusin", pause);
+    rail.addEventListener("focusout", (event) => { if (!rail.contains(event.relatedTarget)) resume(); });
+    rail.addEventListener("pointerdown", pause);
+    rail.addEventListener("pointerup", resume);
+    rail.addEventListener("pointercancel", resume);
+    const tick = (now) => {
+      if (!rail.isConnected) return;
+      const maxScroll = Math.max(0, rail.scrollWidth - rail.clientWidth);
+      if (!paused && maxScroll > 2) {
+        const elapsed = Math.min(64, now - lastFrame);
+        position += direction * speed * elapsed / 1000;
+        if (loopSpan > 1) {
+          normalizeLoop();
+        } else {
+          const minScroll = isRtl ? -maxScroll : 0;
+          const maxScrollValue = isRtl ? 0 : maxScroll;
+          if (position <= minScroll) { position = minScroll; direction = 1; }
+          else if (position >= maxScrollValue) { position = maxScrollValue; direction = -1; }
+        }
+        rail.scrollLeft = position;
+      } else if (paused) {
+        position = rail.scrollLeft;
+      }
+      lastFrame = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+function bindProductCardNavigation() {
+  document.querySelectorAll("[data-card-href]").forEach((card) => {
+    if (card.dataset.cardNavigationBound === "true") return;
+    card.dataset.cardNavigationBound = "true";
+    const navigate = () => { if (card.dataset.cardHref) location.href = card.dataset.cardHref; };
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("a,button,input,select,textarea,[role='button'],[contenteditable='true']")) return;
+      navigate();
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.target !== card || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      navigate();
+    });
+  });
+}
+
 function collectionSectionHtml(collection, section = {}, index = 0) {
   if (!collection) return "";
   const rows = collectionItems(collection).filter((item) => collectionItemData(item, collection));
@@ -562,7 +681,7 @@ function collectionSectionHtml(collection, section = {}, index = 0) {
   const products = visible.map((item) => collectionItemCard(item, collection, true)).join("");
   const display = section.display_style === "grid"
     ? `<div class="product-grid collection-home-grid">${products}</div>`
-    : homeRail(visible, railId, (item) => collectionItemCard(item, collection, true));
+    : homeRail(visible, railId, (item) => collectionItemCard(item, collection, true), section);
   return `<section class="section home-collection"><div class="container"><div class="section-head"><div><span class="collection-eyebrow">مجموعة مختارة</span><h2>${esc(title)}</h2></div>${section.show_view_all === false ? "" : `<a class="section-link" href="/collection/${encodeURIComponent(slug)}">مشاهدة المجموعة</a>`}</div>${display}</div></section>`;
 }
 
@@ -577,11 +696,18 @@ function renderHome() {
   const saleProducts=state.products.filter(product=>comparePrice(product)>productPrice(product)).slice(0,8);
   const categoryOrder=["شراشف صلاة","سجاد صلاة","اطقم سجاد وشراشف","الأكثر مبيعأ"];
   const categoryRank=(category)=>{const index=categoryOrder.indexOf(category.name_ar);return index<0?categoryOrder.length:index;};
-  const categoryRows=state.categories.filter(category=>category.show_on_home!==false).sort((a,b)=>categoryRank(a)-categoryRank(b));
+  const categoryRows=state.categories.filter(category=>!category.parent_id&&category.show_on_home!==false).sort((a,b)=>categoryRank(a)-categoryRank(b));
   const eidProducts=state.products.slice(0,8);
+  const sectionSettings = (key) => (state.builder?.sections || []).find((section) => {
+    const source = String(section.source || "").toLowerCase();
+    const type = String(section.type || "").toLowerCase();
+    if (key === "categories") return type === "categories" || source === "categories";
+    if (key === "offers") return source === "sale" || String(section.id || "").includes("offer");
+    return false;
+  }) || {};
   const fixed = {
-    offers:`<section class="section home-offers"><div class="container"><div class="section-head"><h2>أفضل عروض رداء الحشمة</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${homeRail(saleProducts.length?saleProducts:state.products.slice(0,8),"offersRail")}</div></section>`,
-    categories:`<section class="section home-categories"><div class="container"><div class="section-head center"><h2>تسوق التصنيفات</h2></div>${homeRail(categoryRows,"categoriesRail",homeCategory)}</div></section>`,
+    offers:`<section class="section home-offers"><div class="container"><div class="section-head"><h2>أفضل عروض رداء الحشمة</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${homeRail(saleProducts.length?saleProducts:state.products.slice(0,8),"offersRail",product=>productCard(product,true),sectionSettings("offers"))}</div></section>`,
+    categories:`<section class="section home-categories"><div class="container"><div class="section-head center"><h2>تسوق التصنيفات</h2></div>${homeRail(categoryRows,"categoriesRail",homeCategory,sectionSettings("categories"))}</div></section>`,
     latest:`<section class="section home-latest"><div class="container"><div class="section-head"><h2>عروض العيد</h2><a class="section-link" href="/products">مشاهدة الكل</a></div>${eidShowcase(eidProducts)}</div></section>`
   };
   const used = new Set();
@@ -652,22 +778,36 @@ function bindHero(count) {
   },5500);
 }
 
-function filteredProducts() {
+function categoryIncludesProduct(category, product) {
+  if(category?.category_type==="smart")return (category.product_ids||[]).map(Number).includes(Number(product.id));
+  if(category?.parent_id)return (product.subcategory_ids||[]).map(Number).includes(Number(category.id));
+  return Number(product.category_id)===Number(category?.id) || String(product.category_slug||product.category?.slug)===String(category?.slug) || (product.categories||[]).some(item=>String(item.slug)===String(category?.slug));
+}
+
+function optionMatches(variant, value=state.option) { return !value || String(variant.value||variant.option||"")===value; }
+function colorMatches(variant, value=state.color) { return !value || String(variant.color||variant.color_id||"").toLowerCase()===String(value).toLowerCase(); }
+function matchingCatalogProducts(omit="") {
   let rows=[...state.products];
+  if(omit!=="category"&&state.category){const category=state.categories.find(item=>!item.parent_id&&String(item.slug)===state.category);rows=rows.filter(product=>categoryIncludesProduct(category,product));}
+  if(omit!=="subcategory"&&state.subcategory){const subcategory=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);rows=rows.filter(product=>categoryIncludesProduct(subcategory,product));}
+  if(omit!=="facet"&&state.facet)rows=rows.filter(product=>(product.facet_ids||[]).map(String).includes(state.facet));
+  if(omit!=="collection"&&state.collection){const collection=state.collections.find(item=>String(item.slug)===state.collection);const ids=new Set(collectionItems(collection).map(item=>Number(item.product_id||item.product?.id)));rows=rows.filter(product=>ids.has(Number(product.id)));}
+  if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.filter(product=>activeVariants(product).some(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option)));
+  if(omit!=="price")rows=rows.filter(product=>{const price=productPrice(product);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
+  return rows;
+}
+function filteredProducts() {
+  const rows=matchingCatalogProducts();
   const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
-  if(state.category&&selectedCategory?.category_type==="smart"){
-    const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));
-    rows=rows.filter(product=>ranks.has(Number(product.id))).sort((a,b)=>ranks.get(Number(a.id))-ranks.get(Number(b.id)));
-  } else if(state.category) rows=rows.filter(product=>String(product.category_slug||product.category?.slug)===state.category || (product.categories||[]).some(item=>String(item.slug)===state.category));
-  if(Number.isFinite(state.maxPrice)) rows=rows.filter(product=>productPrice(product)<=state.maxPrice);
-  if(state.sort==="price-asc") rows.sort((a,b)=>productPrice(a)-productPrice(b));
-  if(state.sort==="price-desc") rows.sort((a,b)=>productPrice(b)-productPrice(a));
-  if(state.sort==="name") rows.sort((a,b)=>(a.name_ar||"").localeCompare(b.name_ar||"","ar"));
+  if(state.sort==="price-asc")rows.sort((a,b)=>productPrice(a)-productPrice(b));
+  else if(state.sort==="price-desc")rows.sort((a,b)=>productPrice(b)-productPrice(a));
+  else if(state.sort==="name")rows.sort((a,b)=>(a.name_ar||"").localeCompare(b.name_ar||"","ar"));
+  else if(selectedCategory?.category_type==="smart"){const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));rows.sort((a,b)=>(ranks.get(Number(a.id))??9999)-(ranks.get(Number(b.id))??9999));}
   return rows;
 }
 
 function renderProducts() {
-  const allPrices=state.products.map(productPrice);
+  const allPrices=state.products.flatMap(product=>[productPrice(product),...activeVariants(product).map(variant=>variantPrice(product,variant))]);
   const maxCatalog=Math.ceil(Math.max(...allPrices,100)/10)*10;
   if(!Number.isFinite(state.maxPrice))state.maxPrice=maxCatalog;
   const rows=filteredProducts();
@@ -675,9 +815,10 @@ function renderProducts() {
   const pages=Math.max(1,Math.ceil(rows.length/perPage));
   state.page=Math.min(state.page,pages);
   const visible=rows.slice((state.page-1)*perPage,state.page*perPage);
-  const visibleBundles=state.page===1&&!state.category?state.bundles:[];
-  const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
-  const pageTitle=selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
+  const visibleBundles=state.page===1&&!state.category&&!state.subcategory&&!state.facet&&!state.color&&!state.option&&!state.collection?state.bundles:[];
+  const selectedCategory=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
+  const selectedSubcategory=state.categories.find(category=>category.parent_id&&String(category.slug)===state.subcategory);
+  const pageTitle=selectedSubcategory?.name_ar||selectedSubcategory?.name_en||selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
   shell(`${breadcrumbs(pageTitle)}<section class="container"><div class="shop-head"><h1>${esc(pageTitle)}</h1>${selectedCategory?.description_ar?`<p>${esc(selectedCategory.description_ar)}</p>`:""}</div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div>${visibleBundles.length?`<div class="bundle-shop-heading"><span>وفر أكثر</span><h2>بندلز مختارة لك</h2></div>`:""}<div class="product-grid shop-grid">${visibleBundles.map(bundleCard).join("")}${visible.map(productCard).join("")}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد منتجات</h2><p>جرّبي اختيار تصنيف أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
   document.getElementById("sortProducts").value=state.sort;
   document.getElementById("sortProducts").onchange=event=>{state.sort=event.target.value;state.page=1;renderProducts();};
@@ -686,18 +827,33 @@ function renderProducts() {
 }
 
 function filterHtml(maxCatalog) {
-  const categories=state.categories.filter(category=>category.show_in_filters!==false);
-  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><section class="filter-panel"><h2 class="filter-title">تصنيفات المنتج</h2><div class="filter-list"><button class="${!state.category?"active":""}" data-category="">كل المنتجات</button>${categories.map(category=>`<button class="${state.category===category.slug?"active":""}" data-category="${esc(category.slug)}">${esc(category.name_ar)}</button>`).join("")}</div></section><section class="filter-panel"><h2 class="filter-title">الفرز بالسعر</h2><input class="price-range" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${state.maxPrice}" /><div class="price-filter-copy"><span>السعر: 0 - <b id="maxPriceCopy">${money(state.maxPrice)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
+  const countFor=(omit,predicate)=>matchingCatalogProducts(omit).filter(predicate).length;
+  const categories=state.categories.filter(category=>!category.parent_id&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("category",product=>categoryIncludesProduct(category,product))})).filter(category=>category.count||state.category===category.slug);
+  const selectedRoot=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
+  const subcategories=state.categories.filter(category=>category.parent_id&&Number(category.parent_id)===Number(selectedRoot?.id)&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("subcategory",product=>categoryIncludesProduct(category,product))})).filter(category=>category.count||state.subcategory===category.slug);
+  const facets=state.facets.filter(facet=>facet.is_active!==false&&facet.isActive!==false).map(facet=>({...facet,count:countFor("facet",product=>(product.facet_ids||[]).map(String).includes(String(facet.id)))})).filter(facet=>facet.count||state.facet===String(facet.id));
+  const colorMap=new Map();matchingCatalogProducts("color").forEach(product=>{const seen=new Set();activeVariants(product).filter(variant=>optionMatches(variant)).forEach(variant=>{const value=String(variant.color||"").trim();const key=value.toLowerCase();if(!key||seen.has(key))return;seen.add(key);const row=colorMap.get(key)||{value,hex:variant.hex_code||variant.hex||"#ddd",count:0};row.count++;colorMap.set(key,row);});});
+  if(state.color&&!colorMap.has(state.color.toLowerCase())){const variant=state.products.flatMap(activeVariants).find(item=>String(item.color||"").toLowerCase()===state.color.toLowerCase());if(variant)colorMap.set(state.color.toLowerCase(),{value:state.color,hex:variant.hex_code||variant.hex||"#ddd",count:0});}
+  const colors=[...colorMap.values()].sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value,"ar"));
+  const visibleColors=state.showAllColors?colors:colors.slice(0,12);
+  const optionMap=new Map();matchingCatalogProducts("option").forEach(product=>{const seen=new Set();activeVariants(product).filter(variant=>colorMatches(variant)).forEach(variant=>{const value=String(variant.value||variant.option||"").trim();if(!value||seen.has(value))return;seen.add(value);const row=optionMap.get(value)||{value,group:variant.option||"خيارات المنتج",count:0};row.count++;optionMap.set(value,row);});});
+  if(state.option&&!optionMap.has(state.option))optionMap.set(state.option,{value:state.option,group:"خيارات المنتج",count:0});
+  const options=[...optionMap.values()].sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value,"ar"));
+  const collections=state.collections.filter(item=>item.is_active!==false).map(item=>({...item,count:countFor("collection",product=>collectionItems(item).some(entry=>Number(entry.product_id||entry.product?.id)===Number(product.id)))})).filter(item=>item.count||state.collection===item.slug);
+  const min=Math.min(Number(state.minPrice||0),maxCatalog),max=Math.max(Number(state.maxPrice||maxCatalog),min);
+  const list=(rows,key,valueOf,nameOf)=>`<div class="filter-list">${rows.map(row=>{const value=String(valueOf(row));return `<button type="button" class="${state[key]===value?"active":""}" data-filter-key="${key}" data-filter-value="${esc(value)}" aria-pressed="${state[key]===value}"><span>${esc(nameOf(row))}</span><small>${row.count}</small></button>`}).join("")}</div>`;
+  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><div class="filter-sidebar-head"><strong>فلترة المنتجات</strong><button type="button" data-clear-filters>مسح الكل</button></div><section class="filter-panel"><h2 class="filter-title">التصنيفات</h2><div class="filter-list"><button type="button" class="${!state.category?"active":""}" data-filter-key="category" data-filter-value=""><span>كل المنتجات</span></button></div>${list(categories,"category",row=>row.slug,row=>row.name_ar||row.name_en)}</section>${subcategories.length?`<section class="filter-panel"><h2 class="filter-title">التصنيفات الفرعية</h2>${list(subcategories,"subcategory",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}${facets.length?`<section class="filter-panel"><h2 class="filter-title">الفئات</h2>${list(facets,"facet",row=>row.id,row=>row.name_ar||row.nameAr||row.name_en||row.nameEn)}</section>`:""}${colors.length?`<section class="filter-panel"><h2 class="filter-title">الألوان <small>${colors.length}</small></h2><div class="filter-color-grid" role="group" aria-label="الألوان">${visibleColors.map(color=>`<button type="button" class="filter-color-dot ${state.color===color.value?"active":""}" data-filter-key="color" data-filter-value="${esc(color.value)}" title="${esc(color.value)} · ${color.count} منتجات" aria-label="${esc(color.value)}" aria-pressed="${state.color===color.value}"><span style="background:${esc(color.hex)}"></span></button>`).join("")}</div>${colors.length>12?`<button type="button" class="filter-more" id="toggleAllColors">${state.showAllColors?"عرض أقل":`عرض كل الألوان (${colors.length})`}</button>`:""}${state.color?`<small class="filter-selected-value">${esc(state.color)}</small>`:""}</section>`:""}${options.length?`<section class="filter-panel"><h2 class="filter-title">${esc(options[0].group.replace(/^أختر\s*/, ""))}</h2>${list(options,"option",row=>row.value,row=>row.value)}</section>`:""}${collections.length?`<section class="filter-panel"><h2 class="filter-title">المجموعات</h2>${list(collections,"collection",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}<section class="filter-panel"><h2 class="filter-title">نطاق السعر</h2><div class="price-range-dual"><input class="price-range price-range-min" id="minPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${min}" aria-label="الحد الأدنى للسعر"/><input class="price-range price-range-max" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${max}" aria-label="الحد الأقصى للسعر"/></div><div class="price-filter-copy"><span><b id="minPriceCopy">${money(min)}</b> - <b id="maxPriceCopy">${money(max)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
 }
 
 function bindFilters() {
-  document.querySelectorAll("[data-category]").forEach(button=>button.onclick=()=>{state.category=button.dataset.category;state.page=1;const url=state.category?`/products?category=${encodeURIComponent(state.category)}`:"/products";history.replaceState(null,"",url);renderProducts();});
-  const range=document.getElementById("maxPrice");
-  range.oninput=()=>document.getElementById("maxPriceCopy").innerHTML=money(range.value);
-  document.getElementById("applyPrice").onclick=()=>{state.maxPrice=Number(range.value);state.page=1;renderProducts();};
-  const sidebar=document.getElementById("filterSidebar");
-  document.getElementById("mobileFilter")?.addEventListener("click",()=>{sidebar.classList.add("mobile-open");document.body.classList.add("is-locked");});
-  document.getElementById("closeFilter")?.addEventListener("click",()=>{sidebar.classList.remove("mobile-open");document.body.classList.remove("is-locked");});
+  const updateUrl=()=>{const url=new URL(location.href);[["category",state.category],["subcategory",state.subcategory],["facet",state.facet],["color",state.color],["option",state.option],["collection",state.collection],["min_price",state.minPrice||""],["max_price",Number.isFinite(state.maxPrice)&&state.maxPrice<Math.ceil(Math.max(...state.products.flatMap(product=>[productPrice(product),...activeVariants(product).map(variant=>variantPrice(product,variant))]),100)/10)*10?state.maxPrice:""]].forEach(([key,value])=>value?url.searchParams.set(key,value):url.searchParams.delete(key));url.searchParams.delete("label");history.replaceState(null,"",url.pathname+url.search);};
+  document.querySelectorAll("[data-filter-key]").forEach(button=>button.onclick=()=>{const key=button.dataset.filterKey,value=button.dataset.filterValue;state[key]=state[key]===value?"":value;if(key==="category"){const root=state.categories.find(item=>!item.parent_id&&String(item.slug)===state.category);const sub=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);if(!root||!sub||Number(sub.parent_id)!==Number(root.id))state.subcategory="";}state.page=1;updateUrl();renderProducts();});
+  document.querySelector("[data-clear-filters]")?.addEventListener("click",()=>{Object.assign(state,{category:"",subcategory:"",facet:"",color:"",option:"",collection:"",minPrice:0,maxPrice:Infinity,page:1});updateUrl();renderProducts();});
+  document.getElementById("toggleAllColors")?.addEventListener("click",()=>{state.showAllColors=!state.showAllColors;renderProducts();});
+  const min=document.getElementById("minPrice"),max=document.getElementById("maxPrice");
+  const sync=()=>{if(Number(min.value)>Number(max.value)){if(document.activeElement===min)max.value=min.value;else min.value=max.value;}document.getElementById("minPriceCopy").innerHTML=money(min.value);document.getElementById("maxPriceCopy").innerHTML=money(max.value);};
+  min.oninput=max.oninput=sync;document.getElementById("applyPrice").onclick=()=>{state.minPrice=Number(min.value);state.maxPrice=Number(max.value);state.page=1;updateUrl();renderProducts();};
+  const sidebar=document.getElementById("filterSidebar");document.getElementById("mobileFilter")?.addEventListener("click",()=>{sidebar.classList.add("mobile-open");document.body.classList.add("is-locked")});document.getElementById("closeFilter")?.addEventListener("click",()=>{sidebar.classList.remove("mobile-open");document.body.classList.remove("is-locked")});
 }
 
 function variantLabel(variant) {
@@ -959,9 +1115,9 @@ function renderProduct(product) {
     document.querySelectorAll("[data-gallery-index]").forEach((button,index)=>button.classList.toggle("is-out-of-stock",mediaIsOutOfStock(media[index])));
   };
   const thumbnail=(item,index)=>`<button class="gallery-thumb ${index===mediaIndex?"active":""} ${item.type==="video"?"is-video":""}" type="button" data-gallery-index="${index}" aria-label="${item.type==="video"?"تشغيل فيديو المنتج":`عرض صورة ${index+1}`}">${item.type==="video"?`<video src="${esc(item.url)}" muted preload="metadata" playsinline></video><span>${icon("play",17)}</span>`:`<img src="${esc(item.url)}" alt="" loading="lazy" />`}</button>`;
-  const shortDescription=productText(product.short_description_ar||product.description_ar||"");
+  const shortDescription=productText(product.short_description_ar||"");
   const fullDescription=productText(product.description_ar||product.short_description_ar||"");
-  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${media.map(thumbnail).join("")}</div><div class="gallery-main" id="productGalleryStage" aria-live="polite"><div id="galleryStageContent"></div><span class="product-stock-overlay" id="productStockOverlay" hidden>Out of Stock</span>${media.length>1?`<button class="gallery-nav gallery-prev" id="galleryPrev" type="button" aria-label="الوسائط السابقة">${icon("chevron-left")}</button><button class="gallery-nav gallery-next" id="galleryNext" type="button" aria-label="الوسائط التالية">${icon("chevron-right")}</button>`:""}<button class="zoom-hint" id="zoomProduct" type="button" aria-label="عرض بالحجم الكامل">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1><div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="tax-inclusive">السعر شامل الضريبة</p><div class="product-sales-proof" id="productSalesProof" hidden></div><div id="productPaymentWidgets" class="product-payment-widgets"></div>${shortDescription?`<p class="short-description">${esc(shortDescription)}</p>`:""}<div id="variantControls"></div><p class="variant-stock-state" id="variantStockState" role="status" hidden>${icon("circle-alert",17)}نفدت كمية هذا الاختيار</p><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div>${fullDescription?`<section class="detail-description"><h2>وصف المنتج</h2><p>${esc(fullDescription)}</p></section>`:""}<section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
+  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${media.map(thumbnail).join("")}</div><div class="gallery-main" id="productGalleryStage" aria-live="polite"><div id="galleryStageContent"></div><span class="product-stock-overlay" id="productStockOverlay" hidden>Out of Stock</span>${media.length>1?`<button class="gallery-nav gallery-prev" id="galleryPrev" type="button" aria-label="الوسائط السابقة">${icon("chevron-left")}</button><button class="gallery-nav gallery-next" id="galleryNext" type="button" aria-label="الوسائط التالية">${icon("chevron-right")}</button>`:""}<button class="zoom-hint" id="zoomProduct" type="button" aria-label="عرض بالحجم الكامل">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1>${shortDescription?`<p class="short-description">${esc(shortDescription)}</p>`:""}<div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="tax-inclusive">السعر شامل الضريبة</p><div class="product-sales-proof" id="productSalesProof" hidden></div><div id="productPaymentWidgets" class="product-payment-widgets"></div><div id="variantControls"></div><p class="variant-stock-state" id="variantStockState" role="status" hidden>${icon("circle-alert",17)}نفدت كمية هذا الاختيار</p><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div>${fullDescription?`<section class="detail-description"><h2>وصف المنتج</h2><p>${esc(fullDescription)}</p></section>`:""}<section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
 
   const openCurrentMedia=()=>{
     if(!media[mediaIndex])return;
@@ -1057,15 +1213,46 @@ function renderDynamicPage(page) {
   shell(`${breadcrumbs(title)}<article class="dynamic-page"><header class="dynamic-page-head"><div class="container"><span>${english?"Information":"معلومات المتجر"}</span><h1>${esc(title)}</h1>${description?`<p>${esc(description)}</p>`:""}</div></header><div class="container dynamic-page-layout"><nav class="dynamic-page-index" aria-label="${english?"Store pages":"صفحات المتجر"}">${state.pages.filter(row=>row.is_active!==false&&row.show_in_footer!==false).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)).map(row=>`<a href="/page/${encodeURIComponent(row.slug)}" class="${row.slug===page.slug?"active":""}">${esc((english?row.footer_title_en:row.footer_title_ar)||(english?row.title_en:row.title_ar)||row.title_ar||row.title_en)}</a>`).join("")}</nav><section class="dynamic-page-body">${dynamicPageContentHtml(content)}</section></div></article>`);
 }
 
+async function refreshCustomerProfile(){const result=await api("/api/users/profile");state.customer=result.user||result;return state.customer;}
+
+function customerAddressIcon(type){return type==="work"?"briefcase-business":type==="other"?"map-pinned":"house";}
+
+function accountAddressCard(address){
+  return `<article class="account-address-card ${address.is_default?"is-default":""}"><header><span>${icon(customerAddressIcon(address.type),20)}</span><div><h3>${esc(address.label||"العنوان")}</h3><small>${address.is_default?"العنوان الافتراضي":address.type==="work"?"العمل":address.type==="home"?"المنزل":"عنوان محفوظ"}</small></div>${address.is_default?`<b>افتراضي</b>`:""}</header><p>${esc(addressSummary(address))}</p><dl><div><dt>الرمز المختصر</dt><dd><bdi>${esc(address.short_address||"-")}</bdi></dd></div><div><dt>المستلم</dt><dd>${esc(address.full_name||[address.first_name,address.last_name].filter(Boolean).join(" "))}</dd></div><div><dt>الجوال</dt><dd><bdi>${esc(address.phone||"")}</bdi></dd></div></dl><footer>${address.is_default?"":`<button type="button" data-address-default="${address.id}">${icon("check",15)}تعيين كافتراضي</button>`}<button type="button" data-address-edit="${address.id}">${icon("pencil",15)}تعديل</button><button class="danger" type="button" data-address-delete="${address.id}">${icon("trash-2",15)}حذف</button></footer></article>`;
+}
+
+function accountAddressForm(address={}){
+  const countries=state.market?.countries||[],countryCode=address.country_code||state.market?.settings?.default_country_code||"SA";
+  return `<form class="account-address-dialog" id="accountAddressForm"><header><div><span>دفتر العناوين</span><h2>${address.id?"تعديل العنوان":"إضافة عنوان جديد"}</h2></div><button type="button" class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></header><div class="account-address-dialog-body"><section class="address-kind-picker"><label><input type="radio" name="type" value="home" ${!address.type||address.type==="home"?"checked":""}/><span>${icon("house",18)}المنزل</span></label><label><input type="radio" name="type" value="work" ${address.type==="work"?"checked":""}/><span>${icon("briefcase-business",18)}العمل</span></label><label><input type="radio" name="type" value="other" ${address.type==="other"?"checked":""}/><span>${icon("map-pinned",18)}آخر</span></label></section><div class="account-address-grid"><label>اسم العنوان<input name="label" value="${esc(address.label||"")}" maxlength="60" placeholder="مثال: المنزل الرئيسي" required /></label><label>الدولة<select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===countryCode?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label><label>الاسم الأول<input name="first_name" value="${esc(address.first_name||state.customer?.name?.split(/\s+/)[0]||"")}" required /></label><label>اسم العائلة<input name="last_name" value="${esc(address.last_name||state.customer?.name?.split(/\s+/).slice(1).join(" ")||"")}" required /></label><label>رقم الجوال<input name="phone" value="${esc(address.phone||state.customer?.phone||"")}" required /></label><label>الرمز الوطني المختصر<div class="account-short-address"><input name="short_address" value="${esc(address.short_address||"")}" maxlength="9" required /><button type="button" id="resolveAccountAddress">${icon("map-pin-check",17)}تحقق</button></div></label><label>المنطقة<input name="province" value="${esc(address.province||"")}" required /></label><label>المدينة<input name="city" value="${esc(address.city||"")}" required /></label><label>الحي<input name="district" value="${esc(address.district||"")}" required /></label><label>الشارع<input name="street" value="${esc(address.street||"")}" required /></label><label>رقم المبنى<input name="building_number" value="${esc(address.building_number||"")}" required /></label><label>الرمز البريدي<input name="postal_code" value="${esc(address.postal_code||"")}" required /></label><label>الرقم الإضافي<input name="additional_number" value="${esc(address.additional_number||"")}" /></label><label class="full">ملاحظات العنوان<textarea name="address_notes">${esc(address.address_notes||"")}</textarea></label><input name="latitude" type="hidden" value="${esc(address.latitude??"")}"/><input name="longitude" type="hidden" value="${esc(address.longitude??"")}"/></div><p class="account-address-message" id="accountAddressMessage"></p></div><footer><button type="button" class="secondary-button" data-overlay-close>إلغاء</button><button type="submit" class="primary-button">${icon("check",17)}حفظ العنوان</button></footer></form>`;
+}
+
+function openAccountAddressEditor(address={}){
+  openOverlay(accountAddressForm(address));const form=document.getElementById("accountAddressForm"),message=document.getElementById("accountAddressMessage");
+  document.getElementById("resolveAccountAddress")?.addEventListener("click",async event=>{const button=event.currentTarget,code=String(form.elements.short_address.value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");if(!/^[A-Z]{4}[0-9]{4}$/.test(code)){message.textContent="أدخل 4 أحرف ثم 4 أرقام.";return;}button.disabled=true;message.textContent="جاري التحقق من العنوان...";try{const result=await api("/api/store/address/sa/resolve",{method:"POST",body:JSON.stringify({short_address:code})});Object.entries(result.address||{}).forEach(([name,value])=>{if(form.elements[name]&&value!==null)form.elements[name].value=value;});form.elements.short_address.value=code;message.textContent="تم التحقق وملء بيانات العنوان.";}catch(error){message.textContent=error.message;}finally{button.disabled=false;}});
+  form.onsubmit=async event=>{event.preventDefault();if(!form.reportValidity())return;const button=form.querySelector('[type="submit"]');button.disabled=true;message.textContent="جاري حفظ العنوان...";const body=Object.fromEntries(new FormData(form));try{await api(address.id?`/api/users/addresses/${address.id}`:"/api/users/addresses",{method:address.id?"PATCH":"POST",body:JSON.stringify(body)});await refreshCustomerProfile();closeOverlay();renderAccount();toast("تم حفظ العنوان");}catch(error){message.textContent=error.message;button.disabled=false;}};
+}
+
+async function renderAccount(){
+  if(!state.customer){location.href="/login.html";return;}
+  const customer=state.customer,addresses=customer.addresses||[],ordersPayload=await api("/api/orders/my-orders").catch(()=>({orders:[]})),orders=ordersPayload.orders||[];
+  shell(`${breadcrumbs("حسابي")}<section class="container account-page"><header class="account-hero"><div><span>حساب العميل</span><h1>مرحبًا، ${esc(customer.name||customer.full_name||"")}</h1><p>تحكمي في بياناتك وعناوين التوصيل من مكان واحد.</p></div><a class="secondary-button" href="/products">متابعة التسوق</a></header><div class="account-layout"><aside class="account-nav"><a href="#profileSection">البيانات الشخصية</a><a href="#addressesSection">عناويني <b>${addresses.length}</b></a><a href="#ordersSection">طلباتي <b>${orders.length}</b></a></aside><div class="account-content"><section class="account-panel" id="profileSection"><header><div><span>الملف الشخصي</span><h2>بيانات الحساب</h2></div></header><form class="account-profile-form" id="accountProfileForm"><label>الاسم الكامل<input name="name" value="${esc(customer.name||customer.full_name||"")}" required /></label><label>البريد الإلكتروني<input name="email" type="email" value="${esc(customer.email||"")}" required /></label><label>رقم الجوال<input name="phone" type="tel" value="${esc(customer.phone||"")}" /></label><button class="primary-button" type="submit">${icon("save",17)}حفظ البيانات</button></form></section><section class="account-panel" id="addressesSection"><header><div><span>دفتر العناوين</span><h2>عناوين التوصيل</h2><p>اختاري عنوانًا افتراضيًا ليظهر تلقائيًا عند إتمام الطلب.</p></div><button class="primary-button" type="button" id="addAccountAddress">${icon("plus",17)}إضافة عنوان</button></header><div class="account-address-list">${addresses.length?addresses.map(accountAddressCard).join(""):`<div class="account-empty"><span>${icon("map-pin",28)}</span><h3>لا توجد عناوين محفوظة</h3><p>أضيفي عنوان المنزل أو العمل لتسريع إتمام الطلب.</p></div>`}</div></section><section class="account-panel" id="ordersSection"><header><div><span>سجل الطلبات</span><h2>طلباتي</h2></div></header><div class="account-orders">${orders.length?orders.slice(0,12).map(order=>`<article><div><strong>طلب #${esc(order.id)}</strong><span>${esc(order.status||"pending")}</span></div><p>${esc(addressSummary(order.shipping_address||order.customer||{}))}</p><b>${money(order.total||0)}</b></article>`).join(""):`<div class="account-empty"><h3>لا توجد طلبات حتى الآن</h3></div>`}</div></section></div></div></section>`);
+  document.getElementById("addAccountAddress").onclick=()=>openAccountAddressEditor();
+  document.querySelectorAll("[data-address-edit]").forEach(button=>button.onclick=()=>openAccountAddressEditor(addresses.find(row=>String(row.id)===button.dataset.addressEdit)||{}));
+  document.querySelectorAll("[data-address-default]").forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api(`/api/users/addresses/${button.dataset.addressDefault}/default`,{method:"PATCH",body:"{}"});await refreshCustomerProfile();renderAccount();toast("تم تغيير العنوان الافتراضي");}catch(error){toast(error.message);button.disabled=false;}});
+  document.querySelectorAll("[data-address-delete]").forEach(button=>button.onclick=async()=>{if(!confirm("هل تريد حذف هذا العنوان؟"))return;button.disabled=true;try{await api(`/api/users/addresses/${button.dataset.addressDelete}`,{method:"DELETE"});await refreshCustomerProfile();renderAccount();toast("تم حذف العنوان");}catch(error){toast(error.message);button.disabled=false;}});
+  document.getElementById("accountProfileForm").onsubmit=async event=>{event.preventDefault();const button=event.currentTarget.querySelector("button");button.disabled=true;try{const body=Object.fromEntries(new FormData(event.currentTarget));const result=await api("/api/users/profile",{method:"PATCH",body:JSON.stringify(body)});state.customer=result.user;renderAccount();toast("تم حفظ بيانات الحساب");}catch(error){toast(error.message);button.disabled=false;}};
+}
+
 function renderStoreRoute() {
   const path=location.pathname.replace(/\/$/,"")||"/";
   trackCommerceEventOnce(`page_view:${location.pathname}${location.search}`,"page_view",[],{value:0});
   if(path==="/")renderHome();
   else if(path==="/products"||path==="/shop")renderProducts();
-  else if(path.startsWith("/product/")){const id=decodeURIComponent(path.split("/").pop());const product=state.products.find(item=>String(item.id)===id||item.slug===id);product?renderProduct(product):renderNotFound();}
+  else if(path.startsWith("/product/")){const id=decodeURIComponent(path.split("/").pop());const product=state.products.find(item=>String(item.id)===id||item.slug===id);const migratedBundle=state.bundles.find(item=>String(item.legacy_product_id||"")===id||String(item.legacy_product_slug||"")===id);if(product)renderProduct(product);else if(migratedBundle)location.replace(`/bundle/${encodeURIComponent(migratedBundle.slug||migratedBundle.id)}`);else renderNotFound();}
   else if(path.startsWith("/collection/")){const slug=decodeURIComponent(path.split("/").pop());const collection=state.collections.find(item=>String(item.id)===slug||item.slug===slug);collection?renderCollection(collection):renderNotFound();}
   else if(path.startsWith("/bundle/")){const id=decodeURIComponent(path.split("/").pop());const bundle=state.bundles.find(item=>String(item.id)===id||item.slug===id);bundle?renderBundle(bundle):renderNotFound();}
   else if(path.startsWith("/page/")){const slug=decodeURIComponent(path.split("/").pop());const page=state.pages.find(item=>item.slug===slug&&item.is_active!==false);page?renderDynamicPage(page):renderNotFound();}
+  else if(path==="/account")renderAccount();
   else if(path==="/cart")renderCart(false);
   else if(path==="/checkout")renderCart(true);
   else if(path.startsWith("/payment/tamara/"))renderTamaraReturn(path.split("/").pop());
@@ -1076,21 +1263,32 @@ function renderStoreRoute() {
 
 function renderBundle(bundle) {
   let quantity=1;
-  const compare=Number(bundle.compare_at_price||bundle.regular_total||0);
-  shell(`${breadcrumbs(bundle.name_ar||"بندل المنتجات")}<section class="container product-page bundle-page"><div class="product-detail"><div class="bundle-main-visual">${bundleVisual(bundle)}</div><div class="product-summary"><div class="product-meta">بندل خاص · ${Number(bundle.item_count||bundle.items?.length||0)} قطع</div><h1>${esc(bundle.name_ar||bundle.name_en)}</h1><div class="price detail-price">${compare>Number(bundle.price)?`<del>${money(compare)}</del>`:""}<strong>${money(bundle.price)}</strong></div>${bundle.savings?`<div class="bundle-saving">وفّري ${money(bundle.savings)} عند شراء المجموعة</div>`:""}<p class="short-description">${esc(bundle.description_ar||"")}</p><div class="purchase-row"><div class="quantity-control"><button id="bundleQtyPlus">+</button><strong id="bundleQtyValue">1</strong><button id="bundleQtyMinus">−</button></div><button class="primary-button" id="addBundle">${icon("shopping-cart")}إضافة البندل للسلة</button></div><button class="secondary-button buy-now" id="buyBundleNow">اشتري الآن</button></div></div><section class="bundle-includes"><div class="section-head center"><h2>البندل يحتوي على</h2></div><div class="bundle-items-row">${(bundle.items||[]).map((item,index)=>`${index?`<span class="bundle-item-plus">+</span>`:""}<a class="bundle-item-card" href="/product/${item.product_id}"><img src="${esc(item.image_url)}" alt="${esc(item.name_ar)}" /><div><span>${item.quantity>1?`${item.quantity} × `:""}منتج #${item.product_id}</span><strong>${esc(item.name_ar||item.name_en)}</strong><small>${money(item.unit_price)}</small></div></a>`).join("")}</div></section>${bundle.description_ar?`<section class="detail-description"><h2>وصف البندل</h2><p>${esc(bundle.description_ar)}</p></section>`:""}</section>`);
-  const update=()=>document.getElementById("bundleQtyValue").textContent=quantity;
-  document.getElementById("bundleQtyPlus").onclick=()=>{quantity+=1;update();};
-  document.getElementById("bundleQtyMinus").onclick=()=>{quantity=Math.max(1,quantity-1);update();};
-  document.getElementById("addBundle").onclick=()=>addBundleToCart(bundle,quantity);
-  document.getElementById("buyBundleNow").onclick=()=>{addBundleToCart(bundle,quantity,false);location.href="/cart";};
-  hydrateIcons();
+  const options=(bundle.variants||bundle.bundle_variants||[]).filter(option=>option.is_active!==false);
+  let selected=options.find(option=>String(option.id)===String(bundle.default_variant_id))||options[0]||null;
+  const current=()=>selected||bundle;
+  const draw=()=>{
+    const active=current(),items=active.items||bundle.items||[],compare=Number(active.compare_at_price||active.regular_total||bundle.compare_at_price||bundle.regular_total||0),price=Number(active.price??bundle.price??0),saving=Math.max(0,Number(active.savings??active.regular_total-price));
+    shell(`${breadcrumbs(bundle.name_ar||"بندل المنتجات")}<section class="container product-page bundle-page"><div class="product-detail"><div class="bundle-main-visual">${active.image_url?`<img src="${esc(active.image_url)}" alt="${esc(active.label_ar||active.label_en||bundle.name_ar||"")}"/>`:bundleVisual({...bundle,items})}</div><div class="product-summary"><div class="product-meta">بندل خاص · ${Number(active.item_count||items.length||0)} قطع</div><h1>${esc(bundle.name_ar||bundle.name_en)}</h1>${options.length?`<div class="bundle-option-picker"><span>اختاري البندل</span><div>${options.map(option=>{const soldOut=Number(option.available_stock)===0;return `<button type="button" data-bundle-option="${esc(option.id)}" class="${String(option.id)===String(selected?.id)?"active":""} ${soldOut?"is-out-of-stock":""}" ${soldOut?"disabled":""}>${option.hex_code?`<i style="--bundle-color:${esc(option.hex_code)}"></i>`:""}<b>${esc(option.label_ar||option.label_en||option.color||"خيار")}</b><small>${soldOut?"نفد":money(option.price)}</small></button>`;}).join("")}</div></div>`:""}<div class="price detail-price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div>${saving?`<div class="bundle-saving">وفّري ${money(saving)} عند شراء المجموعة</div>`:""}<p class="short-description">${esc(bundle.description_ar||"")}</p><div class="purchase-row"><div class="quantity-control"><button id="bundleQtyPlus">+</button><strong id="bundleQtyValue">${quantity}</strong><button id="bundleQtyMinus">−</button></div><button class="primary-button" id="addBundle" ${active.available_stock===0?"disabled":""}>${icon("shopping-cart")}${active.available_stock===0?"نفد هذا الاختيار":"إضافة البندل للسلة"}</button></div><button class="secondary-button buy-now" id="buyBundleNow" ${active.available_stock===0?"disabled":""}>اشتري الآن</button></div></div><section class="bundle-includes"><div class="section-head center"><h2>البندل يحتوي على</h2></div><div class="bundle-items-row">${items.map((item,index)=>`${index?`<span class="bundle-item-plus">+</span>`:""}<a class="bundle-item-card" href="/product/${item.product_id}"><img src="${esc(item.image_url)}" alt="${esc(item.name_ar)}" /><div><span>${item.quantity>1?`${item.quantity} × `:""}منتج #${item.product_id}</span><strong>${esc(item.name_ar||item.name_en)}</strong>${item.variant_label?`<em>${esc(item.variant_label)}</em>`:""}<small>${money(item.unit_price)}</small></div></a>`).join("")}</div></section>${bundle.description_ar?`<section class="detail-description"><h2>وصف البندل</h2><p>${esc(bundle.description_ar)}</p></section>`:""}</section>`);
+    document.querySelectorAll("[data-bundle-option]").forEach(button=>button.onclick=()=>{selected=options.find(option=>String(option.id)===button.dataset.bundleOption)||selected;quantity=1;draw();});
+    const update=()=>document.getElementById("bundleQtyValue").textContent=quantity;
+    document.getElementById("bundleQtyPlus").onclick=()=>{const max=current().available_stock;quantity=max===null||max===undefined?quantity+1:Math.min(Number(max),quantity+1);update();};
+    document.getElementById("bundleQtyMinus").onclick=()=>{quantity=Math.max(1,quantity-1);update();};
+    document.getElementById("addBundle").onclick=()=>addBundleToCart(bundle,selected,quantity);
+    document.getElementById("buyBundleNow").onclick=()=>{if(addBundleToCart(bundle,selected,quantity,false)!==false)location.href="/cart";};
+    hydrateIcons();
+  };
+  draw();
 }
 
-function addBundleToCart(bundle, quantity=1, notify=true) {
-  const key=`bundle:${bundle.id}`;
-  const item={key,item_type:"bundle",bundle_id:bundle.id,product_id:0,name_ar:bundle.name_ar,name_en:bundle.name_en,image_url:bundle.main_photo_url||bundle.items?.[0]?.image_url||"",bundle_main_photo_url:bundle.main_photo_url||"",variant_label:`${bundle.item_count||bundle.items?.length||0} منتجات`,price:Number(bundle.price||0),quantity:Number(quantity||1),bundle_items:bundle.items||[]};
+function addBundleToCart(bundle, option=null, quantity=1, notify=true) {
+  const selected=option||bundle, optionId=option?.id||null;
+  const available=selected.available_stock;
+  if(available!==null&&available!==undefined&&Number(quantity||1)>Number(available)){toast("نفدت كمية هذا الاختيار");return false;}
+  const key=`bundle:${bundle.id}:${optionId||"default"}`;
+  const item={key,item_type:"bundle",bundle_id:bundle.id,bundle_variant_id:optionId,variant_id:optionId,product_id:0,name_ar:bundle.name_ar,name_en:bundle.name_en,image_url:option?.image_url||bundle.main_photo_url||selected.items?.[0]?.image_url||"",bundle_main_photo_url:bundle.main_photo_url||"",variant_label:option?(option.label_ar||option.label_en||option.color||""):`${bundle.item_count||bundle.items?.length||0} منتجات`,price:Number(selected.price??bundle.price??0),quantity:Number(quantity||1),bundle_items:selected.items||bundle.items||[]};
   const existing=state.cart.find(entry=>entry.key===key);if(existing)existing.quantity+=item.quantity;else state.cart.push(item);
   saveLocalCart();api("/api/cart",{method:"POST",body:JSON.stringify(item)}).catch(()=>{});trackCommerceEvent("add_to_cart",[item],{value:item.price*item.quantity});if(notify)toast("تمت إضافة البندل إلى السلة");
+  return true;
 }
 
 async function addToCart(product, variant, quantity = 1, notify = true) {
@@ -1282,10 +1480,17 @@ function cartItemHtml(item,index) {
 }
 
 function checkoutCustomerDefaults(defaultCountry) {
-  const customer=state.customer||{};const parts=String(customer.full_name||customer.name||"").trim().split(/\s+/).filter(Boolean);
-  const first_name=customer.first_name||parts.shift()||"",last_name=customer.last_name||parts.join(" ")||"";
-  let phone=String(customer.phone||"").replace(/\D/g,"");if((customer.country_code||defaultCountry)==="SA")phone=phone.replace(/^966/,"").replace(/^0(?=5\d{8}$)/,"");
-  return {...customer,first_name,last_name,phone};
+  const customer=state.customer||{};const saved=(customer.addresses||[]).find(address=>address.is_default)||(customer.addresses||[])[0]||{};const source={...customer,...saved};const parts=String(source.full_name||source.name||customer.full_name||customer.name||"").trim().split(/\s+/).filter(Boolean);
+  const first_name=source.first_name||parts.shift()||"",last_name=source.last_name||parts.join(" ")||"";
+  let phone=String(source.phone||"").replace(/\D/g,"");if((source.country_code||defaultCountry)==="SA")phone=phone.replace(/^966/,"").replace(/^0(?=5\d{8}$)/,"");
+  return {...source,first_name,last_name,phone};
+}
+
+function addressSummary(address={}){return [address.city,address.district,address.street,address.building_number?`مبنى ${address.building_number}`:""].filter(Boolean).join("، ");}
+
+function checkoutAddressBookMarkup(){
+  const addresses=state.customer?.addresses||[];if(!state.customer)return "";
+  return `<section class="checkout-address-book full"><header><div><span>عنوان التوصيل</span><h2>اختاري عنوانًا محفوظًا</h2></div><a href="/account">إدارة العناوين</a></header><div class="checkout-address-options" id="checkoutAddressOptions">${addresses.map((address,index)=>`<label class="checkout-address-option"><input type="radio" name="address_id" value="${esc(address.id)}" ${address.is_default||(!addresses.some(row=>row.is_default)&&index===0)?"checked":""}/><span class="checkout-address-check">${icon(address.type==="work"?"briefcase-business":"house",18)}</span><span><strong>${esc(address.label||address.type||"العنوان")}${address.is_default?`<small>افتراضي</small>`:""}</strong><b>${esc(addressSummary(address))}</b><em>${esc(address.short_address||"")}</em></span></label>`).join("")}<label class="checkout-address-option is-new"><input type="radio" name="address_id" value="" ${addresses.length?"":"checked"}/><span class="checkout-address-check">${icon("plus",18)}</span><span><strong>عنوان جديد</strong><b>إضافة عنوان توصيل آخر</b></span></label></div></section>`;
 }
 
 function checkoutFormMarkup(countries, defaultCountry) {
@@ -1305,30 +1510,37 @@ function checkoutFormMarkup(countries, defaultCountry) {
     if(method.id==="edfapay")content=`<span class="checkout-payment-copy"><strong>${esc(method.title_ar||"ادفع باي")}</strong><small>ادفعي عن طريق البطاقة البنكية أو الائتمانية</small></span><span class="checkout-card-brands" aria-label="مدى وفيزا وماستركارد وApple Pay">${cardBrands}</span>`;
     return `<label class="checkout-payment-choice is-${esc(method.id)}"><input type="radio" name="payment_method" value="${esc(method.id)}" ${index===0?"checked":""} required /><span class="checkout-payment-indicator"></span><span class="checkout-payment-frame">${content}</span></label>`;
   }).join("");
-  return `<form class="checkout-form" id="checkoutForm">
+  const savedAddresses=state.customer?.addresses||[];
+  return `<form class="checkout-form ${savedAddresses.length?"has-saved-address":""}" id="checkoutForm">
+    ${checkoutAddressBookMarkup()}
+    <div class="checkout-address-editor full ${savedAddresses.length?"is-collapsed":""}" id="checkoutAddressEditor">
+    <header class="checkout-address-editor-head"><div><span>${savedAddresses.length?"تعديل بيانات التوصيل":"بيانات التوصيل"}</span><strong id="checkoutAddressEditorTitle">${savedAddresses.length?"العنوان المختار":"أضيفي عنوان التوصيل"}</strong></div>${savedAddresses.length?`<button type="button" id="toggleCheckoutAddressEditor">تعديل العنوان</button>`:""}</header>
+    <div class="checkout-address-fields">
     <label><span class="checkout-label-text">الاسم الأول<i>*</i></span><input name="first_name" autocomplete="given-name" value="${esc(defaults.first_name||"")}" required /></label>
     <label><span class="checkout-label-text">اسم العائلة<i>*</i></span><input name="last_name" autocomplete="family-name" value="${esc(defaults.last_name||"")}" required /></label>
     <label><span class="checkout-label-text">رقم الجوال<i>*</i></span><div class="checkout-phone-control" id="checkoutPhoneControl"><span id="checkoutPhonePrefix">+966</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="5XXXXXXXX" value="${esc(defaults.phone||"")}" required /></div><small class="checkout-field-hint" id="checkoutPhoneHint">9 أرقام بعد +966</small></label>
     <label>البريد الإلكتروني<input name="email" type="email" autocomplete="email" value="${esc(defaults.email||"")}" /></label>
-    <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===defaultCountry?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
+    <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===(defaults.country_code||defaultCountry)?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     ${splEnabled?`<section class="national-address-card full" id="saudiAddressPanel">
       <div class="national-address-head"><div><span>العنوان الوطني السعودي <i class="checkout-required-star">*</i></span><strong>اكتبي الرمز المختصر لملء العنوان تلقائيًا</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للتحقق</span></div>
-      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="AAAA 0000" aria-label="العنوان الوطني المختصر" required /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
+      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="AAAA 0000" aria-label="العنوان الوطني المختصر" value="${esc(defaults.short_address||"")}" required /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
       <p id="nationalAddressMessage">يتكون الرمز من 4 أحرف و4 أرقام.</p>
       <input name="address_verification_token" type="hidden" />
-      <input name="latitude" type="hidden" />
-      <input name="longitude" type="hidden" />
-    </section>`:`<label><span class="checkout-label-text">الرمز الوطني المختصر<i>*</i></span><input name="short_address" maxlength="9" autocomplete="off" placeholder="AAAA 0000" style="direction:ltr;text-transform:uppercase" required /></label>`}
-    <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" required data-address-field /></label>
-    <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" required data-address-field /></label>
-    <label><span class="checkout-label-text">الحي<i>*</i></span><input name="district" autocomplete="address-level3" required data-address-field /></label>
-    <label><span class="checkout-label-text">الشارع<i>*</i></span><input name="street" autocomplete="street-address" required data-address-field /></label>
-    <label><span class="checkout-label-text">رقم المبنى<i>*</i></span><input name="building_number" inputmode="numeric" required data-address-field /></label>
-    <label><span class="checkout-label-text">الرمز البريدي<i>*</i></span><input name="postal_code" inputmode="numeric" autocomplete="postal-code" required data-address-field /></label>
-    <label>الرقم الإضافي للعنوان<input name="additional_number" inputmode="numeric" data-address-field /></label>
+      <input name="latitude" type="hidden" value="${esc(defaults.latitude??"")}" />
+      <input name="longitude" type="hidden" value="${esc(defaults.longitude??"")}" />
+    </section>`:`<label><span class="checkout-label-text">الرمز الوطني المختصر<i>*</i></span><input name="short_address" maxlength="9" autocomplete="off" placeholder="AAAA 0000" style="direction:ltr;text-transform:uppercase" value="${esc(defaults.short_address||"")}" required /></label>`}
+    <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" value="${esc(defaults.province||"")}" required data-address-field /></label>
+    <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" value="${esc(defaults.city||"")}" required data-address-field /></label>
+    <label><span class="checkout-label-text">الحي<i>*</i></span><input name="district" autocomplete="address-level3" value="${esc(defaults.district||"")}" required data-address-field /></label>
+    <label><span class="checkout-label-text">الشارع<i>*</i></span><input name="street" autocomplete="street-address" value="${esc(defaults.street||"")}" required data-address-field /></label>
+    <label><span class="checkout-label-text">رقم المبنى<i>*</i></span><input name="building_number" inputmode="numeric" value="${esc(defaults.building_number||"")}" required data-address-field /></label>
+    <label><span class="checkout-label-text">الرمز البريدي<i>*</i></span><input name="postal_code" inputmode="numeric" autocomplete="postal-code" value="${esc(defaults.postal_code||"")}" required data-address-field /></label>
+    <label>الرقم الإضافي للعنوان<input name="additional_number" inputmode="numeric" value="${esc(defaults.additional_number||"")}" data-address-field /></label>
+    <label class="full checkout-save-address" ${state.customer?"":"hidden"}><input type="checkbox" name="save_address" value="true" /><span>حفظ هذا العنوان في حسابي</span><select name="address_type"><option value="home">المنزل</option><option value="work">العمل</option><option value="other">عنوان آخر</option></select><input name="address_label" placeholder="اسم العنوان" /></label>
+    </div></div>
     <fieldset class="checkout-shipping-methods full" id="checkoutShippingMethods" hidden><legend>شركة الشحن</legend><div id="checkoutShippingChoices"></div></fieldset>
     <fieldset class="checkout-payment-methods full"><legend>طريقة الدفع</legend>${paymentChoices||`<p>لا توجد طريقة دفع متاحة حاليًا.</p>`}</fieldset>
-    <label class="full">ملاحظات العنوان أو الطلب<textarea name="address_notes"></textarea></label>
+    <label class="full">ملاحظات العنوان أو الطلب<textarea name="address_notes">${esc(defaults.address_notes||"")}</textarea></label>
   </form>`;
 }
 
@@ -1347,7 +1559,7 @@ function renderCart(checkout=false) {
   document.getElementById("applyCoupon").onclick=applyCoupon;
   document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
   document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackCommerceEvent("add_payment_info",state.cart,{value:cartTotals().total});}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();bindCheckoutAddressBook();renderCheckoutPaymentWidgets(totals.total);const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["tamara","edfapay","tabby"].includes(form.elements.payment_method.value);};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackCommerceEvent("add_payment_info",state.cart,{value:cartTotals().total});}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["address_id","country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
 }
 
 function bindCheckoutPhoneInput(){
@@ -1355,6 +1567,17 @@ function bindCheckoutPhoneInput(){
   const normalizeSaudi=()=>{let value=phone.value.replace(/\D/g,"").replace(/^966/,"");if(value.length===10&&value.startsWith("0"))value=value.slice(1);phone.value=value.slice(0,9);phone.setCustomValidity(value&&/^5\d{8}$/.test(phone.value)?"":"أدخلي 9 أرقام تبدأ بالرقم 5");};
   const update=()=>{const saudi=country.value==="SA";control.classList.toggle("is-saudi",saudi);prefix.hidden=!saudi;hint.textContent=saudi?"9 أرقام بعد +966":"أدخلي رقم الهاتف مع مفتاح الدولة";phone.maxLength=saudi?10:18;phone.inputMode=saudi?"numeric":"tel";phone.placeholder=saudi?"5XXXXXXXX":"+971...";if(form.elements.short_address)form.elements.short_address.required=saudi;phone.setCustomValidity("");if(saudi)normalizeSaudi();};
   phone.addEventListener("input",()=>{if(country.value==="SA")normalizeSaudi();else phone.setCustomValidity("");});country.addEventListener("change",update);update();
+}
+
+function bindCheckoutAddressBook(){
+  const form=document.getElementById("checkoutForm"),editor=document.getElementById("checkoutAddressEditor");if(!form||!editor||!state.customer)return;
+  const addresses=state.customer.addresses||[],saveRow=form.querySelector(".checkout-save-address"),toggle=document.getElementById("toggleCheckoutAddressEditor"),title=document.getElementById("checkoutAddressEditorTitle");
+  const fields=["first_name","last_name","phone","email","country_code","short_address","province","city","district","street","building_number","postal_code","additional_number","address_notes","latitude","longitude"];
+  const setValue=(name,value)=>{const input=form.elements[name];if(!input)return;let next=value??"";if(name==="phone"&&String(value||"").startsWith("+966"))next=String(value).replace(/^\+966/,"");input.value=next;};
+  const applyAddress=address=>{fields.forEach(name=>setValue(name,address?.[name]));form.elements.address_verification_token&&(form.elements.address_verification_token.value="");editor.classList.add("is-collapsed");if(saveRow)saveRow.hidden=true;if(title)title.textContent=address?.label||"العنوان المختار";bindCheckoutPhoneInput();};
+  const useNewAddress=(preserve=false)=>{if(!preserve){["short_address","province","city","district","street","building_number","postal_code","additional_number","address_notes","latitude","longitude"].forEach(name=>setValue(name,""));}editor.classList.remove("is-collapsed");if(saveRow){saveRow.hidden=false;form.elements.save_address.checked=true;}if(title)title.textContent="عنوان توصيل جديد";};
+  form.querySelectorAll('[name="address_id"]').forEach(input=>input.addEventListener("change",()=>{const address=addresses.find(row=>String(row.id)===String(input.value));if(address)applyAddress(address);else useNewAddress(false);refreshCheckoutQuote({force:true});}));
+  toggle?.addEventListener("click",()=>{const current=addresses.find(row=>String(row.id)===String(form.elements.address_id?.value));if(current)applyAddress(current);const newOption=[...form.querySelectorAll('[name="address_id"]')].find(input=>!input.value);if(newOption)newOption.checked=true;useNewAddress(true);toggle.hidden=true;});
 }
 
 function checkoutCustomerValues(form){
@@ -1443,12 +1666,12 @@ let checkoutQuoteFingerprint="";
 let checkoutQuoteRequestController=null;
 async function refreshCheckoutQuote({force=false}={}){
   const form=document.getElementById("checkoutForm");if(!form)return;const required=[...form.querySelectorAll("[required]")];if(required.some(input=>!input.value.trim()))return;
-  const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
+  const values=checkoutCustomerValues(form);const payment_method=values.payment_method||"cod",address_id=values.address_id||undefined;delete values.payment_method;delete values.shipping_quote_choice;delete values.address_id;delete values.save_address;delete values.address_type;delete values.address_label;const status=document.getElementById("shippingQuoteState");if(status)status.textContent="جاري حساب الشحن...";
   const quoteCustomer={country_code:values.country_code,province:values.province,city:values.city,district:values.district,street:values.street,building_number:values.building_number,postal_code:values.postal_code,short_address:values.short_address,latitude:values.latitude,longitude:values.longitude};
-  const fingerprint=JSON.stringify({customer:quoteCustomer,payment_method,items:state.cart.map(item=>[item.key,item.quantity])});
+  const fingerprint=JSON.stringify({address_id,customer:quoteCustomer,payment_method,items:state.cart.map(item=>[item.key,item.quantity])});
   if(!force&&fingerprint===checkoutQuoteFingerprint){if(status)status.textContent="تم تحديث تكلفة الشحن";return;}
   checkoutQuoteRequestController?.abort();const controller=new AbortController();checkoutQuoteRequestController=controller;
-  try{const result=await api("/api/store/shipping/quote",{method:"POST",signal:controller.signal,body:JSON.stringify({customer:values,payment_method,items:state.cart})});if(controller!==checkoutQuoteRequestController)return;checkoutQuoteFingerprint=fingerprint;state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);renderCheckoutPaymentWidgets(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(error.name!=="AbortError"&&status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}finally{if(checkoutQuoteRequestController===controller)checkoutQuoteRequestController=null;}
+  try{const result=await api("/api/store/shipping/quote",{method:"POST",signal:controller.signal,body:JSON.stringify({address_id,customer:values,payment_method,items:state.cart})});if(controller!==checkoutQuoteRequestController)return;checkoutQuoteFingerprint=fingerprint;state.checkoutQuotes=result.quotes||[result.quote].filter(Boolean);const previous=state.checkoutQuote?.id;state.checkoutQuote=state.checkoutQuotes.find(quote=>quote.id===previous)||result.quote;renderCheckoutShippingChoices(state.checkoutQuotes);const totals=cartTotals();const shippingAmount=document.getElementById("checkoutShippingAmount");if(shippingAmount)shippingAmount.innerHTML=checkoutShippingPrice(totals.shipping);const total=document.getElementById("checkoutTotalAmount");if(total)total.innerHTML=money(totals.total);renderCheckoutPaymentWidgets(totals.total);if(status)status.textContent=result.quote?.fallback_used?"تم استخدام سعر الشحن الاحتياطي":"تم تحديث تكلفة الشحن";}catch(error){if(error.name!=="AbortError"&&status)status.textContent="سيتم تأكيد تكلفة الشحن عند إرسال الطلب";}finally{if(checkoutQuoteRequestController===controller)checkoutQuoteRequestController=null;}
 }
 
 function changeCartQuantity(index,delta,checkout) {
@@ -1525,11 +1748,11 @@ async function placeOrder(options={}) {
   const cartCurrent=await revalidateVisibleCart({force:true});if(!cartCurrent)return;
   const form=document.getElementById("checkoutForm"),button=document.getElementById("placeOrder");if(!form||!button)return;
   if(!form.reportValidity()){const missing=[...form.querySelectorAll(":invalid")].map(input=>input.name||input.id).filter(Boolean);syncCheckoutRecovery("validation_failed",{stage:"validation_failed",reason_code:"CHECKOUT_FORM_INVALID",message:"Required checkout fields are incomplete",field_names:missing});button.disabled=false;button.textContent="تأكيد الطلب";return;}
-  const formValues=checkoutFormState(),values=checkoutCustomerValues(form),payment_method=values.payment_method||"cod";delete values.payment_method;delete values.shipping_quote_choice;const customer=values,discount=cartTotals().discount;button.disabled=true;button.textContent="جاري تأكيد الطلب...";
+  const formValues=checkoutFormState(),values=checkoutCustomerValues(form),payment_method=values.payment_method||"cod",address_id=values.address_id||undefined,save_address=values.save_address==="true",address_type=values.address_type||"home",address_label=values.address_label||"";delete values.payment_method;delete values.shipping_quote_choice;delete values.address_id;delete values.save_address;delete values.address_type;delete values.address_label;const customer=values,discount=cartTotals().discount;button.disabled=true;button.textContent="جاري تأكيد الطلب...";
   const attempt=payment_method==="cod"?null:paymentAttempt(payment_method);
   try{
     const recovery=await ensureCheckoutRecovery();await syncCheckoutRecovery("checkout_submitted",{stage:"ready_to_submit",status:"active",payment_provider:payment_method,payment_attempt_id:attempt?.id});
-    const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,cart_revision_token:state.cartRevisionToken,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});
+    const result=await api("/api/orders",{method:"POST",body:JSON.stringify({customer,address_id,save_address,address_type,address_label,payment_method,payment_attempt_id:attempt?.id||undefined,checkout_session_id:recovery?.session_id,checkout_session_token:recovery?.session_token,cart_revision_token:state.cartRevisionToken,shipping_quote_token:state.checkoutQuote?.quote_token||undefined,locale:"ar_SA",items:state.cart,discount_codes:appliedPromotionCodes(discount)})});
     if(result.payment_redirect_url){continueGatewayPayment(result,attempt,button);return;}
     trackPurchase(result.order||{});clearPaymentAttempt(result.order?.id);clearCheckoutRecovery();state.cart=[];saveLocalCart();clearDiscount();shell(`${breadcrumbs("تم استلام الطلب")}<section class="container empty-cart"><div>${icon("circle-check-big",58)}<h1>تم استلام طلبك بنجاح</h1><p class="muted">رقم الطلب: ${esc(result.order?.id||"")}</p><a class="primary-button" href="/products">متابعة التسوق</a></div></section>`);
   }catch(error){
@@ -1567,10 +1790,17 @@ function renderNotFound(){shell(`<section class="container empty-cart"><div><h1>
 
 async function init() {
   try {
-    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,pagesResponse,addressConfig,paymentMethods,marketingPixels,profile] = await Promise.all([
-      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/pages").catch(()=>({pages:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
+    const [appearance,currencies,market,builder,categories,productsResponse,bundlesResponse,collectionsResponse,labelsResponse,facetsResponse,pagesResponse,addressConfig,paymentMethods,marketingPixels,profile] = await Promise.all([
+      api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/labels").catch(()=>({labels:[]})),api("/api/store/facets").catch(()=>({facets:[]})),api("/api/pages").catch(()=>({pages:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
     ]);
-    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.pages=pagesResponse.pages||pagesResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
+    state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.labels=labelsResponse.labels||labelsResponse||[];state.facets=facetsResponse.facets||facetsResponse||[];state.pages=pagesResponse.pages||pagesResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
+    const oldFacetNames={"شراشف-منقطة":"منقط","شراشف-مشجرة":"مشجر","شراشف-سادة":"سادة"};
+    if(state.category==="شراشف-صلاة")state.category="شراشف";
+    else if(state.category==="كل-المنتجات")state.category="";
+    else if(oldFacetNames[state.category]){const legacyName=oldFacetNames[state.category];const legacySubcategory=state.categories.find(item=>item.parent_id&&item.name_ar===legacyName);const shraash=state.categories.find(item=>!item.parent_id&&(item.slug==="شراشف"||item.name_ar==="شراشف"));state.category=shraash?.slug||"";state.subcategory=legacySubcategory?.slug||"";}
+    if(state.subcategory){const sub=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);const root=state.categories.find(item=>Number(item.id)===Number(sub?.parent_id));if(sub&&root)state.category=root.slug;else state.subcategory="";}
+    if(new URLSearchParams(location.search).has("category")||new URLSearchParams(location.search).has("subcategory")){const url=new URL(location.href);state.category?url.searchParams.set("category",state.category):url.searchParams.delete("category");state.subcategory?url.searchParams.set("subcategory",state.subcategory):url.searchParams.delete("subcategory");if(state.facet)url.searchParams.set("facet",state.facet);history.replaceState(null,"",url.pathname+url.search);}
+
     if(["/cart","/checkout"].includes(location.pathname)&&state.cart.length){try{await reconcileCart({page:cartPageName(),force:true});}catch(error){state.cartValidationError=error;}}
     applyTheme();
     renderStoreRoute();

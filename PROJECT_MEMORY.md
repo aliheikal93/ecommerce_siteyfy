@@ -203,3 +203,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - Footer policy URLs are configurable in the existing Storefront Layout editor: `store_policy_url`, `shipping_policy_url`, `privacy_policy_url`. Only configured valid HTTP(S) or local destinations render; removed misleading policy links to `/products`. No policy text or local policy pages were invented.
 - Changed only `brandIdentity.footer_color` from the old brown preset to the saved `primary_dark_color`, matching the purple reference identity while keeping the footer color editable in admin. Database backup before this change: `/root/hst_backups/siteyfy-ui-20260910/before-footer.sqlite`.
 - Verified footer at 375/390/768/1440px, image loading, three social SVGs, phone direction, payment contrast, visibility flags, and safe policy destinations. Storefront/admin asset versions bumped.
+
+## Bundle option semantics and prayer-set migration — 2026-09-24
+
+- A bundle option may combine one master color with one master product option. The color applies to every color-bearing component in that bundle option.
+- Generated bundle labels identify the component type before its option value. Bedsheet sewing choices therefore display as لون · شرشف بسحاب, لون · شرشف بدون سحاب مفتوح من الامام, and similar labels. A rug with no secondary option contributes only its matching color variant.
+- Bundle inventory inherits from exact component variants unless independent bundle stock is explicitly enabled. The available bundle quantity is the minimum available component quantity after component quantities are applied.
+- Legacy prayer sets from category 105 are migrated into bundle records while the original product records remain archived for order history and carry a migrated_bundle_id. Storefront legacy product URLs redirect to the replacement bundle.
+- scripts/migrate-prayer-sets-to-bundles.cjs is an idempotent preview/apply migration. It only maps exact color and option matches from existing standalone products and records the mapping policy in each bundle.

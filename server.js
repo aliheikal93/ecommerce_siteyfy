@@ -8,8 +8,10 @@ import fs from "node:fs";
 import lighthouse from "lighthouse";
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import nodemailer from "nodemailer";
 import path from "node:path";
 import sharp from "sharp";
+import zlib from "node:zlib";
 import { launch } from "chrome-launcher";
 import { fileURLToPath } from "node:url";
 
@@ -214,7 +216,13 @@ const defaultShippingIntegrationSettings = {
     last_range: null,
     incremental_cursor: null,
     sync_overlap_days: 2,
-    sync_interval_minutes: 15
+    sync_interval_minutes: 15,
+    sync_paused: false,
+    pause_reason: "",
+    paused_at: null,
+    auth_failure_count: 0,
+    max_auth_failures: 3,
+    last_auth_failure_at: null
   },
   customer_pricing: {
     strategy: "fixed",
@@ -362,6 +370,97 @@ const defaultShippingAuditSettings = {
   version: 1
 };
 
+const defaultNotificationSettings = {
+  enabled: true,
+  scan_interval_minutes: 5,
+  retention_days: 365,
+  channels: { dashboard: true, email: false },
+  email: {
+    provider: "smtp",
+    host: "",
+    port: 587,
+    secure: false,
+    username: "",
+    password_encrypted: "",
+    from_name: "SITEYFY Store",
+    from_email: "",
+    reply_to: "",
+    default_recipients: [],
+    connection_timeout_ms: 10000
+  },
+  quiet_hours: { enabled: false, start: "22:00", end: "08:00", timezone: "Asia/Riyadh", critical_bypass: true },
+  digest: { daily_enabled: false, daily_hour: 9, weekly_enabled: false, weekly_day: 1, weekly_hour: 9 },
+  updated_at: null
+};
+
+const defaultNotificationRules = [
+  { code:"inventory_low_stock", module:"inventory", trigger:"inventory_low_stock", name_en:"Low stock", name_ar:"مخزون منخفض", severity:"warning", threshold:5, threshold_unit:"units", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"inventory_out_of_stock", module:"inventory", trigger:"inventory_out_of_stock", name_en:"Out of stock", name_ar:"نفاد المخزون", severity:"high", threshold:0, threshold_unit:"units", cooldown_minutes:720, dashboard:true, email:false, is_active:true },
+  { code:"inventory_cost_change", module:"inventory", trigger:"inventory_cost_change", name_en:"Large cost change", name_ar:"تغير كبير في التكلفة", severity:"warning", threshold:15, threshold_unit:"percent", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"order_payment_failed", module:"orders", trigger:"order_payment_failed", name_en:"Payment failed", name_ar:"فشل عملية الدفع", severity:"high", threshold:1, threshold_unit:"attempts", cooldown_minutes:360, dashboard:true, email:false, is_active:true },
+  { code:"order_return_overdue", module:"orders", trigger:"order_return_overdue", name_en:"Return overdue", name_ar:"مرتجع متأخر", severity:"high", threshold:7, threshold_unit:"days", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"finance_negative_profit", module:"finance", trigger:"finance_negative_profit", name_en:"Negative-profit order", name_ar:"طلب بخسارة", severity:"critical", threshold:0, threshold_unit:"SAR", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"finance_missing_cost", module:"finance", trigger:"finance_missing_cost", name_en:"Missing financial cost", name_ar:"تكلفة مالية مفقودة", severity:"warning", threshold:1, threshold_unit:"fields", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"shipping_stale", module:"shipping", trigger:"shipping_stale", name_en:"Shipment has no recent update", name_ar:"شحنة بدون تحديث حديث", severity:"high", threshold:7, threshold_unit:"days", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"shipping_financial_finding", module:"shipping", trigger:"shipping_financial_finding", name_en:"Carrier charge needs review", name_ar:"رسم شحن يحتاج مراجعة", severity:"critical", threshold:0.01, threshold_unit:"SAR", cooldown_minutes:1440, dashboard:true, email:false, is_active:true },
+  { code:"shipping_sync_failed", module:"integrations", trigger:"shipping_sync_failed", name_en:"Shipping sync failed", name_ar:"فشل مزامنة الشحن", severity:"critical", threshold:1, threshold_unit:"failures", cooldown_minutes:60, dashboard:true, email:false, is_active:true },
+  { code:"settlement_received", module:"settlements", trigger:"settlement_received", name_en:"New carrier closing", name_ar:"تقفيلة شحن جديدة", severity:"info", threshold:0, threshold_unit:"SAR", cooldown_minutes:10080, dashboard:true, email:false, is_active:true },
+  { code:"settlement_overdue", module:"settlements", trigger:"settlement_overdue", name_en:"Carrier settlement overdue", name_ar:"تحصيل شركة الشحن متأخر", severity:"high", threshold:7, threshold_unit:"days", cooldown_minutes:1440, dashboard:true, email:false, is_active:true }
+];
+
+const adminPermissionCatalog = [
+  ["dashboard.view", "dashboard", "View dashboard", "عرض لوحة التحكم"],
+  ["catalog.view", "catalog", "View catalog", "عرض الكتالوج"],
+  ["catalog.manage", "catalog", "Manage catalog", "إدارة الكتالوج"],
+  ["inventory.view", "inventory", "View inventory", "عرض المخزون"],
+  ["inventory.manage", "inventory", "Manage inventory", "إدارة المخزون"],
+  ["inventory.view_cost", "inventory", "View inventory cost", "عرض تكلفة المخزون"],
+  ["orders.view", "orders", "View orders", "عرض الطلبات"],
+  ["orders.manage", "orders", "Manage orders", "إدارة الطلبات"],
+  ["orders.cancel", "orders", "Cancel orders", "إلغاء الطلبات"],
+  ["orders.refund", "orders", "Manage refunds", "إدارة الاسترداد"],
+  ["returns.view", "orders", "View returns", "عرض المرتجعات"],
+  ["returns.manage", "orders", "Manage returns", "إدارة المرتجعات"],
+  ["customers.view", "customers", "View customers", "عرض العملاء"],
+  ["customers.manage", "customers", "Manage customers", "إدارة العملاء"],
+  ["promotions.view", "promotions", "View promotions", "عرض العروض"],
+  ["promotions.manage", "promotions", "Manage promotions", "إدارة العروض"],
+  ["finance.view", "finance", "View finance", "عرض المالية"],
+  ["finance.manage", "finance", "Manage finance settings", "إدارة إعدادات المالية"],
+  ["finance.export", "finance", "Export financial reports", "تصدير التقارير المالية"],
+  ["shipping.view", "shipping", "View shipping", "عرض الشحن"],
+  ["shipping.manage", "shipping", "Manage shipping", "إدارة الشحن"],
+  ["shipping.dispatch", "shipping", "Dispatch shipments", "إرسال الشحنات"],
+  ["integrations.view", "integrations", "View integrations", "عرض التكاملات"],
+  ["integrations.manage", "integrations", "Manage integrations", "إدارة التكاملات"],
+  ["integrations.manage_secrets", "integrations", "Manage secret keys", "إدارة المفاتيح السرية"],
+  ["content.view", "content", "View storefront content", "عرض محتوى المتجر"],
+  ["content.manage", "content", "Manage storefront content", "إدارة محتوى المتجر"],
+  ["ai.view", "ai", "View AI tools", "عرض أدوات الذكاء الاصطناعي"],
+  ["ai.manage", "ai", "Use and configure AI", "استخدام وإعداد الذكاء الاصطناعي"],
+  ["notifications.view", "system", "View notifications", "عرض الإشعارات"],
+  ["notifications.resolve", "system", "Resolve notifications", "حل الإشعارات"],
+  ["settings.view", "system", "View settings", "عرض الإعدادات"],
+  ["settings.manage", "system", "Manage settings", "إدارة الإعدادات"],
+  ["staff.view", "staff", "View staff", "عرض الموظفين"],
+  ["staff.manage", "staff", "Manage staff", "إدارة الموظفين"],
+  ["roles.view", "staff", "View roles", "عرض الأدوار"],
+  ["roles.manage", "staff", "Manage roles and permissions", "إدارة الأدوار والصلاحيات"],
+  ["audit.view", "staff", "View staff activity", "عرض نشاط الموظفين"]
+].map(([key, module, name_en, name_ar]) => ({ key, module, name_en, name_ar }));
+
+const allAdminPermissionKeys = adminPermissionCatalog.map((permission) => permission.key);
+const defaultStaffRoles = [
+  { code:"super_admin", name_en:"Super Admin", name_ar:"المدير العام", description_en:"Full system access, including staff and secrets.", description_ar:"صلاحية كاملة تشمل الموظفين والمفاتيح السرية.", permissions:["*"], is_system:true },
+  { code:"store_manager", name_en:"Store Manager", name_ar:"مدير المتجر", description_en:"Runs daily store operations without secret-key access.", description_ar:"يدير تشغيل المتجر اليومي دون الوصول للمفاتيح السرية.", permissions:allAdminPermissionKeys.filter((key) => !["roles.manage","integrations.manage_secrets"].includes(key)), is_system:true },
+  { code:"order_support", name_en:"Order Support", name_ar:"خدمة الطلبات", description_en:"Orders, customers, returns and checkout recovery.", description_ar:"الطلبات والعملاء والمرتجعات واستعادة التشيك أوت.", permissions:["dashboard.view","orders.view","orders.manage","returns.view","returns.manage","customers.view","customers.manage","notifications.view","notifications.resolve"], is_system:true },
+  { code:"warehouse", name_en:"Warehouse", name_ar:"المخزن", description_en:"Inventory receiving, fulfilment and returned stock.", description_ar:"استلام المخزون وتجهيز الطلبات والمرتجعات.", permissions:["dashboard.view","catalog.view","inventory.view","inventory.manage","inventory.view_cost","orders.view","orders.manage","returns.view","returns.manage","shipping.view","shipping.dispatch","notifications.view","notifications.resolve"], is_system:true },
+  { code:"finance", name_en:"Finance", name_ar:"المالية", description_en:"Profit, cost, settlements and financial exports.", description_ar:"الأرباح والتكلفة والتقفيلات والتقارير المالية.", permissions:["dashboard.view","orders.view","inventory.view","inventory.view_cost","finance.view","finance.manage","finance.export","shipping.view","promotions.view","notifications.view","notifications.resolve"], is_system:true },
+  { code:"shipping_operations", name_en:"Shipping Operations", name_ar:"عمليات الشحن", description_en:"Shipment dispatch, tracking and carrier review.", description_ar:"إرسال وتتبع الشحنات ومراجعة شركات الشحن.", permissions:["dashboard.view","orders.view","customers.view","shipping.view","shipping.manage","shipping.dispatch","integrations.view","notifications.view","notifications.resolve"], is_system:true },
+  { code:"marketing", name_en:"Marketing", name_ar:"التسويق", description_en:"Catalog content, promotions, SEO and marketing pixels.", description_ar:"محتوى الكتالوج والعروض وSEO وبيكسلات التسويق.", permissions:["dashboard.view","catalog.view","catalog.manage","content.view","content.manage","promotions.view","promotions.manage","integrations.view","ai.view","ai.manage","notifications.view"], is_system:true },
+  { code:"viewer", name_en:"Read Only", name_ar:"مشاهدة فقط", description_en:"Read-only access to operational dashboards.", description_ar:"مشاهدة لوحات التشغيل دون تعديل.", permissions:allAdminPermissionKeys.filter((key) => key.endsWith(".view")), is_system:true }
+];
+
 const defaultBrandIdentity = {
   primary_color: "#583A80",
   primary_dark_color: "#3B215D",
@@ -383,6 +482,31 @@ const defaultBrandIdentity = {
   updated_at: null
 };
 
+const defaultDashboardIdentity = {
+  brand_name: "SITEYFY",
+  tagline_en: "Digital Solutions",
+  tagline_ar: "الحلول الرقمية",
+  default_theme: "light",
+  allow_theme_switch: true,
+  light: {
+    primary: "#005BFF", secondary: "#363ECF", accent: "#9724A5",
+    canvas: "#F8FAFC", surface: "#FFFFFF", surface_soft: "#F1F5F9",
+    heading: "#0C113F", text: "#0F172A", muted: "#64748B", border: "#E2E8F0",
+    logo_horizontal: "/admin/assets/brand/siteyfy-light-lockup.png",
+    logo_vertical: "/admin/assets/brand/siteyfy-light-gradient.png",
+    icon: "/admin/assets/brand/siteyfy-light-lockup.png", icon_crop: true
+  },
+  dark: {
+    primary: "#005BFF", secondary: "#363ECF", accent: "#9724A5",
+    canvas: "#080D3C", surface: "#111644", surface_soft: "#161B48",
+    heading: "#FFFFFF", text: "#DFE0FF", muted: "#A8ACC8", border: "#2C315F",
+    logo_horizontal: "/admin/assets/brand/siteyfy-dark-lockup.png",
+    logo_vertical: "/admin/assets/brand/siteyfy-dark-gradient.png",
+    icon: "/admin/assets/brand/siteyfy-dark-lockup.png", icon_crop: true
+  },
+  updated_at: null
+};
+
 const defaultStorefrontLayout = {
   announcement: {
     is_active: true,
@@ -394,7 +518,7 @@ const defaultStorefrontLayout = {
       { id: "welcome", text_ar: "خصم لأول طلب لك معنا - استخدم الكود WELCOME10", text_en: "First order discount - use WELCOME10", link_label_ar: "", link_label_en: "", link_url: "", is_active: true }
     ]
   },
-  header: { sticky: true, show_search: true, show_account: true, show_wishlist: true, show_cart: true, show_category_strip: true },
+  header: { sticky: true, show_search: true, show_account: true, show_wishlist: true, show_cart: true, show_category_strip: true, category_strip_auto_scroll: true, category_strip_scroll_speed: 18 },
   footer: { show_description: true, show_business_info: true, show_contact: true, show_social: true, show_policies: true, copyright_en: "All rights reserved.", copyright_ar: "جميع الحقوق محفوظة." },
   updated_at: null
 };
@@ -467,12 +591,104 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_inventory_movements_order ON inventory_movements(order_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_inventory_movements_product ON inventory_movements(product_id, variant_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS inventory_receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_number TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'draft',
+    supplier_name TEXT,
+    invoice_number TEXT,
+    currency TEXT NOT NULL DEFAULT 'SAR',
+    cost_mode TEXT NOT NULL DEFAULT 'unit_cost',
+    allocation_method TEXT NOT NULL DEFAULT 'quantity',
+    merchandise_total REAL NOT NULL DEFAULT 0,
+    additional_cost REAL NOT NULL DEFAULT 0,
+    grand_total REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_by TEXT,
+    received_by TEXT,
+    reversed_by TEXT,
+    received_at TEXT,
+    reversed_at TEXT,
+    reversal_reason TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_inventory_receipts_status ON inventory_receipts(status, created_at);
+
+  CREATE TABLE IF NOT EXISTS inventory_receipt_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    variant_id TEXT,
+    product_name TEXT,
+    variant_label TEXT,
+    sku TEXT,
+    quantity INTEGER NOT NULL,
+    entered_cost REAL NOT NULL DEFAULT 0,
+    merchandise_total REAL NOT NULL DEFAULT 0,
+    allocated_extra_cost REAL NOT NULL DEFAULT 0,
+    landed_unit_cost REAL NOT NULL DEFAULT 0,
+    previous_unit_cost REAL NOT NULL DEFAULT 0,
+    resulting_average_cost REAL NOT NULL DEFAULT 0,
+    stock_before INTEGER,
+    stock_after INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(receipt_id) REFERENCES inventory_receipts(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_inventory_receipt_items_receipt ON inventory_receipt_items(receipt_id, id);
+  CREATE INDEX IF NOT EXISTS idx_inventory_receipt_items_product ON inventory_receipt_items(product_id, variant_id);
+
+  CREATE TABLE IF NOT EXISTS inventory_lots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    receipt_id INTEGER,
+    receipt_item_id INTEGER,
+    source_type TEXT NOT NULL DEFAULT 'receipt',
+    product_id INTEGER NOT NULL,
+    variant_id TEXT,
+    original_quantity INTEGER NOT NULL,
+    remaining_quantity INTEGER NOT NULL,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    received_at TEXT NOT NULL,
+    is_reversed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(receipt_id) REFERENCES inventory_receipts(id),
+    FOREIGN KEY(receipt_item_id) REFERENCES inventory_receipt_items(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_inventory_lots_fifo ON inventory_lots(product_id, variant_id, is_reversed, received_at, id);
+  CREATE INDEX IF NOT EXISTS idx_inventory_lots_receipt ON inventory_lots(receipt_id, receipt_item_id);
+
+  CREATE TABLE IF NOT EXISTS inventory_lot_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movement_id INTEGER NOT NULL,
+    lot_id INTEGER NOT NULL,
+    order_id INTEGER,
+    product_id INTEGER NOT NULL,
+    variant_id TEXT,
+    quantity INTEGER NOT NULL,
+    direction INTEGER NOT NULL,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    source_allocation_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(movement_id) REFERENCES inventory_movements(id),
+    FOREIGN KEY(lot_id) REFERENCES inventory_lots(id),
+    FOREIGN KEY(source_allocation_id) REFERENCES inventory_lot_allocations(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_inventory_allocations_order ON inventory_lot_allocations(order_id, product_id, variant_id, direction);
+  CREATE INDEX IF NOT EXISTS idx_inventory_allocations_lot ON inventory_lot_allocations(lot_id, direction);
 `);
 
 if (!db.prepare("PRAGMA table_info(promo_redemptions)").all().some((column) => column.name === "payment_hash")) {
   db.exec("ALTER TABLE promo_redemptions ADD COLUMN payment_hash TEXT");
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_promo_redemptions_payment ON promo_redemptions(payment_hash, status)");
+
+if (!db.prepare("PRAGMA table_info(inventory_movements)").all().some((column) => column.name === "receipt_id")) {
+  db.exec("ALTER TABLE inventory_movements ADD COLUMN receipt_id INTEGER");
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_inventory_movements_receipt ON inventory_movements(receipt_id, created_at)");
 
 const defaults = {
   companyInfo: {
@@ -507,6 +723,7 @@ const defaults = {
     free_shipping_threshold: 0
   },
   brandIdentity: defaultBrandIdentity,
+  dashboardIdentity: defaultDashboardIdentity,
   currencies: { base_currency: "SAR", display_mode: "fixed", auto_exchange: false, rounding_mode: "none", currencies: defaultCurrencies, updated_at: null },
   marketSettings: defaultMarketSettings,
   countries: defaultCountries,
@@ -515,6 +732,14 @@ const defaults = {
   shippingIntegrations: defaultShippingIntegrationSettings,
   paymentGateways: defaultPaymentGatewaySettings,
   shippingAuditSettings: defaultShippingAuditSettings,
+  financeSettings: {
+    recognition_basis: "paid_or_delivered",
+    include_historical_orders: true,
+    shipping_variance_tolerance: 1,
+    currency: "SAR",
+    updated_at: null
+  },
+  notificationSettings: defaultNotificationSettings,
   storefrontLayout: defaultStorefrontLayout,
   homeBuilder: defaultHomeBuilder,
   promotionPolicy: {
@@ -564,6 +789,16 @@ const defaults = {
 for (const [key, value] of Object.entries(defaults)) {
   db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(key, JSON.stringify(value));
 }
+
+const savedNotificationRuleCodes = new Set(entityRows("notification_rules").map((rule) => String(rule.code || "")));
+defaultNotificationRules.forEach((rule) => {
+  if (!savedNotificationRuleCodes.has(rule.code)) createRecord("notification_rules", { ...rule, recipients:[], escalation_minutes:0, created_by:"system" });
+});
+
+const savedStaffRoleCodes = new Set(entityRows("staff_roles").map((role) => String(role.code || "")));
+defaultStaffRoles.forEach((role) => {
+  if (!savedStaffRoleCodes.has(role.code)) createRecord("staff_roles", { ...role, is_active:true, created_by:"system" });
+});
 
 const savedSettings = getSetting("settings") || {};
 if (!savedSettings.website_domain) {
@@ -629,6 +864,15 @@ const uploadStorage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: uploadStorage });
+const profileImageUpload = multer({
+  storage: uploadStorage,
+  limits: { files: 1, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const allowed = String(file.mimetype || "").startsWith("image/") && [".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"].includes(extension);
+    cb(allowed ? null : new Error("Only PNG, JPG, WebP, GIF, or AVIF images are allowed"), allowed);
+  }
+});
 const productMediaUpload = multer({
   storage: uploadStorage,
   limits: { files: 40, fileSize: 100 * 1024 * 1024 },
@@ -707,30 +951,36 @@ function publicCartItem(body = {}) {
   if (body.bundle_id || body.bundleId || body.item_type === "bundle") {
     const bundle = findBundle(body.bundle_id || body.bundleId || body.id);
     if (!bundle) fail("Bundle was not found", 404);
+    const requestedOptionId = body.bundle_variant_id || body.bundleVariantId || body.variant_id || body.variantId || bundle.default_variant_id || null;
+    const option = bundle.variants?.length ? bundle.variants.find((entry) => String(entry.id) === String(requestedOptionId)) : null;
+    if (bundle.variants?.length && !option) fail("Choose a valid bundle option");
+    const selected = option || bundle;
     const quantity = Math.max(1, Number(body.quantity || 1));
-    if (bundle.available_stock !== null && quantity > bundle.available_stock) fail("Bundle quantity is out of stock");
+    if (selected.available_stock !== null && quantity > selected.available_stock) fail("Bundle quantity is out of stock");
     const bundleRaw = getRecord("bundles", bundle.id) || bundle;
-    const componentRevision = bundle.items.map((component) => {
+    const componentRevision = selected.items.map((component) => {
       const product = getRecord("products", component.product_id);
-      return `${component.product_id}:${product?.updated_at || "missing"}`;
+      return `${component.product_id}:${component.variant_id || "base"}:${product?.updated_at || "missing"}`;
     }).join("|");
+    const optionLabel = option ? (option.label_ar || option.label_en || option.color || "") : `${selected.items.length} منتجات`;
     return {
-      key: String(body.key || `bundle:${bundle.id}`),
+      key: String(body.key || `bundle:${bundle.id}:${option?.id || "default"}`),
       item_type: "bundle",
       bundle_id: Number(bundle.id),
+      bundle_variant_id: option?.id || null,
       product_id: 0,
       slug: bundle.slug || "",
       category_slug: "bundles",
       name_ar: bundle.name_ar || "باقة منتجات",
       name_en: bundle.name_en || "Product bundle",
-      image_url: bundle.main_photo_url || bundle.items[0]?.image_url || "/uploads/catalog/gift.png",
-      bundle_items: bundle.items,
+      image_url: option?.image_url || bundle.main_photo_url || selected.items[0]?.image_url || "/uploads/catalog/gift.png",
+      bundle_items: selected.items,
       bundle_main_photo_url: bundle.main_photo_url || "",
-      variant_id: null,
-      variant_label: `${bundle.items.length} منتجات`,
-      price: Number(bundle.price || 0),
+      variant_id: option?.id || null,
+      variant_label: optionLabel,
+      price: Number(selected.price || 0),
       quantity,
-      catalog_revision: crypto.createHash("sha256").update(`${bundleRaw.updated_at || ""}|${bundle.price}|${bundle.available_stock}|${componentRevision}`).digest("hex").slice(0, 24)
+      catalog_revision: crypto.createHash("sha256").update(`${bundleRaw.updated_at || ""}|${option?.id || "default"}|${selected.price}|${selected.available_stock}|${componentRevision}`).digest("hex").slice(0, 24)
     };
   }
   const productId = Number(body.product_id || body.productId || body.id || body.product?.id || 0);
@@ -740,6 +990,7 @@ function publicCartItem(body = {}) {
   const product = normalizeProductPayload(rawProduct);
   const variantId = body.variant_id || body.variantId || null;
   const variant = variantId ? product.variants.find((item) => String(item.id) === String(variantId)) : null;
+  if (product.product_type === "variable" && !variantId) fail("Choose a product variant");
   if (variantId && (!variant || variant.is_active === false)) fail("Product option was not found or is inactive", 404);
   if (variant?.is_in_stock === false) fail("Product option is out of stock", 409);
   const quantity = Math.max(1, Number(body.quantity || 1));
@@ -788,6 +1039,7 @@ function cartChangeBase(input = {}, index = 0) {
     item_type:input.item_type === "bundle" || input.bundle_id || input.bundleId ? "bundle" : "product",
     product_id:Number(input.product_id || input.productId || 0) || null,
     bundle_id:Number(input.bundle_id || input.bundleId || 0) || null,
+    bundle_variant_id:input.bundle_variant_id || input.bundleVariantId || (input.item_type === "bundle" ? input.variant_id || input.variantId || null : null),
     variant_id:input.variant_id || input.variantId || null,
     name_ar:String(input.name_ar || input.name_en || "منتج"), name_en:String(input.name_en || input.name_ar || "Product")
   };
@@ -803,10 +1055,14 @@ function reconcileCartItems(items = []) {
     if (base.item_type === "bundle") {
       const bundle = findBundle(base.bundle_id);
       if (!bundle) { changes.push({ ...base, type:"item_removed", reason:"BUNDLE_UNAVAILABLE" }); return; }
-      if (bundle.available_stock !== null && Number(bundle.available_stock) <= 0) { changes.push({ ...base, type:"out_of_stock", reason:"BUNDLE_OUT_OF_STOCK" }); return; }
-      if (bundle.available_stock !== null && candidate.quantity > Number(bundle.available_stock)) {
-        changes.push({ ...base, type:"quantity_adjusted", previous_quantity:candidate.quantity, current_quantity:Number(bundle.available_stock), reason:"BUNDLE_STOCK_CHANGED" });
-        candidate.quantity = Number(bundle.available_stock);
+      const option = bundle.variants?.length ? bundle.variants.find((entry) => String(entry.id) === String(base.bundle_variant_id || base.variant_id || bundle.default_variant_id)) : null;
+      if (bundle.variants?.length && !option) { changes.push({ ...base, type:"item_removed", reason:"BUNDLE_OPTION_UNAVAILABLE" }); return; }
+      const selectedBundle = option || bundle;
+      candidate = { ...candidate, bundle_variant_id:option?.id || null, variant_id:option?.id || null, variant_label:option ? (option.label_ar || option.label_en || option.color || "") : candidate.variant_label, bundle_items:selectedBundle.items, price:Number(selectedBundle.price || 0), image_url:option?.image_url || bundle.main_photo_url || selectedBundle.items[0]?.image_url || candidate.image_url };
+      if (selectedBundle.available_stock !== null && Number(selectedBundle.available_stock) <= 0) { changes.push({ ...base, type:"out_of_stock", reason:"BUNDLE_OUT_OF_STOCK" }); return; }
+      if (selectedBundle.available_stock !== null && candidate.quantity > Number(selectedBundle.available_stock)) {
+        changes.push({ ...base, type:"quantity_adjusted", previous_quantity:candidate.quantity, current_quantity:Number(selectedBundle.available_stock), reason:"BUNDLE_STOCK_CHANGED" });
+        candidate.quantity = Number(selectedBundle.available_stock);
       }
     } else {
       const rawProduct = getRecord("products", base.product_id);
@@ -908,7 +1164,8 @@ function updateProductRecord(id, payload = {}) {
   const merged = existing ? { ...existing, ...payload } : { ...payload, id: Number(id) };
   delete merged.created_at;
   delete merged.updated_at;
-  return existing ? updateRecord("products", id, normalizeProductPayload(merged)) : createRecord("products", normalizeProductPayload(merged));
+  const normalized = validateProductPayload(merged, { requireExplicitType: Boolean(payload.product_type || payload.productType) });
+  return existing ? updateRecord("products", id, normalized) : createRecord("products", normalized);
 }
 
 function normalizeFulfillmentSettings(value = getSetting("fulfillmentSettings") || {}) {
@@ -922,6 +1179,144 @@ function normalizeFulfillmentSettings(value = getSetting("fulfillmentSettings") 
   };
 }
 
+function moneyValue(value) {
+  return Number(Number(value || 0).toFixed(4));
+}
+
+function inventoryTargetSnapshot(target = {}) {
+  const productId = Number(target.product_id || 0);
+  const raw = getRecord("products", productId);
+  if (!raw) fail(`PRODUCT_${productId}_NOT_FOUND`, 404);
+  const product = normalizeProductPayload(raw);
+  const variantId = target.variant_id === null || target.variant_id === undefined || target.variant_id === "" ? null : String(target.variant_id);
+  const variantIndex = variantId ? product.variants.findIndex((variant) => String(variant.id) === variantId) : -1;
+  if (variantId && variantIndex < 0) fail(`PRODUCT_OPTION_${variantId}_NOT_FOUND`, 404);
+  const variant = variantIndex >= 0 ? product.variants[variantIndex] : null;
+  return {
+    product_id: productId,
+    variant_id: variantId,
+    raw,
+    product,
+    variant,
+    variant_index: variantIndex,
+    inventory_mode: variant ? variant.inventory_mode : product.inventory_mode,
+    stock: variant ? variant.stock : product.stock,
+    cost: Number((variant ? variant.cost : product.cost) || 0),
+    name: product.name_ar || product.name_en || `Product #${productId}`,
+    sku: variant?.sku || product.sku || "",
+    variant_label: variant ? [variant.color, variant.option, variant.value].filter(Boolean).join(" / ") : ""
+  };
+}
+
+function updateInventoryTarget(snapshot, values = {}) {
+  const stock = Math.max(0, Math.floor(Number(values.stock || 0)));
+  const cost = moneyValue(values.cost ?? snapshot.cost);
+  if (snapshot.variant) {
+    snapshot.product.variants[snapshot.variant_index] = {
+      ...snapshot.variant,
+      inventory_mode:"tracked",
+      stock,
+      cost,
+      is_in_stock:stock > 0,
+      stock_status:stock > 0 ? "in_stock" : "out_of_stock"
+    };
+  } else {
+    Object.assign(snapshot.product, {
+      inventory_mode:"tracked",
+      stock,
+      cost,
+      is_in_stock:stock > 0,
+      stock_status:stock > 0 ? "in_stock" : "out_of_stock"
+    });
+  }
+  return updateRecord("products", snapshot.product_id, snapshot.product);
+}
+
+function inventoryLotsForTarget(target = {}, includeEmpty = false) {
+  return db.prepare(`SELECT * FROM inventory_lots
+    WHERE product_id = ? AND ((variant_id IS NULL AND ? IS NULL) OR variant_id = ?) AND is_reversed = 0
+      ${includeEmpty ? "" : "AND remaining_quantity > 0"}
+    ORDER BY received_at ASC, id ASC`).all(Number(target.product_id), target.variant_id || null, target.variant_id || null);
+}
+
+function ensureInventoryLotCoverage(snapshot, actor = "system") {
+  if (snapshot.inventory_mode === "unlimited") return null;
+  const stock = Math.max(0, Number(snapshot.stock || 0));
+  if (!stock) return null;
+  const covered = inventoryLotsForTarget(snapshot).reduce((sum, lot) => sum + Number(lot.remaining_quantity || 0), 0);
+  const missing = Math.max(0, Math.round(stock - covered));
+  if (!missing) return null;
+  const result = db.prepare(`INSERT INTO inventory_lots
+    (receipt_id, receipt_item_id, source_type, product_id, variant_id, original_quantity, remaining_quantity, unit_cost, received_at, created_at, updated_at)
+    VALUES (NULL, NULL, 'opening_balance', ?, ?, ?, ?, ?, '1970-01-01T00:00:00.000Z', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
+      snapshot.product_id, snapshot.variant_id, missing, missing, moneyValue(snapshot.cost)
+    );
+  return { id:Number(result.lastInsertRowid), quantity:missing, actor };
+}
+
+function inventoryAverageCost(target = {}, fallback = 0) {
+  const rows = inventoryLotsForTarget(target);
+  const quantity = rows.reduce((sum, lot) => sum + Number(lot.remaining_quantity || 0), 0);
+  if (!quantity) return moneyValue(fallback);
+  const value = rows.reduce((sum, lot) => sum + Number(lot.remaining_quantity || 0) * Number(lot.unit_cost || 0), 0);
+  return moneyValue(value / quantity);
+}
+
+function consumeInventoryLots(snapshot, quantity, actor = "system") {
+  ensureInventoryLotCoverage(snapshot, actor);
+  let remaining = Math.max(0, Math.floor(Number(quantity || 0)));
+  const allocations = [];
+  for (const lot of inventoryLotsForTarget(snapshot)) {
+    if (!remaining) break;
+    const used = Math.min(remaining, Number(lot.remaining_quantity || 0));
+    if (!used) continue;
+    db.prepare("UPDATE inventory_lots SET remaining_quantity = remaining_quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(used, lot.id);
+    allocations.push({ lot_id:Number(lot.id), quantity:used, unit_cost:Number(lot.unit_cost || 0), source_allocation_id:null });
+    remaining -= used;
+  }
+  if (remaining) fail(`PRODUCT_${snapshot.product_id}_COST_LAYER_SHORTAGE`, 409);
+  return allocations;
+}
+
+function restoreInventoryLots(snapshot, orderId, quantity) {
+  let remaining = Math.max(0, Math.floor(Number(quantity || 0)));
+  const allocations = [];
+  const consumed = db.prepare(`SELECT a.*,
+      COALESCE((SELECT SUM(r.quantity) FROM inventory_lot_allocations r WHERE r.source_allocation_id = a.id AND r.direction = 1), 0) AS restored_quantity
+    FROM inventory_lot_allocations a
+    WHERE a.order_id = ? AND a.product_id = ? AND ((a.variant_id IS NULL AND ? IS NULL) OR a.variant_id = ?) AND a.direction = -1
+    ORDER BY a.id ASC`).all(Number(orderId), snapshot.product_id, snapshot.variant_id, snapshot.variant_id);
+  for (const allocation of consumed) {
+    if (!remaining) break;
+    const available = Math.max(0, Number(allocation.quantity || 0) - Number(allocation.restored_quantity || 0));
+    const restored = Math.min(remaining, available);
+    if (!restored) continue;
+    db.prepare("UPDATE inventory_lots SET remaining_quantity = remaining_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(restored, allocation.lot_id);
+    allocations.push({ lot_id:Number(allocation.lot_id), quantity:restored, unit_cost:Number(allocation.unit_cost || 0), source_allocation_id:Number(allocation.id) });
+    remaining -= restored;
+  }
+  if (remaining) {
+    const now = new Date().toISOString();
+    const result = db.prepare(`INSERT INTO inventory_lots
+      (source_type, product_id, variant_id, original_quantity, remaining_quantity, unit_cost, received_at, created_at, updated_at)
+      VALUES ('return_adjustment', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
+        snapshot.product_id, snapshot.variant_id, remaining, remaining, moneyValue(snapshot.cost), now
+      );
+    allocations.push({ lot_id:Number(result.lastInsertRowid), quantity:remaining, unit_cost:moneyValue(snapshot.cost), source_allocation_id:null });
+  }
+  return allocations;
+}
+
+function saveInventoryLotAllocations(movementId, orderId, snapshot, direction, allocations = []) {
+  const insert = db.prepare(`INSERT INTO inventory_lot_allocations
+    (movement_id, lot_id, order_id, product_id, variant_id, quantity, direction, unit_cost, source_allocation_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`);
+  allocations.forEach((allocation) => insert.run(
+    movementId, allocation.lot_id, Number(orderId), snapshot.product_id, snapshot.variant_id,
+    allocation.quantity, direction, moneyValue(allocation.unit_cost), allocation.source_allocation_id || null
+  ));
+}
+
 function inventoryOrderTargets(order = {}) {
   const targets = [];
   asArray(order.items).forEach((item, index) => {
@@ -930,13 +1325,16 @@ function inventoryOrderTargets(order = {}) {
       const rawBundle = getRecord("bundles", item.bundle_id);
       const bundle = rawBundle ? normalizeBundlePayload(rawBundle) : null;
       if (!bundle) return;
-      if (bundle.use_own_stock) {
-        targets.push({ target_type:"bundle", bundle_id:Number(item.bundle_id), variant_id:null, quantity:Math.max(1, Number(item.quantity || 1)), line_key:lineKey });
+      const optionId = item.bundle_variant_id || item.variant_id || null;
+      const option = optionId ? bundle.bundle_variants.find((entry) => String(entry.id) === String(optionId)) : null;
+      const selectedBundle = option || bundle;
+      if (selectedBundle.use_own_stock) {
+        targets.push({ target_type:"bundle", bundle_id:Number(item.bundle_id), variant_id:option?.id || null, quantity:Math.max(1, Number(item.quantity || 1)), line_key:lineKey });
         return;
       }
       const components = asArray(item.components).length
         ? asArray(item.components)
-        : bundle.items.map(component => ({ ...component, quantity:Number(component.quantity || 1) * Math.max(1, Number(item.quantity || 1)) }));
+        : selectedBundle.items.map(component => ({ ...component, quantity:Number(component.quantity || 1) * Math.max(1, Number(item.quantity || 1)) }));
       components.forEach((component, componentIndex) => targets.push({
         target_type:"product", product_id:Number(component.product_id), variant_id:component.variant_id || null,
         quantity:Math.max(1, Number(component.quantity || 1)), line_key:`${lineKey}:component:${componentIndex}`
@@ -968,41 +1366,53 @@ const applyOrderInventoryTransaction = db.transaction((orderId, options = {}) =>
     if (existingMovement) { movements.push(existingMovement); continue; }
     let before = null;
     let after = null;
+    let inventorySnapshot = null;
+    let lotAllocations = [];
     if (target.target_type === "bundle") {
       const raw = getRecord("bundles", target.bundle_id);
       if (!raw) fail(`BUNDLE_${target.bundle_id}_NOT_FOUND`, 404);
       const bundle = normalizeBundlePayload(raw);
-      if (!bundle.use_own_stock || bundle.stock === null || bundle.stock === undefined) continue;
-      before = Math.max(0, Number(bundle.stock || 0));
+      const option = target.variant_id ? bundle.bundle_variants.find((entry) => String(entry.id) === String(target.variant_id)) : null;
+      const selectedBundle = option || bundle;
+      if (!selectedBundle.use_own_stock || selectedBundle.stock === null || selectedBundle.stock === undefined) continue;
+      before = Math.max(0, Number(selectedBundle.stock || 0));
       after = before + sign * target.quantity;
       if (after < 0) fail(`BUNDLE_${target.bundle_id}_OUT_OF_STOCK`, 409);
-      updateRecord("bundles", target.bundle_id, { stock:after });
+      if (option) updateRecord("bundles", target.bundle_id, { bundle_variants:bundle.bundle_variants.map((entry) => String(entry.id) === String(option.id) ? { ...entry, stock:after } : entry) });
+      else updateRecord("bundles", target.bundle_id, { stock:after });
     } else {
-      const raw = getRecord("products", target.product_id);
-      if (!raw) fail(`PRODUCT_${target.product_id}_NOT_FOUND`, 404);
-      const product = normalizeProductPayload(raw);
-      const variantIndex = target.variant_id ? product.variants.findIndex(variant => String(variant.id) === String(target.variant_id)) : -1;
-      if (target.variant_id && variantIndex < 0) fail(`PRODUCT_OPTION_${target.variant_id}_NOT_FOUND`, 404);
-      const variant = variantIndex >= 0 ? product.variants[variantIndex] : null;
-      const mode = variant ? variant.inventory_mode : product.inventory_mode;
+      inventorySnapshot = inventoryTargetSnapshot(target);
+      const mode = inventorySnapshot.inventory_mode;
       if (mode === "unlimited") continue;
       if (mode === "out_of_stock" && sign < 0) fail(`PRODUCT_${target.product_id}_OUT_OF_STOCK`, 409);
-      before = Math.max(0, Number((variant ? variant.stock : product.stock) || 0));
+      before = Math.max(0, Number(inventorySnapshot.stock || 0));
       after = before + sign * target.quantity;
       if (after < 0) fail(`PRODUCT_${target.product_id}_INSUFFICIENT_STOCK`, 409);
-      if (variant) product.variants[variantIndex] = { ...variant, inventory_mode:"tracked", stock:after, is_in_stock:after > 0, stock_status:after > 0 ? "in_stock" : "out_of_stock" };
-      else Object.assign(product, { inventory_mode:"tracked", stock:after, is_in_stock:after > 0, stock_status:after > 0 ? "in_stock" : "out_of_stock" });
-      updateRecord("products", target.product_id, product);
+      lotAllocations = sign < 0
+        ? consumeInventoryLots(inventorySnapshot, target.quantity, options.actor)
+        : restoreInventoryLots(inventorySnapshot, order.id, target.quantity);
+      updateInventoryTarget(inventorySnapshot, { stock:after, cost:inventoryAverageCost(inventorySnapshot, inventorySnapshot.cost) });
     }
+    const movementDetails = {
+      ...(options.details || {}),
+      ...(lotAllocations.length ? {
+        cost_allocations:lotAllocations.map((allocation) => ({ lot_id:allocation.lot_id, quantity:allocation.quantity, unit_cost:moneyValue(allocation.unit_cost) })),
+        cogs:moneyValue(lotAllocations.reduce((sum, allocation) => sum + Number(allocation.quantity || 0) * Number(allocation.unit_cost || 0), 0))
+      } : {})
+    };
     const result = db.prepare(`INSERT INTO inventory_movements (idempotency_key, order_id, target_type, product_id, bundle_id, variant_id, line_key, movement_type, quantity_delta, quantity_before, quantity_after, actor, source, details, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       idempotencyKey, Number(order.id), target.target_type, target.product_id || null, target.bundle_id || null, target.variant_id ? String(target.variant_id) : null,
-      target.line_key, String(options.movement_type), sign * target.quantity, before, after, String(options.actor || "system"), String(options.source || "order"), JSON.stringify(options.details || {}), now
+      target.line_key, String(options.movement_type), sign * target.quantity, before, after, String(options.actor || "system"), String(options.source || "order"), JSON.stringify(movementDetails), now
     );
+    if (inventorySnapshot && lotAllocations.length) saveInventoryLotAllocations(Number(result.lastInsertRowid), order.id, inventorySnapshot, sign, lotAllocations);
     movements.push(db.prepare("SELECT * FROM inventory_movements WHERE id = ?").get(result.lastInsertRowid));
   }
   const tracked = movements.length > 0;
   const patch = typeof options.order_patch === "function" ? options.order_patch(order, { movements, tracked, now }) : (options.order_patch || {});
-  updateRecord("orders", order.id, patch);
+  const inventoryCogs = sign < 0 ? moneyValue(movements.reduce((sum, movement) => {
+    try { return sum + Number(JSON.parse(movement.details || "{}").cogs || 0); } catch { return sum; }
+  }, 0)) : Number(order.inventory_cogs || 0);
+  updateRecord("orders", order.id, { ...patch, ...(sign < 0 ? { inventory_cogs:inventoryCogs, inventory_costing_method:"fifo" } : {}) });
   return { order:getRecord("orders", order.id), movements };
 });
 
@@ -1039,6 +1449,202 @@ function restockReturnedOrder(order, actor = "admin", returnReference = "full") 
 
 function inventoryMovementsForOrder(orderId) {
   return db.prepare("SELECT * FROM inventory_movements WHERE order_id = ? ORDER BY id DESC").all(Number(orderId)).map(row => ({ ...row, details:JSON.parse(row.details || "{}") }));
+}
+
+const inventoryReceiptCostModes = new Set(["unit_cost", "line_total", "invoice_total"]);
+const inventoryReceiptAllocationMethods = new Set(["quantity", "value"]);
+
+function inventoryReceiptNumber() {
+  const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const next = Number(db.prepare("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM inventory_receipts").get().next_id || 1);
+  return `GRN-${stamp}-${String(next).padStart(4, "0")}`;
+}
+
+function normalizedInventoryReceiptPayload(payload = {}) {
+  const costMode = inventoryReceiptCostModes.has(String(payload.cost_mode || "")) ? String(payload.cost_mode) : "unit_cost";
+  const allocationMethod = inventoryReceiptAllocationMethods.has(String(payload.allocation_method || "")) ? String(payload.allocation_method) : "quantity";
+  const seen = new Set();
+  const items = asArray(payload.items).map((item, index) => {
+    const productId = Number(item.product_id || 0);
+    const variantId = item.variant_id === null || item.variant_id === undefined || item.variant_id === "" ? null : String(item.variant_id);
+    const quantity = Math.max(0, Math.floor(Number(item.quantity || 0)));
+    if (!productId || !quantity) fail(`INVENTORY_RECEIPT_ITEM_${index + 1}_INVALID`, 422);
+    const key = `${productId}:${variantId || "base"}`;
+    if (seen.has(key)) fail("INVENTORY_RECEIPT_DUPLICATE_ITEM", 422);
+    seen.add(key);
+    const snapshot = inventoryTargetSnapshot({ product_id:productId, variant_id:variantId });
+    return {
+      product_id:productId,
+      variant_id:variantId,
+      quantity,
+      entered_cost:Math.max(0, moneyValue(item.entered_cost ?? item.unit_cost ?? item.cost ?? 0)),
+      product_name:snapshot.name,
+      variant_label:snapshot.variant_label,
+      sku:snapshot.sku
+    };
+  });
+  if (!items.length) fail("INVENTORY_RECEIPT_ITEMS_REQUIRED", 422);
+  return {
+    supplier_name:String(payload.supplier_name || "").trim(),
+    invoice_number:String(payload.invoice_number || "").trim(),
+    currency:String(payload.currency || "SAR").trim().toUpperCase().slice(0, 8) || "SAR",
+    cost_mode:costMode,
+    allocation_method:allocationMethod,
+    merchandise_total:Math.max(0, moneyValue(payload.merchandise_total || 0)),
+    additional_cost:Math.max(0, moneyValue(payload.additional_cost || 0)),
+    notes:String(payload.notes || "").trim(),
+    items
+  };
+}
+
+function inventoryReceiptView(receiptOrId) {
+  const receipt = typeof receiptOrId === "object" ? receiptOrId : db.prepare("SELECT * FROM inventory_receipts WHERE id = ?").get(Number(receiptOrId));
+  if (!receipt) return null;
+  const items = db.prepare(`SELECT item.*,
+      lot.id AS lot_id, lot.original_quantity AS lot_original_quantity, lot.remaining_quantity AS lot_remaining_quantity,
+      lot.unit_cost AS lot_unit_cost, lot.is_reversed AS lot_is_reversed
+    FROM inventory_receipt_items item
+    LEFT JOIN inventory_lots lot ON lot.receipt_item_id = item.id
+    WHERE item.receipt_id = ? ORDER BY item.id`).all(receipt.id).map((item) => ({
+      ...item,
+      consumed_quantity:item.lot_id ? Math.max(0, Number(item.lot_original_quantity || 0) - Number(item.lot_remaining_quantity || 0)) : 0
+    }));
+  return { ...receipt, items, item_count:items.length, total_quantity:items.reduce((sum, item) => sum + Number(item.quantity || 0), 0) };
+}
+
+const saveInventoryReceiptDraft = db.transaction((payload, actor, receiptId = null) => {
+  const normalized = normalizedInventoryReceiptPayload(payload);
+  let id = Number(receiptId || 0);
+  if (id) {
+    const current = db.prepare("SELECT * FROM inventory_receipts WHERE id = ?").get(id);
+    if (!current) fail("INVENTORY_RECEIPT_NOT_FOUND", 404);
+    if (current.status !== "draft") fail("INVENTORY_RECEIPT_NOT_EDITABLE", 409);
+    db.prepare(`UPDATE inventory_receipts SET supplier_name=?, invoice_number=?, currency=?, cost_mode=?, allocation_method=?,
+      merchandise_total=?, additional_cost=?, grand_total=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+        normalized.supplier_name, normalized.invoice_number, normalized.currency, normalized.cost_mode, normalized.allocation_method,
+        normalized.merchandise_total, normalized.additional_cost, moneyValue(normalized.merchandise_total + normalized.additional_cost), normalized.notes, id
+      );
+    db.prepare("DELETE FROM inventory_receipt_items WHERE receipt_id = ?").run(id);
+  } else {
+    const result = db.prepare(`INSERT INTO inventory_receipts
+      (receipt_number, status, supplier_name, invoice_number, currency, cost_mode, allocation_method, merchandise_total, additional_cost, grand_total, notes, created_by)
+      VALUES (?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        inventoryReceiptNumber(), normalized.supplier_name, normalized.invoice_number, normalized.currency, normalized.cost_mode,
+        normalized.allocation_method, normalized.merchandise_total, normalized.additional_cost,
+        moneyValue(normalized.merchandise_total + normalized.additional_cost), normalized.notes, String(actor || "admin")
+      );
+    id = Number(result.lastInsertRowid);
+  }
+  const insertItem = db.prepare(`INSERT INTO inventory_receipt_items
+    (receipt_id, product_id, variant_id, product_name, variant_label, sku, quantity, entered_cost)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  normalized.items.forEach((item) => insertItem.run(id, item.product_id, item.variant_id, item.product_name, item.variant_label, item.sku, item.quantity, item.entered_cost));
+  return inventoryReceiptView(id);
+});
+
+function proportionalAllocations(total, weights = []) {
+  const normalizedTotal = Math.max(0, moneyValue(total));
+  const weightTotal = weights.reduce((sum, weight) => sum + Math.max(0, Number(weight || 0)), 0);
+  let allocated = 0;
+  return weights.map((weight, index) => {
+    if (index === weights.length - 1) return moneyValue(normalizedTotal - allocated);
+    const share = weightTotal ? moneyValue(normalizedTotal * Math.max(0, Number(weight || 0)) / weightTotal) : moneyValue(normalizedTotal / Math.max(1, weights.length));
+    allocated = moneyValue(allocated + share);
+    return share;
+  });
+}
+
+const receiveInventoryReceipt = db.transaction((receiptId, actor) => {
+  const receipt = db.prepare("SELECT * FROM inventory_receipts WHERE id = ?").get(Number(receiptId));
+  if (!receipt) fail("INVENTORY_RECEIPT_NOT_FOUND", 404);
+  if (receipt.status === "received") return inventoryReceiptView(receipt);
+  if (receipt.status !== "draft") fail("INVENTORY_RECEIPT_CANNOT_BE_RECEIVED", 409);
+  const items = db.prepare("SELECT * FROM inventory_receipt_items WHERE receipt_id = ? ORDER BY id").all(receipt.id);
+  if (!items.length) fail("INVENTORY_RECEIPT_ITEMS_REQUIRED", 422);
+  const baseTotals = receipt.cost_mode === "invoice_total"
+    ? proportionalAllocations(receipt.merchandise_total, items.map((item) => Number(item.quantity || 0)))
+    : items.map((item) => moneyValue(receipt.cost_mode === "line_total" ? item.entered_cost : Number(item.entered_cost || 0) * Number(item.quantity || 0)));
+  const merchandiseTotal = moneyValue(baseTotals.reduce((sum, value) => sum + value, 0));
+  if (receipt.cost_mode === "invoice_total" && merchandiseTotal <= 0) fail("INVENTORY_RECEIPT_TOTAL_REQUIRED", 422);
+  const extraWeights = receipt.allocation_method === "value" && merchandiseTotal > 0 ? baseTotals : items.map((item) => Number(item.quantity || 0));
+  const extraAllocations = proportionalAllocations(receipt.additional_cost, extraWeights);
+  const receivedAt = new Date().toISOString();
+  items.forEach((item, index) => {
+    const snapshot = inventoryTargetSnapshot(item);
+    const stockBefore = snapshot.inventory_mode === "unlimited" ? 0 : Math.max(0, Number(snapshot.stock || 0));
+    ensureInventoryLotCoverage(snapshot, actor);
+    const landedUnitCost = moneyValue((baseTotals[index] + extraAllocations[index]) / Number(item.quantity || 1));
+    const lotResult = db.prepare(`INSERT INTO inventory_lots
+      (receipt_id, receipt_item_id, source_type, product_id, variant_id, original_quantity, remaining_quantity, unit_cost, received_at, created_at, updated_at)
+      VALUES (?, ?, 'receipt', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`).run(
+        receipt.id, item.id, item.product_id, item.variant_id, item.quantity, item.quantity, landedUnitCost, receivedAt
+      );
+    const stockAfter = stockBefore + Number(item.quantity || 0);
+    const averageCost = inventoryAverageCost(snapshot, landedUnitCost);
+    updateInventoryTarget(snapshot, { stock:stockAfter, cost:averageCost });
+    db.prepare(`UPDATE inventory_receipt_items SET merchandise_total=?, allocated_extra_cost=?, landed_unit_cost=?, previous_unit_cost=?,
+      resulting_average_cost=?, stock_before=?, stock_after=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+        baseTotals[index], extraAllocations[index], landedUnitCost, moneyValue(snapshot.cost), averageCost, stockBefore, stockAfter, item.id
+      );
+    db.prepare(`INSERT INTO inventory_movements
+      (idempotency_key, receipt_id, target_type, product_id, variant_id, line_key, movement_type, quantity_delta, quantity_before, quantity_after, actor, source, details, created_at)
+      VALUES (?, ?, 'product', ?, ?, ?, 'inventory_receipt', ?, ?, ?, ?, 'inventory_receipt', ?, ?)`).run(
+        `receipt:${receipt.id}:item:${item.id}`, receipt.id, item.product_id, item.variant_id, `receipt:${receipt.id}:${item.id}`,
+        item.quantity, stockBefore, stockAfter, String(actor || "admin"), JSON.stringify({ lot_id:Number(lotResult.lastInsertRowid), landed_unit_cost:landedUnitCost, previous_unit_cost:moneyValue(snapshot.cost), resulting_average_cost:averageCost }), receivedAt
+      );
+  });
+  db.prepare(`UPDATE inventory_receipts SET status='received', merchandise_total=?, grand_total=?, received_by=?, received_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(
+    merchandiseTotal, moneyValue(merchandiseTotal + Number(receipt.additional_cost || 0)), String(actor || "admin"), receivedAt, receipt.id
+  );
+  return inventoryReceiptView(receipt.id);
+});
+
+const reverseInventoryReceipt = db.transaction((receiptId, actor, reason = "") => {
+  const receipt = inventoryReceiptView(receiptId);
+  if (!receipt) fail("INVENTORY_RECEIPT_NOT_FOUND", 404);
+  if (receipt.status === "reversed") return receipt;
+  if (receipt.status !== "received") fail("INVENTORY_RECEIPT_NOT_REVERSIBLE", 409);
+  if (receipt.items.some((item) => Number(item.consumed_quantity || 0) > 0)) fail("INVENTORY_RECEIPT_HAS_CONSUMED_STOCK", 409);
+  const now = new Date().toISOString();
+  receipt.items.forEach((item) => {
+    const snapshot = inventoryTargetSnapshot(item);
+    const before = Math.max(0, Number(snapshot.stock || 0));
+    const after = before - Number(item.quantity || 0);
+    if (after < 0) fail("INVENTORY_RECEIPT_REVERSAL_STOCK_CONFLICT", 409);
+    db.prepare("UPDATE inventory_lots SET remaining_quantity=0, is_reversed=1, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(item.lot_id);
+    const averageCost = inventoryAverageCost(snapshot, snapshot.cost);
+    updateInventoryTarget(snapshot, { stock:after, cost:averageCost });
+    db.prepare(`INSERT INTO inventory_movements
+      (idempotency_key, receipt_id, target_type, product_id, variant_id, line_key, movement_type, quantity_delta, quantity_before, quantity_after, actor, source, details, created_at)
+      VALUES (?, ?, 'product', ?, ?, ?, 'inventory_receipt_reversed', ?, ?, ?, ?, 'inventory_receipt', ?, ?)`).run(
+        `receipt:${receipt.id}:reverse:${item.id}`, receipt.id, item.product_id, item.variant_id, `receipt:${receipt.id}:${item.id}`,
+        -Number(item.quantity || 0), before, after, String(actor || "admin"), JSON.stringify({ lot_id:item.lot_id, reason:String(reason || "") }), now
+      );
+  });
+  db.prepare("UPDATE inventory_receipts SET status='reversed', reversed_by=?, reversed_at=?, reversal_reason=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(String(actor || "admin"), now, String(reason || ""), receipt.id);
+  return inventoryReceiptView(receipt.id);
+});
+
+function inventoryOverview() {
+  const products = entityRows("products").map(normalizeProductPayload);
+  const targets = products.flatMap((product) => [
+    ...(!product.variants.length || product.inventory_mode !== "unlimited"
+      ? [{ product, variant:null, mode:product.inventory_mode, stock:product.stock, cost:product.cost, product_id:product.id, variant_id:null }]
+      : []),
+    ...product.variants.map((variant) => ({ product, variant, mode:variant.inventory_mode, stock:variant.stock, cost:variant.cost, product_id:product.id, variant_id:variant.id }))
+  ]);
+  const tracked = targets.filter((target) => target.mode !== "unlimited");
+  const stockValue = tracked.reduce((sum, target) => sum + Math.max(0, Number(target.stock || 0)) * Math.max(0, Number(target.cost || 0)), 0);
+  const receipts = db.prepare("SELECT status, COUNT(*) AS count FROM inventory_receipts GROUP BY status").all();
+  return {
+    total_targets:targets.length,
+    tracked_targets:tracked.length,
+    out_of_stock:tracked.filter((target) => Number(target.stock || 0) <= 0).length,
+    low_stock:tracked.filter((target) => Number(target.stock || 0) > 0 && Number(target.stock || 0) <= 5).length,
+    available_units:tracked.reduce((sum, target) => sum + Math.max(0, Number(target.stock || 0)), 0),
+    stock_value:moneyValue(stockValue),
+    receipts:Object.fromEntries(receipts.map((row) => [row.status, Number(row.count || 0)]))
+  };
 }
 
 function orderWasPickedUp(order = {}, shipment = orderShipment(order)) {
@@ -1276,6 +1882,7 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
   const incomingSecret = String(payload.imile?.secret_key || "").trim();
   const incomingWebhookToken = String(payload.imile?.webhook_token || "").trim();
   const incomingOmsPassword = String(payload.oms_connector?.password || "");
+  const resetOmsAuthCircuit = Boolean(incomingOmsPassword) || payload.oms_connector?.resume_sync === true || payload.oms_connector?.resume_sync === "true";
   const incomingSplApiKey = String(payload.spl_address?.api_key || "").trim();
   const incomingOtoRefreshToken = String(payload.oto?.refresh_token || "").trim();
   const incomingOtoWebhookSecret = String(payload.oto?.webhook_secret || "").trim();
@@ -1450,7 +2057,14 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
       lookback_days: Math.min(90, Math.max(7, Number(requestedOms.lookback_days || 30))),
       sync_overlap_days: Math.min(7, Math.max(1, Number(requestedOms.sync_overlap_days || 2))),
       sync_interval_minutes: Math.min(1440, Math.max(15, Number(requestedOms.sync_interval_minutes || 15))),
-      last_error: String(requestedOms.last_error || "").slice(0, 500)
+      sync_paused: resetOmsAuthCircuit ? false : (requestedOms.sync_paused === true || requestedOms.sync_paused === "true" || isImileOmsForcedOfflineError(requestedOms.last_error)),
+      pause_reason: resetOmsAuthCircuit ? "" : String(requestedOms.pause_reason || (isImileOmsForcedOfflineError(requestedOms.last_error) ? "forced_offline" : "")).slice(0, 120),
+      paused_at: resetOmsAuthCircuit ? null : (requestedOms.paused_at || (isImileOmsForcedOfflineError(requestedOms.last_error) ? requestedOms.last_sync_at || current.updated_at || null : null)),
+      auth_failure_count: resetOmsAuthCircuit ? 0 : Math.max(0, Number(requestedOms.auth_failure_count || (isImileOmsForcedOfflineError(requestedOms.last_error) ? 1 : 0))),
+      max_auth_failures: Math.min(10, Math.max(1, Number(requestedOms.max_auth_failures || 3))),
+      last_auth_failure_at: resetOmsAuthCircuit ? null : (requestedOms.last_auth_failure_at || null),
+      resume_sync: undefined,
+      last_error: resetOmsAuthCircuit ? "" : String(requestedOms.last_error || "").slice(0, 500)
     },
     customer_pricing: {
       strategy,
@@ -2245,6 +2859,65 @@ function imileOmsPagePath(connector, route = "account/feeDetail") {
   return `${imileOmsBaseUrl(connector)}/#/${route}`;
 }
 
+function imileOmsErrorText(error) {
+  return String(error?.message || error || "").trim();
+}
+
+function isImileOmsForcedOfflineError(error) {
+  const message = imileOmsErrorText(error).toLowerCase();
+  return message.includes("forced offline") || message.includes("login in other places") || message.includes("account is stolen");
+}
+
+function isImileOmsAuthenticationError(error) {
+  const message = imileOmsErrorText(error).toLowerCase();
+  return isImileOmsForcedOfflineError(error)
+    || message.includes("imile_oms_auth_failed")
+    || message.includes("unauthorized")
+    || message.includes("authentication")
+    || message.includes("invalid password")
+    || message.includes("incorrect password")
+    || message.includes("username or password")
+    || message.includes("login failed");
+}
+
+function recordImileOmsFailure(settings, error, attemptedAt = new Date().toISOString()) {
+  const message = imileOmsErrorText(error) || "IMILE_OMS_SYNC_FAILED";
+  const connector = settings.oms_connector || {};
+  const authFailure = isImileOmsAuthenticationError(error);
+  const failureCount = authFailure ? Math.max(0, Number(connector.auth_failure_count || 0)) + 1 : 0;
+  const maxFailures = Math.min(10, Math.max(1, Number(connector.max_auth_failures || 3)));
+  const forcedOffline = isImileOmsForcedOfflineError(error);
+  const syncPaused = forcedOffline || (authFailure && failureCount >= maxFailures);
+  const updated = normalizeShippingIntegrations({
+    ...settings,
+    oms_connector: {
+      ...connector,
+      last_sync_at: attemptedAt,
+      last_error: message,
+      auth_failure_count: failureCount,
+      max_auth_failures: maxFailures,
+      last_auth_failure_at: authFailure ? attemptedAt : connector.last_auth_failure_at || null,
+      sync_paused: syncPaused || connector.sync_paused === true,
+      pause_reason: syncPaused ? (forcedOffline ? "forced_offline" : "authentication_retries_exhausted") : connector.pause_reason || "",
+      paused_at: syncPaused ? attemptedAt : connector.paused_at || null
+    },
+    updated_at: attemptedAt
+  });
+  setSetting("shippingIntegrations", updated);
+  if (syncPaused) imileOmsTokenCache.clear();
+  return updated;
+}
+
+function imileOmsSyncBlockReason(settings = normalizeShippingIntegrations(), options = {}) {
+  const connector = settings.oms_connector || {};
+  if (settings.imile?.is_enabled !== true) return "imile_integration_disabled";
+  if (connector.is_enabled !== true) return "oms_connector_disabled";
+  if (connector.sync_paused === true) return connector.pause_reason || "authentication_paused";
+  if (!connector.username || !decryptIntegrationSecret(connector.password_encrypted)) return "oms_credentials_missing";
+  if (options.automatic === true && connector.auto_sync_on_open === false) return "automatic_sync_disabled";
+  return "";
+}
+
 function imileOmsFrontSec(user = {}) {
   return {
     userCode: user.userCode || user.username || "",
@@ -2354,6 +3027,258 @@ async function imileOmsFormRequest(pathname, payload, allowRetry = true) {
   return result.resultObject || result.data || {};
 }
 
+function zipEntry(buffer, entryName) {
+  let end = buffer.length - 22;
+  while (end >= 0 && buffer.readUInt32LE(end) !== 0x06054b50) end -= 1;
+  if (end < 0) fail("IMILE_EXPORT_INVALID_ZIP", 502);
+  const entries = buffer.readUInt16LE(end + 10);
+  let offset = buffer.readUInt32LE(end + 16);
+  for (let index = 0; index < entries; index += 1) {
+    if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localOffset = buffer.readUInt32LE(offset + 42);
+    const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    if (name === entryName) {
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = buffer.subarray(dataOffset, dataOffset + compressedSize);
+      if (method === 0) return compressed;
+      if (method === 8) return zlib.inflateRawSync(compressed);
+      fail("IMILE_EXPORT_UNSUPPORTED_COMPRESSION", 502);
+    }
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  fail(`IMILE_EXPORT_ENTRY_MISSING: ${entryName}`, 502);
+}
+
+function decodeSpreadsheetXml(value = "") {
+  return String(value)
+    .replaceAll("&#xa0;", " ")
+    .replaceAll("&#10;", "\n")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)));
+}
+
+function spreadsheetColumnIndex(reference = "A1") {
+  const letters = String(reference).match(/^[A-Z]+/)?.[0] || "A";
+  return [...letters].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+function parseImileFeeExport(buffer) {
+  const xml = zipEntry(buffer, "xl/worksheets/sheet1.xml").toString("utf8");
+  const rows = [...xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)].map((match) => {
+    const cells = [];
+    for (const cell of match[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const reference = cell[1].match(/\br="([A-Z]+\d+)"/)?.[1] || "A1";
+      const inline = cell[2].match(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/)?.[1];
+      const numeric = cell[2].match(/<v>([\s\S]*?)<\/v>/)?.[1];
+      cells[spreadsheetColumnIndex(reference)] = decodeSpreadsheetXml(inline ?? numeric ?? "").trim();
+    }
+    return cells;
+  });
+  const headers = rows.shift() || [];
+  return rows.map((cells) => Object.fromEntries(headers.map((header, index) => [String(header).replace(/\s+/g, " ").trim(), cells[index] ?? ""])));
+}
+
+const imileExportFeeColumns = {
+  "COD Service Fee": "COD service fee",
+  "POS Fee": "POS fee",
+  "Delivery Fee": "Delivery fee",
+  "Customs Clearance": "Customs clearance",
+  "Customs Duty": "Customs duty",
+  "Import VAT": "Import VAT",
+  "Packing Fee": "Packing fee",
+  "Order Storage Fee": "Order storage fee",
+  "Stock Storage Fee": "Stock storage fee",
+  "Bulk First Mile Fee": "Bulk first mile fee",
+  "First Mile Fee": "First mile fee",
+  "Pick Up Fee": "Pick up fee",
+  "Handing Fee": "Handling fee",
+  "Unpacking Fee": "Unpacking fee",
+  "Labeling Fee": "Labeling fee",
+  Fine: "Fine",
+  "Covid Surcharge Fee": "Covid surcharge fee",
+  Reparation: "Reparation",
+  "Postal Fee": "Postal fee",
+  "VAT/Tax Expense": "VAT"
+};
+
+function normalizeImileExportRow(row = {}, fetchedAt = new Date().toISOString()) {
+  const feeComponents = Object.entries(imileExportFeeColumns).map(([column, name]) => ({
+    name,
+    amount: Number(row[column] || 0),
+    currency: String(row.Currency || "SAR")
+  })).filter((item) => item.amount !== 0);
+  const payload = {
+    provider: "imile",
+    waybill_no: String(row["Waybill No."] || ""),
+    client_order_no: String(row["Reference No."] || "").replace(/\.0$/, ""),
+    bill_code: String(row["Billing No."] || ""),
+    bill_date: String(row["Billing Date"] || "").slice(0, 10),
+    bill_type: String(row["Billing Type"] || ""),
+    status_label: String(row.Status || ""),
+    billable_weight: Number(row["Chargeable Weight"] || 0),
+    declared_value: Number(row["Declared value"] || 0),
+    cod_collected: Number(row["COD Collected"] || 0),
+    total_fees: Number(row["Total Fees"] || 0),
+    currency: String(row.Currency || "SAR"),
+    fee_components: feeComponents,
+    source: "imile_official_fee_export"
+  };
+  return { ...payload, snapshot_key: stableHash(payload), fetched_at: fetchedAt };
+}
+
+function upsertImileExportCorrections(rows = [], fetchedAt = new Date().toISOString()) {
+  const existing = new Map(entityRows("shipping_fee_movements").map((row) => [String(row.movement_key || ""), row]));
+  let inserted = 0;
+  let updated = 0;
+  rows.forEach((row) => {
+    if (!row.waybill_no || !/fee/i.test(String(row.bill_type || ""))) return;
+    row.fee_components.filter((fee) => Number(fee.amount || 0) < 0).forEach((fee) => {
+      const movementKey = `${stableHash({
+        provider: "imile",
+        source: "imile_official_fee_export",
+        waybill_no: row.waybill_no,
+        bill_code: row.bill_code,
+        bill_date: row.bill_date,
+        fee_name: fee.name,
+        amount: Number(fee.amount || 0),
+        currency: fee.currency || row.currency || "SAR"
+      })}:1`;
+      const movement = {
+        provider: "imile",
+        movement_kind: "fee",
+        movement_key: movementKey,
+        waybill_no: row.waybill_no,
+        client_order_no: row.client_order_no,
+        external_order_no: "",
+        fee_name: fee.name,
+        amount: Number(Number(fee.amount || 0).toFixed(3)),
+        currency: fee.currency || row.currency || "SAR",
+        bill_code: row.bill_code,
+        bill_date: row.bill_date,
+        movement_date: row.bill_date,
+        provider_movement_id: "",
+        provider_row_id: row.snapshot_key,
+        source: "imile_official_fee_export",
+        provisional: false,
+        direction: "correction",
+        raw: row,
+        last_seen_at: fetchedAt
+      };
+      const current = existing.get(movementKey);
+      if (current) {
+        updateRecord("shipping_fee_movements", current.id, { ...movement, first_seen_at: current.first_seen_at || current.created_at });
+        updated += 1;
+      } else {
+        const saved = createRecord("shipping_fee_movements", { ...movement, first_seen_at: fetchedAt });
+        existing.set(movementKey, saved);
+        inserted += 1;
+      }
+    });
+  });
+  return { inserted, updated };
+}
+
+function refreshImileShipmentsFromMovements(waybillNumbers = [], fetchedAt = new Date().toISOString()) {
+  const waybills = new Set(waybillNumbers.map(String).filter(Boolean));
+  let updated = 0;
+  entityRows("shipping_shipments").filter((row) => row.provider === "imile" && waybills.has(String(row.waybill_no || ""))).forEach((shipment) => {
+    const summary = imileMovementSummary(shipment.waybill_no);
+    updateRecord("shipping_shipments", shipment.id, {
+      carrier_actual_cost: summary.fee_breakdown.length ? summary.net_fee_total : shipment.carrier_actual_cost,
+      carrier_gross_charge_total: summary.gross_charge_total,
+      carrier_correction_total: summary.correction_total,
+      carrier_fee_movement_count: summary.fee_breakdown.length,
+      carrier_fee_breakdown: summary.fee_breakdown.length ? summary.fee_breakdown : shipment.carrier_fee_breakdown,
+      carrier_bill_numbers: [...new Set([...(shipment.carrier_bill_numbers || []), ...summary.bill_numbers])],
+      cost_source: summary.fee_breakdown.length ? "imile_fee_movements" : shipment.cost_source,
+      cost_recorded_at: summary.fee_breakdown.length ? fetchedAt : shipment.cost_recorded_at,
+      last_seen_at: fetchedAt
+    });
+    updated += 1;
+  });
+  return updated;
+}
+
+async function syncImileOfficialFeeExport(dateFrom, dateTo, fetchedAt = new Date().toISOString()) {
+  const settings = normalizeShippingIntegrations();
+  const session = await imileOmsLogin(settings);
+  const connector = settings.oms_connector;
+  const created = await imileOmsFormRequest("/ipep/job/add_export", {
+    titles: "",
+    jobType: 1,
+    bizType: 19037,
+    jobName: `SITEYFY fee audit ${dateFrom} ${dateTo}`,
+    totalCount: 0,
+    queryContent: JSON.stringify({ timeSearchType: 1, startTime: `${dateFrom} 00:00:00`, endTime: `${dateTo} 23:59:59` })
+  });
+  const jobId = String(created?.jobId || created || "");
+  if (!jobId) fail("IMILE_EXPORT_JOB_NOT_CREATED", 502);
+  let job = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const jobs = await imileOmsFormRequest("/ipep/job/get_list", {
+      bizType: 19037,
+      jobType: 1,
+      userCode: session.user?.userCode || session.user?.username || connector.username,
+      moduleId: 10023
+    });
+    job = (Array.isArray(jobs) ? jobs : []).find((entry) => String(entry.jobId) === jobId) || null;
+    if (job && [2, 9].includes(Number(job.excelStatus))) break;
+  }
+  if (!job || Number(job.excelStatus) !== 9) fail(`IMILE_EXPORT_JOB_FAILED: ${job?.errorMsg || "timeout"}`, 502);
+  const fileKey = String(job.mergeOutFilePath || job.outFilePath || "");
+  const fileUrl = await imileOmsFormRequest("/ipep/oss/get_url_by_file_key", { fileKey, bucketType: 1 });
+  if (!/^https?:\/\//i.test(String(fileUrl))) fail("IMILE_EXPORT_DOWNLOAD_URL_MISSING", 502);
+  const response = await fetch(String(fileUrl), { signal: AbortSignal.timeout(30000) });
+  if (!response.ok) fail(`IMILE_EXPORT_DOWNLOAD_FAILED: ${response.status}`, 502);
+  const exportRows = parseImileFeeExport(Buffer.from(await response.arrayBuffer())).map((row) => normalizeImileExportRow(row, fetchedAt));
+  const existing = new Map(entityRows("shipping_fee_export_rows").map((row) => [String(row.snapshot_key || ""), row]));
+  let inserted = 0;
+  let seen = 0;
+  exportRows.forEach((row) => {
+    const current = existing.get(row.snapshot_key);
+    if (current) {
+      updateRecord("shipping_fee_export_rows", current.id, { ...row, first_seen_at: current.first_seen_at || current.created_at, last_seen_at: fetchedAt });
+      seen += 1;
+    } else {
+      const saved = createRecord("shipping_fee_export_rows", { ...row, first_seen_at: fetchedAt, last_seen_at: fetchedAt });
+      existing.set(row.snapshot_key, saved);
+      inserted += 1;
+    }
+  });
+  const correctionRows = exportRows.filter((row) => row.fee_components.some((fee) => fee.amount < 0));
+  const corrections = upsertImileExportCorrections(correctionRows, fetchedAt);
+  const refreshedShipments = refreshImileShipmentsFromMovements(correctionRows.map((row) => row.waybill_no), fetchedAt);
+  const run = createRecord("shipping_fee_export_runs", {
+    provider: "imile",
+    source: "imile_official_fee_export",
+    range_start: dateFrom,
+    range_end: dateTo,
+    provider_job_id: jobId,
+    provider_file_name: String(job.fileName || ""),
+    row_count: exportRows.length,
+    inserted_count: inserted,
+    existing_count: seen,
+    negative_row_count: exportRows.filter((row) => row.total_fees < 0 || row.fee_components.some((fee) => fee.amount < 0)).length,
+    correction_movements_inserted: corrections.inserted,
+    correction_movements_updated: corrections.updated,
+    refreshed_shipments: refreshedShipments,
+    fetched_at: fetchedAt
+  });
+  return { run, row_count: exportRows.length, inserted, existing: seen, corrections, refreshed_shipments: refreshedShipments };
+}
+
 function dateInRiyadh(date = new Date()) {
   return new Date(date.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -2383,6 +3308,227 @@ function imileOmsFeeBreakdown(value) {
   }));
 }
 
+function stableHash(value) {
+  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function imileMovementDate(row = {}, item = {}) {
+  return String(item.billDate || item.bill_date || row.feeUpdateDate || row.feeCreateDate || row.finishDate || row.createDate || "");
+}
+
+function imileFeeMovementRows(rows = [], fetchedAt = new Date().toISOString(), source = "imile_oms_fee_report") {
+  const occurrences = new Map();
+  const movements = [];
+  rows.forEach((row) => {
+    const waybillNo = String(row.waybillNo || row.billNo || "");
+    const rowIdentity = String(row.id || row.feeId || row.detailId || row.orderNo || stableHash({
+      waybill_no: waybillNo,
+      client_no: row.clientNo || "",
+      fee_created_at: row.feeCreateDate || "",
+      fee_updated_at: row.feeUpdateDate || "",
+      finished_at: row.finishDate || "",
+      created_at: row.createDate || ""
+    }));
+    const append = (kind, value) => {
+      const items = Array.isArray(value?.amountDTOS) ? value.amountDTOS : [];
+      items.forEach((item, itemIndex) => {
+        const amount = Number(item.amount || 0);
+        const base = {
+          provider: "imile",
+          movement_kind: kind,
+          waybill_no: waybillNo,
+          client_order_no: String(row.clientNo || ""),
+          external_order_no: String(row.orderNo || ""),
+          fee_name: String(item.feeTypeName || item.billTypeDesc || item.name || (kind === "collection" ? "COD collection" : "Fee")),
+          amount: Number(amount.toFixed(3)),
+          currency: String(item.currency || "SAR"),
+          bill_code: String(item.billCode || item.bill_code || ""),
+          bill_date: String(item.billDate || item.bill_date || ""),
+          movement_date: imileMovementDate(row, item),
+          provider_movement_id: String(item.id || item.movement_key || item.detailId || item.feeId || item.billDetailId || item.serialNo || ""),
+          provider_row_id: rowIdentity,
+          source,
+          provisional: source === "historical_snapshot_backfill",
+          raw: item
+        };
+        const baseKey = stableHash({
+          provider: base.provider,
+          kind,
+          waybill_no: waybillNo,
+          provider_movement_id: base.provider_movement_id,
+          provider_row_id: rowIdentity,
+          fee_name: base.fee_name,
+          amount: base.amount,
+          currency: base.currency,
+          bill_code: base.bill_code,
+          bill_date: base.bill_date,
+          movement_date: base.movement_date,
+          item_index: base.provider_movement_id ? undefined : itemIndex
+        });
+        const occurrence = Number(occurrences.get(baseKey) || 0) + 1;
+        occurrences.set(baseKey, occurrence);
+        movements.push({
+          ...base,
+          movement_key: `${baseKey}:${occurrence}`,
+          direction: amount < 0 ? "correction" : amount > 0 ? "charge" : "zero",
+          first_seen_at: fetchedAt,
+          last_seen_at: fetchedAt
+        });
+      });
+    };
+    append("fee", row.expendAmount);
+    append("collection", row.revenueAmount);
+  });
+  return movements;
+}
+
+function upsertImileFeeMovements(rows = [], fetchedAt = new Date().toISOString(), source = "imile_oms_fee_report") {
+  if (source !== "historical_snapshot_backfill") {
+    const fetchedWaybills = new Set(rows.map((row) => String(row.waybillNo || row.billNo || "")).filter(Boolean));
+    const provisional = entityRows("shipping_fee_movements").filter((row) => row.provisional === true && fetchedWaybills.has(String(row.waybill_no || "")));
+    const remove = db.prepare("UPDATE records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE entity = 'shipping_fee_movements' AND id = ?");
+    const removeMany = db.transaction((ids) => ids.forEach((id) => remove.run(id)));
+    if (provisional.length) removeMany(provisional.map((row) => row.id));
+  }
+  const existing = entityRows("shipping_fee_movements");
+  const byKey = new Map(existing.map((row) => [String(row.movement_key || ""), row]));
+  let inserted = 0;
+  let updated = 0;
+  imileFeeMovementRows(rows, fetchedAt, source).forEach((movement) => {
+    const current = byKey.get(movement.movement_key);
+    if (current) {
+      updateRecord("shipping_fee_movements", current.id, { ...movement, first_seen_at: current.first_seen_at || current.created_at, last_seen_at: fetchedAt });
+      updated += 1;
+    } else {
+      const saved = createRecord("shipping_fee_movements", movement);
+      byKey.set(movement.movement_key, saved);
+      inserted += 1;
+    }
+  });
+  return { inserted, updated, total: inserted + updated };
+}
+
+function imileMovementSummary(waybillNo, movements = entityRows("shipping_fee_movements")) {
+  const rows = movements.filter((row) => row.provider === "imile" && String(row.waybill_no || "") === String(waybillNo || ""));
+  const fees = rows.filter((row) => row.movement_kind === "fee");
+  const collections = rows.filter((row) => row.movement_kind === "collection");
+  const sum = (items) => Number(items.reduce((total, row) => total + Number(row.amount || 0), 0).toFixed(3));
+  const chargeTotal = sum(fees.filter((row) => Number(row.amount || 0) > 0));
+  const correctionTotal = Math.abs(sum(fees.filter((row) => Number(row.amount || 0) < 0)));
+  const feeBreakdown = fees.map((row) => ({
+    id: row.id,
+    movement_key: row.movement_key,
+    name: row.fee_name,
+    amount: Number(row.amount || 0),
+    currency: row.currency || "SAR",
+    bill_code: row.bill_code || "",
+    bill_date: row.bill_date || "",
+    movement_date: row.movement_date || "",
+    direction: row.direction || (Number(row.amount || 0) < 0 ? "correction" : "charge"),
+    source: row.source || "imile_oms_fee_report"
+  }));
+  return {
+    movements: rows,
+    fee_breakdown: feeBreakdown,
+    net_fee_total: sum(fees),
+    gross_charge_total: chargeTotal,
+    correction_total: Number(correctionTotal.toFixed(3)),
+    collection_total: sum(collections),
+    bill_numbers: [...new Set(rows.map((row) => String(row.bill_code || "")).filter(Boolean))],
+    latest_movement_at: rows.map((row) => String(row.movement_date || row.last_seen_at || "")).sort().at(-1) || null
+  };
+}
+
+function backfillImileFeeMovements() {
+  if (entityRows("shipping_fee_movements").length) return { skipped: true, reason: "already_backfilled" };
+  const reconstructed = [];
+  entityRows("shipping_reports").filter((report) => report.source === "oms_fee_report").forEach((report) => {
+    (report.items || []).forEach((item) => reconstructed.push({
+      waybillNo: item.waybill_no,
+      clientNo: item.client_no,
+      orderNo: item.order_no,
+      feeCreateDate: item.fee_created_at || report.report_date,
+      feeUpdateDate: item.fee_updated_at || report.report_date,
+      expendAmount: { amountDTOS: item.fee_breakdown || [] },
+      revenueAmount: { amountDTOS: Number(item.collected_amount || 0) ? [{ feeTypeName: "COD collection", amount: Number(item.collected_amount || 0), currency: item.currency || "SAR", billDate: report.report_date }] : [] }
+    }));
+  });
+  const reportWaybills = new Set(reconstructed.map((row) => String(row.waybillNo || "")));
+  entityRows("shipping_shipments").filter((shipment) => shipment.provider === "imile" && shipment.waybill_no && !reportWaybills.has(String(shipment.waybill_no))).forEach((shipment) => reconstructed.push({
+    waybillNo: shipment.waybill_no,
+    clientNo: shipment.client_order_no,
+    orderNo: shipment.external_order_no,
+    feeCreateDate: shipment.oms_fee_create_date || shipment.created_at,
+    feeUpdateDate: shipment.oms_fee_update_date || shipment.updated_at,
+    expendAmount: { amountDTOS: shipment.carrier_fee_breakdown || [] },
+    revenueAmount: { amountDTOS: Number(shipment.carrier_collected_amount || 0) ? [{ feeTypeName: "COD collection", amount: Number(shipment.carrier_collected_amount || 0), currency: shipment.currency || "SAR", billDate: shipment.oms_fee_update_date || "" }] : [] }
+  }));
+  return upsertImileFeeMovements(reconstructed, new Date().toISOString(), "historical_snapshot_backfill");
+}
+
+function normalizedShipmentReference(value = "") {
+  return String(value || "").trim().toUpperCase().replace(/^(SFY|SITEYFY|ORDER)[-_#:]*/i, "").replace(/[^A-Z0-9]/g, "").replace(/^0+(?=\d)/, "");
+}
+
+function shipmentLinkEvidence(otoShipment, imileShipment) {
+  const evidence = [];
+  if (otoShipment.waybill_no && String(otoShipment.waybill_no) === String(imileShipment.waybill_no)) evidence.push("waybill_exact");
+  if (otoShipment.store_order_id && Number(otoShipment.store_order_id) === Number(imileShipment.store_order_id)) evidence.push("store_order_exact");
+  const otoRefs = [otoShipment.external_order_no, otoShipment.client_order_no, otoShipment.store_order_id].map(normalizedShipmentReference).filter(Boolean);
+  const imileRefs = [imileShipment.external_order_no, imileShipment.client_order_no, imileShipment.store_order_id].map(normalizedShipmentReference).filter(Boolean);
+  if (otoRefs.some((value) => imileRefs.includes(value))) evidence.push("order_reference_exact");
+  const carrierHint = /IMILE|I\s*MILE/i.test(String(otoShipment.carrier_code || otoShipment.carrier_name_en || otoShipment.carrier_name_ar || ""));
+  if (carrierHint) evidence.push("oto_carrier_imile");
+  return evidence;
+}
+
+function syncShippingProviderLinks(fetchedAt = new Date().toISOString()) {
+  const shipments = entityRows("shipping_shipments");
+  const otoRows = shipments.filter((row) => row.provider === "oto");
+  const imileRows = shipments.filter((row) => row.provider === "imile");
+  const existing = entityRows("shipping_provider_links");
+  let inserted = 0;
+  let updated = 0;
+  otoRows.forEach((otoShipment) => {
+    const candidates = imileRows.map((imileShipment) => ({ imileShipment, evidence: shipmentLinkEvidence(otoShipment, imileShipment) }))
+      .filter((candidate) => candidate.evidence.includes("waybill_exact") || candidate.evidence.includes("store_order_exact") || candidate.evidence.includes("order_reference_exact"))
+      .sort((a, b) => b.evidence.length - a.evidence.length);
+    const match = candidates[0];
+    if (!match) return;
+    const current = existing.find((row) => Number(row.oto_shipment_id) === Number(otoShipment.id) && Number(row.imile_shipment_id) === Number(match.imileShipment.id));
+    const otoEstimate = Number(otoShipment.carrier_estimated_cost || otoShipment.shipping_quote?.carrier_estimated_cost || 0);
+    const imileActual = match.imileShipment.carrier_actual_cost === null || match.imileShipment.carrier_actual_cost === undefined ? null : Number(match.imileShipment.carrier_actual_cost || 0);
+    const payload = {
+      platform_provider: "oto",
+      actual_carrier: "imile",
+      relationship_type: "shipping_platform_actual_carrier",
+      oto_shipment_id: Number(otoShipment.id),
+      imile_shipment_id: Number(match.imileShipment.id),
+      store_order_id: otoShipment.store_order_id || match.imileShipment.store_order_id || null,
+      waybill_no: match.imileShipment.waybill_no || otoShipment.waybill_no || "",
+      match_evidence: match.evidence,
+      match_confidence: match.evidence.includes("waybill_exact") || match.evidence.includes("store_order_exact") ? "high" : "medium",
+      oto_carrier_code: otoShipment.carrier_code || "",
+      oto_carrier_name: otoShipment.carrier_name_en || otoShipment.carrier_name_ar || "",
+      oto_estimated_cost: otoEstimate || null,
+      imile_actual_cost: imileActual,
+      cost_variance: imileActual === null || !otoEstimate ? null : Number((imileActual - otoEstimate).toFixed(3)),
+      oto_status: otoShipment.status_group || otoShipment.status_code || "",
+      imile_status: match.imileShipment.status_group || match.imileShipment.status_code || "",
+      status_matches: Boolean(otoShipment.status_group && match.imileShipment.status_group && otoShipment.status_group === match.imileShipment.status_group),
+      last_compared_at: fetchedAt
+    };
+    if (current) {
+      updateRecord("shipping_provider_links", current.id, payload);
+      updated += 1;
+    } else {
+      createRecord("shipping_provider_links", { ...payload, first_matched_at: fetchedAt });
+      inserted += 1;
+    }
+  });
+  return { inserted, updated, total: entityRows("shipping_provider_links").length };
+}
+
 async function fetchImileOmsFees(dateFrom, dateTo) {
   const showCount = 20;
   const rows = [];
@@ -2405,15 +3551,9 @@ async function fetchImileOmsFees(dateFrom, dateTo) {
     } while (currentPage <= totalPage && currentPage <= 100);
     windowStart = shiftIsoDate(windowEnd, 1);
   }
-  const unique = new Map();
-  rows.forEach((row) => {
-    const key = String(row.waybillNo || row.orderNo || `${row.clientNo || "row"}:${row.createDate || unique.size}`);
-    const existing = unique.get(key);
-    const existingCost = imileOmsAmount(existing?.expendAmount).amount;
-    const incomingCost = imileOmsAmount(row.expendAmount).amount;
-    if (!existing || incomingCost > existingCost || String(row.feeUpdateDate || "") > String(existing.feeUpdateDate || "")) unique.set(key, row);
-  });
-  return [...unique.values()];
+  // Do not collapse rows by waybill. A later iMile row can be a negative
+  // correction for a duplicated charge in an earlier bill cycle.
+  return rows;
 }
 
 function normalizeImileBillCycle(value = "") {
@@ -2493,22 +3633,24 @@ function upsertImileOmsBills(rows = [], fetchedAt = new Date().toISOString()) {
   cycles.forEach((key) => {
     const [cycleStart, cycleEnd] = key.split("|");
     const cycleBills = bills.filter((bill) => bill.cycle_start === cycleStart && bill.cycle_end === cycleEnd);
-    const codBill = cycleBills.find((bill) => bill.bill_type === "codBill") || null;
-    const feeBill = cycleBills.find((bill) => bill.bill_type === "feeBill") || null;
+    const codBills = cycleBills.filter((bill) => bill.bill_type === "codBill");
+    const feeBills = cycleBills.filter((bill) => bill.bill_type === "feeBill");
+    const codBill = codBills[0] || null;
+    const feeBill = feeBills[0] || null;
     const billCodes = cycleBills.map((bill) => bill.bill_code).filter(Boolean);
     const linkedShipments = shipmentRows.filter((shipment) => {
       const numbers = Array.isArray(shipment.carrier_bill_numbers) ? shipment.carrier_bill_numbers.map(String) : [];
       return billCodes.some((code) => numbers.includes(code));
     });
     const linkedFeeTotal = Number(linkedShipments.reduce((sum, shipment) => sum + Number(shipment.carrier_actual_cost || 0), 0).toFixed(3));
-    const feeAmount = Number(feeBill?.amount || 0);
-    const codAmount = Number(codBill?.amount || 0);
+    const feeAmount = Number(feeBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0).toFixed(3));
+    const codAmount = Number(codBills.reduce((sum, bill) => sum + Number(bill.amount || 0), 0).toFixed(3));
     const feeDifference = Number((feeAmount - linkedFeeTotal).toFixed(3));
     const issues = [];
     if (!codBill) issues.push("missing_cod_bill");
     if (!feeBill) issues.push("missing_fee_bill");
-    if (codBill && codBill.settlement_status !== "Completed") issues.push("cod_not_completed");
-    if (feeBill && feeBill.settlement_status !== "Completed") issues.push("fee_not_completed");
+    if (codBills.some((bill) => bill.settlement_status !== "Completed")) issues.push("cod_not_completed");
+    if (feeBills.some((bill) => bill.settlement_status !== "Completed")) issues.push("fee_not_completed");
     if (feeAmount > codAmount && codAmount > 0) issues.push("fees_exceed_collections");
     if (linkedShipments.length && Math.abs(feeDifference) > 0.05) issues.push("fee_detail_mismatch");
     const payload = {
@@ -2517,11 +3659,15 @@ function upsertImileOmsBills(rows = [], fetchedAt = new Date().toISOString()) {
       cycle_end: cycleEnd,
       bill_date: codBill?.bill_date || feeBill?.bill_date || shiftIsoDate(cycleEnd, 1),
       cod_bill_id: codBill?.id || null,
+      cod_bill_ids: codBills.map((bill) => bill.id),
       cod_bill_code: codBill?.bill_code || "",
+      cod_bill_codes: codBills.map((bill) => bill.bill_code).filter(Boolean),
       cod_amount: codAmount,
       cod_status: codBill?.settlement_status || "Missing",
       fee_bill_id: feeBill?.id || null,
+      fee_bill_ids: feeBills.map((bill) => bill.id),
       fee_bill_code: feeBill?.bill_code || "",
+      fee_bill_codes: feeBills.map((bill) => bill.bill_code).filter(Boolean),
       fee_amount: feeAmount,
       fee_status: feeBill?.settlement_status || "Missing",
       expected_transfer: Number((codAmount - feeAmount).toFixed(3)),
@@ -2530,7 +3676,7 @@ function upsertImileOmsBills(rows = [], fetchedAt = new Date().toISOString()) {
       linked_shipment_count: linkedShipments.length,
       linked_fee_total: linkedFeeTotal,
       fee_detail_difference: feeDifference,
-      status: codBill?.settlement_status === "Completed" && feeBill?.settlement_status === "Completed" ? "completed" : "open",
+      status: codBills.length && feeBills.length && codBills.every((bill) => bill.settlement_status === "Completed") && feeBills.every((bill) => bill.settlement_status === "Completed") ? "completed" : "open",
       issues,
       fetched_at: fetchedAt
     };
@@ -2649,25 +3795,30 @@ function inferImileWeightPricing() {
 function upsertImileOmsReport(reportDate, rows, syncMeta) {
   const shipmentRows = entityRows("shipping_shipments");
   const shipmentByWaybill = new Map(shipmentRows.map((row) => [String(row.waybill_no || ""), row]));
-  const matchedShipments = [];
+  const matchedShipments = new Map();
   const items = [];
   const billNumbers = new Set();
   const feeTotals = new Map();
   let actualCostTotal = 0;
   let collectedTotal = 0;
   let costRows = 0;
-  let unmatched = 0;
+  const unmatchedWaybills = new Set();
   rows.forEach((row) => {
     const waybill = String(row.waybillNo || "");
     const actual = imileOmsAmount(row.expendAmount);
     const collected = imileOmsAmount(row.revenueAmount);
-    const feeBreakdown = imileOmsFeeBreakdown(row.expendAmount);
+    const movementSummary = imileMovementSummary(waybill);
+    const reportFeeBreakdown = imileOmsFeeBreakdown(row.expendAmount);
+    const shipmentFeeBreakdown = movementSummary.fee_breakdown.length ? movementSummary.fee_breakdown : reportFeeBreakdown;
     let shipment = shipmentByWaybill.get(waybill);
     (Array.isArray(row.billNos) ? row.billNos : []).filter(Boolean).forEach((bill) => billNumbers.add(String(bill)));
-    feeBreakdown.forEach((fee) => feeTotals.set(fee.name, Number(((feeTotals.get(fee.name) || 0) + fee.amount).toFixed(3))));
+    reportFeeBreakdown.forEach((fee) => {
+      if (fee.bill_code) billNumbers.add(String(fee.bill_code));
+      feeTotals.set(fee.name, Number(((feeTotals.get(fee.name) || 0) + fee.amount).toFixed(3)));
+    });
     actualCostTotal += actual.amount;
     collectedTotal += collected.amount;
-    if (actual.amount > 0) costRows += 1;
+    if (actual.amount !== 0) costRows += 1;
     if (!shipment && waybill) {
       shipment = upsertShippingShipment({
         waybill_no: waybill,
@@ -2687,22 +3838,25 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
       shipmentByWaybill.set(waybill, shipment);
     }
     if (shipment) {
-      matchedShipments.push(shipment);
+      matchedShipments.set(Number(shipment.id), shipment);
       shipment = updateRecord("shipping_shipments", shipment.id, {
-        carrier_actual_cost: actual.amount > 0 ? actual.amount : shipment.carrier_actual_cost ?? null,
-        cost_source: actual.amount > 0 ? "imile_oms_fee_report" : shipment.cost_source ?? null,
-        cost_recorded_at: actual.amount > 0 ? new Date().toISOString() : shipment.cost_recorded_at ?? null,
-        carrier_collected_amount: collected.amount,
+        carrier_actual_cost: movementSummary.fee_breakdown.length ? movementSummary.net_fee_total : (actual.amount !== 0 ? actual.amount : shipment.carrier_actual_cost ?? null),
+        carrier_gross_charge_total: movementSummary.gross_charge_total,
+        carrier_correction_total: movementSummary.correction_total,
+        carrier_fee_movement_count: movementSummary.fee_breakdown.length,
+        cost_source: movementSummary.fee_breakdown.length || actual.amount !== 0 ? "imile_oms_fee_movements" : shipment.cost_source ?? null,
+        cost_recorded_at: movementSummary.fee_breakdown.length || actual.amount !== 0 ? new Date().toISOString() : shipment.cost_recorded_at ?? null,
+        carrier_collected_amount: movementSummary.movements.length ? movementSummary.collection_total : collected.amount,
         carrier_billable_weight: Number(row.billableWeight || 0),
-        carrier_bill_numbers: Array.isArray(row.billNos) ? row.billNos : [],
-        carrier_fee_breakdown: feeBreakdown,
+        carrier_bill_numbers: [...new Set([...(Array.isArray(row.billNos) ? row.billNos : []), ...movementSummary.bill_numbers])],
+        carrier_fee_breakdown: shipmentFeeBreakdown,
         oms_fee_update_date: String(row.feeUpdateDate || reportDate),
         oms_fee_create_date: String(row.feeCreateDate || reportDate),
         last_seen_at: syncMeta.fetched_at,
         provider_updated_at: String(row.feeUpdateDate || row.finishDate || reportDate)
       });
     } else {
-      unmatched += 1;
+      unmatchedWaybills.add(waybill || `row:${items.length}`);
     }
     items.push({
       waybill_no: waybill,
@@ -2712,10 +3866,16 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
       billable_weight: Number(row.billableWeight || 0),
       declared_value: Number(row.billableDeclaredValue || 0),
       collected_amount: collected.amount,
-      actual_cost: actual.amount || null,
+      actual_cost: actual.amount === 0 ? null : actual.amount,
       currency: actual.currency || collected.currency || "SAR",
       bill_numbers: Array.isArray(row.billNos) ? row.billNos : [],
-      fee_breakdown: feeBreakdown,
+      fee_breakdown: reportFeeBreakdown,
+      movement_summary: {
+        net_fee_total: movementSummary.net_fee_total,
+        gross_charge_total: movementSummary.gross_charge_total,
+        correction_total: movementSummary.correction_total,
+        movement_count: movementSummary.fee_breakdown.length
+      },
       order_type: String(row.orderTypeDesc || row.orderType || ""),
       order_status: String(row.orderStatusDesc || row.orderStatus || ""),
       order_created_at: String(row.createDate || ""),
@@ -2727,6 +3887,8 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
   });
   actualCostTotal = Number(actualCostTotal.toFixed(3));
   collectedTotal = Number(collectedTotal.toFixed(3));
+  const shipmentCount = new Set(rows.map((row) => String(row.waybillNo || "")).filter(Boolean)).size;
+  const unmatched = unmatchedWaybills.size;
   const reportPayload = {
     provider: "imile",
     source: "oms_fee_report",
@@ -2735,11 +3897,12 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
     fetched_at: syncMeta.fetched_at,
     range_start: syncMeta.range_start,
     range_end: syncMeta.range_end,
-    shipment_count: rows.length,
-    matched_count: matchedShipments.length,
+    source_row_count: rows.length,
+    shipment_count: shipmentCount,
+    matched_count: matchedShipments.size,
     unmatched_count: unmatched,
     cost_rows: costRows,
-    missing_cost_count: rows.length - costRows,
+    missing_cost_count: Math.max(0, rows.length - costRows),
     actual_cost_total: actualCostTotal,
     collected_total: collectedTotal,
     currency: "SAR",
@@ -2749,7 +3912,8 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
   };
   const existingReport = entityRows("shipping_reports").find((report) => report.source === "oms_fee_report" && report.report_date === reportDate);
   const report = existingReport ? updateRecord("shipping_reports", existingReport.id, reportPayload) : createRecord("shipping_reports", reportPayload);
-  const customerShippingTotal = Number(matchedShipments.reduce((sum, shipment) => sum + Number(shipment.customer_shipping_charge || 0), 0).toFixed(2));
+  const matchedShipmentRows = [...matchedShipments.values()];
+  const customerShippingTotal = Number(matchedShipmentRows.reduce((sum, shipment) => sum + Number(shipment.customer_shipping_charge || 0), 0).toFixed(2));
   const existingSettlement = entityRows("shipping_settlements").find((settlement) => settlement.source_data_date === reportDate || settlement.source_report_id === report.id);
   const settlementPayload = {
     provider: "imile",
@@ -2757,9 +3921,9 @@ function upsertImileOmsReport(reportDate, rows, syncMeta) {
     period_start: existingSettlement?.period_start || shiftIsoDate(reportDate, -6),
     period_end: existingSettlement?.period_end || reportDate,
     status: existingSettlement?.status || "draft",
-    shipment_ids: matchedShipments.map((shipment) => shipment.id),
-    total: rows.length,
-    shipment_count: rows.length,
+    shipment_ids: matchedShipmentRows.map((shipment) => shipment.id),
+    total: shipmentCount,
+    shipment_count: shipmentCount,
     customer_shipping_total: customerShippingTotal,
     estimated_cost_total: Number(existingSettlement?.estimated_cost_total || 0),
     actual_cost_total: actualCostTotal,
@@ -2787,6 +3951,8 @@ async function syncImileOmsReports(options = {}) {
     const settings = normalizeShippingIntegrations();
     const connector = settings.oms_connector;
     const fetchedAt = new Date().toISOString();
+    const blockReason = imileOmsSyncBlockReason(settings, { automatic: options.trigger === "scheduler" || (!options.force && options.trigger !== "manual") });
+    if (blockReason) return { skipped: true, reason: blockReason, connector: publicShippingIntegrations().oms_connector };
     const dateTo = String(options.date_to || dateInRiyadh());
     const cursorDate = String(connector.incremental_cursor?.fee_updated_through || connector.last_range?.end || "");
     const dateFrom = String(options.date_from || (cursorDate ? shiftIsoDate(cursorDate, -Number(connector.sync_overlap_days || 2)) : shiftIsoDate(dateTo, -connector.lookback_days)));
@@ -2815,6 +3981,7 @@ async function syncImileOmsReports(options = {}) {
       const beforeRows = entityRows("shipping_shipments");
       const beforeByWaybill = new Map(beforeRows.map((row) => [String(row.waybill_no || ""), crypto.createHash("sha256").update(JSON.stringify({ carrier_actual_cost: row.carrier_actual_cost, carrier_collected_amount: row.carrier_collected_amount, carrier_billable_weight: row.carrier_billable_weight, carrier_bill_numbers: row.carrier_bill_numbers, carrier_fee_breakdown: row.carrier_fee_breakdown, oms_fee_update_date: row.oms_fee_update_date })).digest("hex")]));
       const rows = await fetchImileOmsFees(dateFrom, dateTo);
+      const feeMovementSync = upsertImileFeeMovements(rows, fetchedAt);
       const existingCarrierBills = entityRows("shipping_carrier_bills").filter((bill) => bill.provider === "imile");
       const billDateFrom = String(options.bill_date_from || (existingCarrierBills.length ? shiftIsoDate(dateTo, -45) : shiftIsoDate(dateTo, -730)));
       const billRows = await fetchImileOmsBills(billDateFrom, dateTo);
@@ -2825,6 +3992,19 @@ async function syncImileOmsReports(options = {}) {
       }, new Map());
       const persisted = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([reportDate, reportRows]) => upsertImileOmsReport(reportDate, reportRows, { fetched_at: fetchedAt, range_start: dateFrom, range_end: dateTo }));
       const billSync = upsertImileOmsBills(billRows, fetchedAt);
+      const latestOfficialExport = entityRows("shipping_fee_export_runs").sort((a, b) => String(b.fetched_at || b.created_at || "").localeCompare(String(a.fetched_at || a.created_at || "")))[0] || null;
+      const officialExportDue = options.sync_official_export === true || !latestOfficialExport?.fetched_at || Date.now() - new Date(latestOfficialExport.fetched_at).getTime() >= 24 * 60 * 60 * 1000;
+      let officialExport = { skipped: true, reason: "recently_synced" };
+      if (officialExportDue) {
+        try {
+          const exportLookbackDays = Math.max(90, Number(connector.official_export_lookback_days || 400));
+          officialExport = await syncImileOfficialFeeExport(shiftIsoDate(dateTo, -exportLookbackDays), dateTo, fetchedAt);
+        } catch (error) {
+          officialExport = { error: String(error.message || "IMILE_OFFICIAL_EXPORT_FAILED") };
+          console.error(`iMile official fee export failed: ${officialExport.error}`);
+        }
+      }
+      const providerLinks = syncShippingProviderLinks(fetchedAt);
       const legacyEvidence = syncLegacyShipmentSalesEvidence(fetchedAt);
       const latest = persisted.at(-1)?.report || entityRows("shipping_reports")[0] || null;
       const fetchedWaybills = [...new Set(rows.map((row) => String(row.waybillNo || "")).filter(Boolean))];
@@ -2840,6 +4020,11 @@ async function syncImileOmsReports(options = {}) {
           last_sync_at: fetchedAt,
           last_success_at: fetchedAt,
           last_error: "",
+          sync_paused: false,
+          pause_reason: "",
+          paused_at: null,
+          auth_failure_count: 0,
+          last_auth_failure_at: null,
           last_report_date: latest?.report_date || settings.oms_connector.last_report_date,
           last_report_summary: latest ? {
             shipment_count: latest.shipment_count,
@@ -2856,16 +4041,11 @@ async function syncImileOmsReports(options = {}) {
         updated_at: fetchedAt
       });
       setSetting("shippingIntegrations", updated);
-      syncRun = updateRecord("shipping_sync_runs", syncRun.id, { status: "completed", fetched_rows: rows.length, unique_shipments: fetchedWaybills.length, new_shipments: newShipments, updated_shipments: updatedShipments, unchanged_shipments: unchangedShipments, reports_updated: persisted.length, bills_fetched: billRows.length, bills_inserted: billSync.inserted, bills_updated: billSync.updated, reconciliations_updated: billSync.reconciliations, cursor_after: cursorAfter, completed_at: new Date().toISOString() });
+      syncRun = updateRecord("shipping_sync_runs", syncRun.id, { status: "completed", fetched_rows: rows.length, unique_shipments: fetchedWaybills.length, new_shipments: newShipments, updated_shipments: updatedShipments, unchanged_shipments: unchangedShipments, reports_updated: persisted.length, fee_movements_inserted: feeMovementSync.inserted, fee_movements_updated: feeMovementSync.updated, official_export_run_id: officialExport.run?.id || null, official_export_rows: officialExport.row_count || 0, official_export_inserted: officialExport.inserted || 0, official_export_negative_rows: officialExport.run?.negative_row_count || 0, official_export_error: officialExport.error || "", provider_links_created: providerLinks.inserted, provider_links_updated: providerLinks.updated, bills_fetched: billRows.length, bills_inserted: billSync.inserted, bills_updated: billSync.updated, reconciliations_updated: billSync.reconciliations, cursor_after: cursorAfter, completed_at: new Date().toISOString() });
       queueShippingAudit("oms_sync");
-      return { synced: true, fetched_rows: rows.length, reports_updated: persisted.length, new_shipments: newShipments, updated_shipments: updatedShipments, unchanged_shipments: unchangedShipments, bills: billSync, legacy_evidence: legacyEvidence, run: syncRun, latest_report: latest, connector: publicShippingIntegrations().oms_connector };
+      return { synced: true, fetched_rows: rows.length, reports_updated: persisted.length, new_shipments: newShipments, updated_shipments: updatedShipments, unchanged_shipments: unchangedShipments, fee_movements: feeMovementSync, official_export: officialExport, provider_links: providerLinks, bills: billSync, legacy_evidence: legacyEvidence, run: syncRun, latest_report: latest, connector: publicShippingIntegrations().oms_connector };
     } catch (error) {
-      const updated = normalizeShippingIntegrations({
-        ...settings,
-        oms_connector: { ...settings.oms_connector, last_sync_at: fetchedAt, last_error: String(error.message || "IMILE_OMS_SYNC_FAILED") },
-        updated_at: fetchedAt
-      });
-      setSetting("shippingIntegrations", updated);
+      const updated = recordImileOmsFailure(settings, error, fetchedAt);
       syncRun = updateRecord("shipping_sync_runs", syncRun.id, { status: "failed", error: String(error.message || "IMILE_OMS_SYNC_FAILED"), completed_at: new Date().toISOString() });
       throw error;
     }
@@ -3412,7 +4592,7 @@ async function createOtoShipment(order, shipment) {
   if (settings.oto.auto_create_shipments && order.shipping_selection?.delivery_option_id) {
     await otoRequest("/rest/v2/createShipment", { body: { orderId, deliveryOptionId: order.shipping_selection.delivery_option_id } });
   }
-  return upsertShippingShipment({
+  const saved = upsertShippingShipment({
     ...shipment,
     provider: "oto",
     external_order_no: orderId,
@@ -3423,6 +4603,8 @@ async function createOtoShipment(order, shipment) {
     sync_state: settings.oto.auto_create_shipments ? "created" : "order_created",
     created_with_api_at: new Date().toISOString()
   });
+  syncShippingProviderLinks();
+  return saved;
 }
 
 async function updateOtoOrder(order, shipment) {
@@ -3581,11 +4763,12 @@ function otoWebhookSignatureValid(payload, secret) {
 
 function upsertShippingShipment(payload = {}) {
   const rows = entityRows("shipping_shipments");
-  const existing = rows.find((row) => payload.waybill_no && row.waybill_no === payload.waybill_no)
-    || rows.find((row) => payload.store_order_id && Number(row.store_order_id) === Number(payload.store_order_id));
+  const provider = String(payload.provider || "imile");
+  const existing = rows.find((row) => String(row.provider || "imile") === provider && payload.waybill_no && row.waybill_no === payload.waybill_no)
+    || rows.find((row) => String(row.provider || "imile") === provider && payload.store_order_id && Number(row.store_order_id) === Number(payload.store_order_id));
   const statusCode = payload.status_code || payload.latest_status || existing?.status_code || "pending";
   const normalized = {
-    provider: "imile",
+    provider,
     source: "store",
     currency: normalizeCurrencies().base_currency,
     customer_shipping_charge: 0,
@@ -3823,6 +5006,48 @@ function shippingAuditFeeTotal(shipment, tokens = []) {
   return Number(shipmentFeeRows(shipment).filter((fee) => tokens.some((token) => auditCode(fee.name).includes(auditCode(token)))).reduce((sum, fee) => sum + Number(fee.amount || 0), 0).toFixed(3));
 }
 
+function shippingFeeCanonicalName(value = "") {
+  const normalized = auditCode(value);
+  if (/COD|COLLECTION|تحصيل|COD服务费/.test(normalized)) return "cod_service_fee";
+  if (/DELIVERY|SHIPPING|توصيل|شحن|配送/.test(normalized)) return "delivery_fee";
+  if (/VAT|TAX|ضريبة/.test(normalized)) return "vat";
+  if (/POS/.test(normalized)) return "pos_fee";
+  return normalized;
+}
+
+function shippingFeeCorrectionGroups(shipment) {
+  const groups = new Map();
+  shipmentFeeRows(shipment).forEach((fee) => {
+    const amount = Number(fee.amount || 0);
+    if (!amount) return;
+    const canonicalName = shippingFeeCanonicalName(fee.name);
+    const key = [canonicalName, auditCode(fee.currency || shipment.currency || "SAR")].join("|");
+    const group = groups.get(key) || { key, canonical_name: canonicalName, fee_name: fee.name, currency: fee.currency || shipment.currency || "SAR", positive: [], negative: [] };
+    (amount < 0 ? group.negative : group.positive).push(fee);
+    groups.set(key, group);
+  });
+  return [...groups.values()].map((group) => {
+    const positiveAmounts = group.positive.map((row) => Math.abs(Number(row.amount || 0))).filter(Boolean).sort((a, b) => a - b);
+    const unitAmount = positiveAmounts[0] || 0;
+    const duplicateCharges = Math.max(0, group.positive.length - 1);
+    const chargedTotal = Number(group.positive.reduce((sum, row) => sum + Math.abs(Number(row.amount || 0)), 0).toFixed(3));
+    const correctionTotal = Number(group.negative.reduce((sum, row) => sum + Math.abs(Number(row.amount || 0)), 0).toFixed(3));
+    const netTotal = Number((chargedTotal - correctionTotal).toFixed(3));
+    const appliedCorrections = unitAmount ? Math.min(duplicateCharges, Math.floor((correctionTotal + 0.0001) / unitAmount)) : 0;
+    const unresolvedDuplicates = unitAmount ? Math.max(0, Math.ceil(Math.max(0, netTotal - unitAmount - 0.0001) / unitAmount)) : duplicateCharges;
+    return {
+      ...group,
+      unit_amount: unitAmount,
+      duplicate_charges: duplicateCharges,
+      applied_corrections: appliedCorrections,
+      unresolved_duplicates: unresolvedDuplicates,
+      charged_total: chargedTotal,
+      correction_total: correctionTotal,
+      net_total: netTotal
+    };
+  });
+}
+
 function shippingAuditOrder(shipment, ordersById, ordersByNumber) {
   return ordersById.get(Number(shipment.store_order_id)) || ordersByNumber.get(String(shipment.client_order_no || "")) || ordersByNumber.get(String(shipment.external_order_no || "")) || null;
 }
@@ -3923,6 +5148,7 @@ function shippingAuditDetectionSteps(ruleCode, finding, source, settings) {
     : { en: `No completed fee bill was found after ${settings.settlement.overdue_days} days.`, ar: `لم يتم العثور على فاتورة مصاريف مقفلة بعد ${settings.settlement.overdue_days} أيام.` };
   const comparisons = {
     duplicate_fee: { en: `Grouped fee rows by waybill, bill code, fee name and amount; found ${finding.duplicate_count || 2} identical rows.`, ar: `تم تجميع بنود الرسوم حسب البوليصة والفاتورة واسم الرسم والمبلغ، وظهر ${finding.duplicate_count || 2} بند متطابق.` },
+    duplicate_fee_corrected: { en: `Paired ${finding.correction_count || 1} negative correction row(s) with the duplicated positive fee rows and recalculated the net.`, ar: `تمت مطابقة ${finding.correction_count || 1} حركة سالبة مع الرسوم الموجبة المكررة وإعادة حساب الصافي.` },
     weight_variance: { en: `Compared ${finding.expected_weight ?? "-"} kg expected with ${finding.billed_weight ?? "-"} kg billed using the configured tolerance.`, ar: `تمت مقارنة الوزن المتوقع ${finding.expected_weight ?? "-"} كجم بالمحتسب ${finding.billed_weight ?? "-"} كجم وفق نسبة السماح المحددة.` },
     missing_expected_weight: { en: "The bill contains carrier weight, but the linked store order has no package weight.", ar: "الفاتورة تحتوي وزن شركة الشحن لكن الطلب المرتبط لا يحتوي وزن الطرد المتوقع." },
     unexpected_pos_fee: { en: `Compared the POS fee with actual payment code ${finding.actual_payment || "-"}.`, ar: `تمت مقارنة رسم POS مع كود الدفع الفعلي ${finding.actual_payment || "-"}.` },
@@ -4014,15 +5240,13 @@ function buildShippingAuditFindings(shipment, order, run, settings, context = {}
   }
 
   if (settings.duplicates.enabled) {
-    const groups = new Map();
-    shipmentFeeRows(shipment).forEach((fee) => {
-      const key = [auditCode(fee.name), Number(fee.amount || 0).toFixed(3), String(fee.bill_code || "")].join("|");
-      groups.set(key, [...(groups.get(key) || []), fee]);
-    });
-    groups.forEach((fees, key) => {
-      if (fees.length < 2) return;
-      const duplicateAmount = Number((Number(fees[0].amount || 0) * (fees.length - 1)).toFixed(3));
-      add("duplicate_fee", "critical", "Duplicate carrier fee", "رسم شركة شحن مكرر", `The same fee appears ${fees.length} times on the shipment.`, `الرسم نفسه ظاهر ${fees.length} مرات على الشحنة.`, { actual_amount: Number(fees[0].amount || 0) * fees.length, expected_amount: Number(fees[0].amount || 0), exposure_amount: duplicateAmount, duplicate_count: fees.length, duplicate_fee: fees[0], matched_fee_rows: fees, calculation: { fee_name: fees[0].name, unit_amount: Number(fees[0].amount || 0), row_count: fees.length, expected_row_count: 1, expected_total: Number(fees[0].amount || 0), charged_total: Number((Number(fees[0].amount || 0) * fees.length).toFixed(3)), duplicate_difference: duplicateAmount, bill_code: fees[0].bill_code || null, bill_date: fees[0].bill_date || null } }, key);
+    shippingFeeCorrectionGroups(shipment).forEach((group) => {
+      if (group.unresolved_duplicates > 0) {
+        const duplicateAmount = Number((group.unit_amount * group.unresolved_duplicates).toFixed(3));
+        add("duplicate_fee", "critical", "Unresolved duplicate carrier fee", "رسم شركة شحن مكرر لم تتم تسويته", `The fee was charged ${group.positive.length} times; ${group.applied_corrections} negative correction(s) were found and ${group.unresolved_duplicates} duplicate charge(s) remain.`, `تم احتساب الرسم ${group.positive.length} مرات، وعُثر على ${group.applied_corrections} تصحيح سالب وما زال ${group.unresolved_duplicates} رسم مكرر بدون تسوية.`, { actual_amount: group.net_total, expected_amount: group.unit_amount, exposure_amount: duplicateAmount, duplicate_count: group.positive.length, correction_count: group.negative.length, duplicate_fee: group.positive[0], matched_fee_rows: [...group.positive, ...group.negative], calculation: { fee_name: group.fee_name, unit_amount: group.unit_amount, positive_row_count: group.positive.length, negative_row_count: group.negative.length, corrections_applied: group.applied_corrections, unresolved_duplicates: group.unresolved_duplicates, expected_total: group.unit_amount, charged_total: group.charged_total, correction_total: group.correction_total, net_total: group.net_total, duplicate_difference: duplicateAmount, positive_rows: group.positive, correction_rows: group.negative } }, group.key);
+      } else if (group.applied_corrections > 0) {
+        add("duplicate_fee_corrected", "info", "Duplicate fee corrected by carrier", "تمت تسوية الرسم المكرر", `The carrier charged this fee ${group.positive.length} times and later posted ${group.applied_corrections} negative correction(s). The current net is ${group.net_total.toFixed(2)}.`, `احتسبت الشركة هذا الرسم ${group.positive.length} مرات ثم أضافت ${group.applied_corrections} حركة تصحيح سالبة. الصافي الحالي ${group.net_total.toFixed(2)}.`, { finding_kind: "informational", actual_amount: group.net_total, expected_amount: group.unit_amount, exposure_amount: 0, duplicate_count: group.positive.length, correction_count: group.negative.length, matched_fee_rows: [...group.positive, ...group.negative], calculation: { fee_name: group.fee_name, unit_amount: group.unit_amount, positive_row_count: group.positive.length, negative_row_count: group.negative.length, corrections_applied: group.applied_corrections, unresolved_duplicates: 0, charged_total: group.charged_total, correction_total: group.correction_total, net_total: group.net_total, positive_rows: group.positive, correction_rows: group.negative } }, group.key);
+      }
     });
   }
 
@@ -4052,7 +5276,7 @@ function buildShippingAuditFindings(shipment, order, run, settings, context = {}
 }
 
 function shippingAuditSummary(findings = entityRows("shipping_audit_findings")) {
-  const activeRows = findings.filter((row) => !["resolved", "ignored", "resolved_automatically"].includes(row.status));
+  const activeRows = findings.filter((row) => !["resolved", "ignored", "resolved_automatically", "resolved_by_correction"].includes(row.status));
   const notices = activeRows.filter((row) => row.finding_kind === "informational" || row.severity === "info" || row.status === "notice");
   const active = activeRows.filter((row) => !notices.includes(row));
   const count = (value) => active.filter((row) => row.severity === value).length;
@@ -4102,20 +5326,41 @@ function runShippingAudit(options = {}) {
     const order = shippingAuditOrder(shipment, ordersById, ordersByNumber);
     buildShippingAuditFindings(shipment, order, run, settings, auditContext).forEach((finding) => {
       detected.add(finding.fingerprint);
-      const current = byFingerprint.get(finding.fingerprint);
+      const semanticFeeName = shippingFeeCanonicalName(finding.calculation?.fee_name || finding.duplicate_fee?.name || "");
+      const current = byFingerprint.get(finding.fingerprint) || (finding.rule_code.startsWith("duplicate_fee") ? existing.find((row) => (
+        Number(row.shipment_id) === Number(finding.shipment_id)
+        && row.rule_code === finding.rule_code
+        && ["open", "reviewing", "notice"].includes(row.status)
+        && shippingFeeCanonicalName(row.calculation?.fee_name || row.duplicate_fee?.name || "") === semanticFeeName
+      )) : null);
       if (current) {
+        detected.add(current.fingerprint);
         const status = finding.finding_kind === "informational" ? "notice" : current.status === "resolved_automatically" ? "open" : current.status || "open";
         updateRecord("shipping_audit_findings", current.id, { ...finding, status, first_detected_at: current.first_detected_at || current.created_at, last_detected_at: finding.detected_at, occurrence_count: Number(current.occurrence_count || 1) + 1 });
+        createRecord("shipping_audit_finding_events", { finding_id: Number(current.id), run_id: Number(run.id), event_type: "detected_again", previous_status: current.status || "open", next_status: status, snapshot: finding, occurred_at: finding.detected_at });
         updated += 1;
       } else {
-        createRecord("shipping_audit_findings", { ...finding, status: finding.finding_kind === "informational" ? "notice" : "open", first_detected_at: finding.detected_at, last_detected_at: finding.detected_at, occurrence_count: 1, notes: "" });
+        const status = finding.finding_kind === "informational" ? "notice" : "open";
+        const saved = createRecord("shipping_audit_findings", { ...finding, status, first_detected_at: finding.detected_at, last_detected_at: finding.detected_at, occurrence_count: 1, notes: "" });
+        createRecord("shipping_audit_finding_events", { finding_id: Number(saved.id), run_id: Number(run.id), event_type: "detected", previous_status: null, next_status: status, snapshot: finding, occurred_at: finding.detected_at });
         inserted += 1;
       }
     });
   });
   let autoResolved = 0;
+  const latestCorrectedByShipment = new Map(entityRows("shipping_audit_findings").filter((row) => row.rule_code === "duplicate_fee_corrected" && detected.has(row.fingerprint)).map((row) => [Number(row.shipment_id), row]));
   existing.filter((row) => ["open", "reviewing", "notice"].includes(row.status) && !detected.has(row.fingerprint)).forEach((row) => {
-    updateRecord("shipping_audit_findings", row.id, { status: "resolved_automatically", resolved_at: new Date().toISOString(), resolution_reason: "not_detected_in_latest_run" });
+    const corrected = row.rule_code === "duplicate_fee" ? latestCorrectedByShipment.get(Number(row.shipment_id)) : null;
+    const immutableFinancialEvidence = row.financially_confirmed === true && ["duplicate_fee", "delivery_fee_variance", "weight_variance", "unexpected_cod_fee", "cancelled_before_pickup_fee"].includes(row.rule_code);
+    if (immutableFinancialEvidence && !corrected) {
+      createRecord("shipping_audit_finding_events", { finding_id: Number(row.id), run_id: Number(run.id), event_type: "retained_for_recheck", previous_status: row.status, next_status: row.status, snapshot: { reason: "closed_bill_financial_evidence_requires_explicit_resolution" }, occurred_at: new Date().toISOString() });
+      return;
+    }
+    const nextStatus = corrected ? "resolved_by_correction" : "resolved_automatically";
+    const resolutionReason = corrected ? "carrier_negative_correction_applied" : "not_detected_in_latest_run";
+    const resolvedAt = new Date().toISOString();
+    updateRecord("shipping_audit_findings", row.id, { status: nextStatus, resolved_at: resolvedAt, resolution_reason: resolutionReason, correction_finding_id: corrected?.id || null, resolution_evidence: corrected?.calculation || null });
+    createRecord("shipping_audit_finding_events", { finding_id: Number(row.id), run_id: Number(run.id), event_type: corrected ? "resolved_by_correction" : "resolved_automatically", previous_status: row.status, next_status: nextStatus, related_finding_id: corrected?.id || null, snapshot: { resolution_reason: resolutionReason, resolution_evidence: corrected?.calculation || null }, occurred_at: resolvedAt });
     autoResolved += 1;
   });
   const summary = shippingAuditSummary();
@@ -4156,6 +5401,584 @@ function shipmentReportItem(row) {
   };
 }
 
+function financeOrderDate(order = {}) {
+  return String(order.payment_completed_at || order.payment?.paid_at || order.legacy_dates?.completed_at || order.legacy_dates?.created_at || order.created_at || "");
+}
+
+function financeOrderRecognized(order = {}) {
+  if (["cancelled", "refunded"].includes(String(order.status || "").toLowerCase())) return false;
+  return order.status === "delivered" || order.payment?.status === "paid" || order.payment?.status === "cash_on_delivery";
+}
+
+function financeProductCost(productId, variantId = null) {
+  const product = getRecord("products", productId);
+  if (!product) return { unit_cost: 0, confidence: "missing" };
+  const variant = variantId ? (product.variants || []).find((row) => String(row.id) === String(variantId)) : null;
+  const configured = Number(variant?.cost ?? product.cost ?? 0);
+  const average = inventoryAverageCost({ product_id: Number(productId), variant_id: variantId || null }, configured);
+  const unitCost = Number(average || configured || 0);
+  return { unit_cost: unitCost, confidence: unitCost > 0 ? "estimated_current_cost" : "missing" };
+}
+
+function financeOrderCogs(order = {}) {
+  if (order.inventory_cogs !== null && order.inventory_cogs !== undefined) return { amount: Number(order.inventory_cogs || 0), confidence: "actual_fifo" };
+  let amount = 0;
+  let missing = 0;
+  inventoryOrderTargets(order).forEach((target) => {
+    if (target.target_type === "bundle") {
+      const bundle = getRecord("bundles", target.bundle_id);
+      const cost = Number(bundle?.cost || 0);
+      if (!cost) missing += 1;
+      amount += cost * Number(target.quantity || 1);
+      return;
+    }
+    const cost = financeProductCost(target.product_id, target.variant_id);
+    if (cost.confidence === "missing") missing += 1;
+    amount += cost.unit_cost * Number(target.quantity || 1);
+  });
+  return { amount: moneyValue(amount), confidence: missing ? (amount > 0 ? "partial_estimate" : "missing") : "estimated_current_cost", missing_targets: missing };
+}
+
+function financePaymentFee(order = {}, transactions = []) {
+  const matching = transactions.filter((row) => Number(row.order_id) === Number(order.id));
+  const values = matching.map((row) => Number(row.fee_amount ?? row.details?.fee_amount ?? row.details?.fee ?? row.details?.commission ?? 0)).filter((value) => Number.isFinite(value) && value !== 0);
+  return { amount: moneyValue(values.reduce((sum, value) => sum + value, 0)), confidence: values.length ? "actual" : "missing", transaction_count: matching.length };
+}
+
+function financeShippingForOrder(order = {}, shipments = [], providerLinks = []) {
+  const direct = shipments.filter((row) => Number(row.store_order_id) === Number(order.id));
+  const linkedImileIds = providerLinks.filter((row) => Number(row.store_order_id) === Number(order.id)).map((row) => Number(row.imile_shipment_id));
+  const linked = shipments.filter((row) => linkedImileIds.includes(Number(row.id)));
+  const candidates = [...linked, ...direct].filter((row, index, rows) => rows.findIndex((candidate) => Number(candidate.id) === Number(row.id)) === index);
+  const actual = candidates.find((row) => row.provider === "imile" && row.carrier_actual_cost !== null && row.carrier_actual_cost !== undefined)
+    || candidates.find((row) => row.carrier_actual_cost !== null && row.carrier_actual_cost !== undefined);
+  if (actual) return { amount: Number(actual.carrier_actual_cost || 0), confidence: "actual", shipment_id: actual.id, provider: actual.provider, candidates };
+  const estimated = candidates.find((row) => Number(row.carrier_estimated_cost || 0) > 0);
+  if (estimated) return { amount: Number(estimated.carrier_estimated_cost || 0), confidence: "estimated_quote", shipment_id: estimated.id, provider: estimated.provider, candidates };
+  const fallback = Number(order.expected_shipping_cost || order.shipping_quote?.carrier_estimated_cost || 0);
+  return { amount: fallback, confidence: fallback > 0 ? "estimated_order" : "missing", shipment_id: null, provider: order.shipping_provider || order.shipping_selection?.provider || null, candidates };
+}
+
+function financeBundleDiscount(order = {}) {
+  let amount = 0;
+  let count = 0;
+  (order.items || []).filter((item) => item.item_type === "bundle" || item.bundle_id).forEach((item) => {
+    const bundle = getRecord("bundles", item.bundle_id);
+    const components = item.bundle_items || item.components || bundle?.items || [];
+    const standalone = components.reduce((sum, component) => {
+      const product = getRecord("products", component.product_id);
+      const variant = (product?.variants || []).find((row) => String(row.id) === String(component.variant_id));
+      const price = Number(variant?.price || product?.price || product?.sale_price || 0);
+      return sum + price * Math.max(1, Number(component.quantity || 1));
+    }, 0) * Math.max(1, Number(item.quantity || 1));
+    const paid = Number(item.final_subtotal ?? item.subtotal ?? item.price * item.quantity ?? 0);
+    amount += Math.max(0, standalone - paid);
+    count += 1;
+  });
+  return { amount: moneyValue(amount), count, confidence: count ? "estimated_current_standalone_prices" : "not_applicable" };
+}
+
+function financeOrderAnalysis(order, context) {
+  const cogs = financeOrderCogs(order);
+  const shipping = financeShippingForOrder(order, context.shipments, context.providerLinks);
+  const paymentFee = financePaymentFee(order, context.transactions);
+  const bundleDiscount = financeBundleDiscount(order);
+  const productRevenue = Number(order.subtotal || 0) - Number(order.discount_amount || 0);
+  const shippingRevenue = Number(order.shipping_amount || 0);
+  const shippingBase = Number(order.shipping_base_amount ?? order.shipping_quote?.customer_amount ?? shippingRevenue);
+  const freeShippingBenefit = Math.max(0, shippingBase - shippingRevenue);
+  const contributionProfit = moneyValue(productRevenue + shippingRevenue - cogs.amount - shipping.amount - paymentFee.amount);
+  return {
+    order_id: Number(order.id),
+    order_number: order.order_number || order.legacy_order_number || String(order.id),
+    date: financeOrderDate(order),
+    status: order.status,
+    recognized: financeOrderRecognized(order),
+    currency: order.currency_snapshot?.code || order.payment?.currency || "SAR",
+    subtotal: Number(order.subtotal || 0),
+    product_revenue: moneyValue(productRevenue),
+    product_discount: Number(order.discount_amount || 0),
+    discount_codes: order.discount_codes || (order.discount_code ? [order.discount_code] : []),
+    applied_promotions: order.applied_promotions || [],
+    shipping_base: moneyValue(shippingBase),
+    shipping_revenue: moneyValue(shippingRevenue),
+    free_shipping_benefit: moneyValue(freeShippingBenefit),
+    free_shipping_rule_id: order.free_shipping_rule_id || null,
+    shipping_cost: moneyValue(shipping.amount),
+    shipping_confidence: shipping.confidence,
+    shipping_provider: shipping.provider,
+    cogs: moneyValue(cogs.amount),
+    cogs_confidence: cogs.confidence,
+    payment_provider: order.payment?.provider || order.payment?.method || "unknown",
+    payment_fee: paymentFee.amount,
+    payment_fee_confidence: paymentFee.confidence,
+    bundle_discount: bundleDiscount.amount,
+    bundle_count: bundleDiscount.count,
+    contribution_profit: contributionProfit,
+    margin_percent: productRevenue + shippingRevenue > 0 ? Number((contributionProfit / (productRevenue + shippingRevenue) * 100).toFixed(2)) : 0,
+    data_confidence: [cogs.confidence, shipping.confidence, paymentFee.confidence]
+  };
+}
+
+function financeOverview(filters = {}) {
+  const settings = { ...(getSetting("financeSettings") || defaults.financeSettings) };
+  const context = {
+    shipments: entityRows("shipping_shipments"),
+    providerLinks: entityRows("shipping_provider_links"),
+    transactions: entityRows("payment_transactions")
+  };
+  let orders = entityRows("orders");
+  if (filters.date_from) orders = orders.filter((order) => financeOrderDate(order).slice(0, 10) >= String(filters.date_from));
+  if (filters.date_to) orders = orders.filter((order) => financeOrderDate(order).slice(0, 10) <= String(filters.date_to));
+  if (filters.include_historical === "false") orders = orders.filter((order) => !order.is_historical);
+  const all = orders.map((order) => financeOrderAnalysis(order, context));
+  const recognized = all.filter((row) => row.recognized);
+  const sum = (key) => moneyValue(recognized.reduce((total, row) => total + Number(row[key] || 0), 0));
+  const aggregate = (key, factory) => [...recognized.reduce((map, row) => {
+    const values = factory(row);
+    values.forEach((value) => {
+      const id = String(value || "Unspecified");
+      const current = map.get(id) || { key: id, orders: 0, revenue: 0, discount: 0, shipping_cost: 0, profit: 0 };
+      current.orders += 1;
+      current.revenue += Number(row.product_revenue || 0) + Number(row.shipping_revenue || 0);
+      current.discount += Number(row.product_discount || 0);
+      current.shipping_cost += Number(row.shipping_cost || 0);
+      current.profit += Number(row.contribution_profit || 0);
+      map.set(id, current);
+    });
+    return map;
+  }, new Map()).values()].map((row) => ({ ...row, revenue:moneyValue(row.revenue), discount:moneyValue(row.discount), shipping_cost:moneyValue(row.shipping_cost), profit:moneyValue(row.profit) })).sort((a, b) => b.revenue - a.revenue);
+  const promotionRows = aggregate("promotions", (row) => [
+    ...row.discount_codes.map((code) => `Code: ${code}`),
+    ...(row.free_shipping_rule_id || row.free_shipping_benefit > 0 ? [`Free shipping: ${row.free_shipping_rule_id || "applied"}`] : []),
+    ...(row.bundle_count ? ["Bundle pricing"] : [])
+  ]);
+  const paymentRows = aggregate("payments", (row) => [row.payment_provider]);
+  const shippingRows = aggregate("shipping", (row) => [row.shipping_provider || "unmatched"]);
+  const freeShippingOrders = recognized.filter((row) => row.free_shipping_benefit > 0 || row.free_shipping_rule_id);
+  const providerComparisons = context.providerLinks.map((link) => ({ ...link, needs_review: link.cost_variance !== null && Math.abs(Number(link.cost_variance || 0)) > Number(settings.shipping_variance_tolerance || 1) }));
+  const movementRows = entityRows("shipping_fee_movements");
+  const corrections = movementRows.filter((row) => row.movement_kind === "fee" && Number(row.amount || 0) < 0);
+  const officialExportRuns = entityRows("shipping_fee_export_runs").sort((a, b) => String(b.fetched_at || b.created_at || "").localeCompare(String(a.fetched_at || a.created_at || "")));
+  const latestOfficialExport = officialExportRuns[0] || null;
+  const shippingIntegrations = publicShippingIntegrations();
+  const paymentIntegrations = publicPaymentGateways();
+  return {
+    settings,
+    summary: {
+      recognized_orders: recognized.length,
+      gross_product_sales: sum("subtotal"),
+      product_revenue: sum("product_revenue"),
+      product_discounts: sum("product_discount"),
+      shipping_revenue: sum("shipping_revenue"),
+      shipping_cost: sum("shipping_cost"),
+      free_shipping_benefit: sum("free_shipping_benefit"),
+      free_shipping_orders: freeShippingOrders.length,
+      average_free_shipping_cost: freeShippingOrders.length ? moneyValue(freeShippingOrders.reduce((total, row) => total + Number(row.shipping_cost || 0), 0) / freeShippingOrders.length) : 0,
+      bundle_discount: sum("bundle_discount"),
+      cogs: sum("cogs"),
+      payment_fees: sum("payment_fee"),
+      contribution_profit: sum("contribution_profit"),
+      negative_profit_orders: recognized.filter((row) => row.contribution_profit < 0).length,
+      actual_shipping_orders: recognized.filter((row) => row.shipping_confidence === "actual").length,
+      actual_cogs_orders: recognized.filter((row) => row.cogs_confidence === "actual_fifo").length,
+      imile_correction_rows: corrections.length,
+      imile_correction_total: moneyValue(Math.abs(corrections.reduce((total, row) => total + Number(row.amount || 0), 0))),
+      provider_link_count: providerComparisons.length,
+      provider_variance_count: providerComparisons.filter((row) => row.needs_review).length,
+      official_export_rows: Number(latestOfficialExport?.row_count || 0),
+      official_export_negative_rows: Number(latestOfficialExport?.negative_row_count || 0),
+      official_export_last_synced_at: latestOfficialExport?.fetched_at || null,
+      currency: settings.currency || "SAR"
+    },
+    promotions: promotionRows,
+    payments: paymentRows,
+    shipping_providers: shippingRows,
+    provider_comparisons: providerComparisons.sort((a, b) => Number(b.needs_review) - Number(a.needs_review) || Math.abs(Number(b.cost_variance || 0)) - Math.abs(Number(a.cost_variance || 0))),
+    data_quality: {
+      missing_cogs: recognized.filter((row) => row.cogs_confidence === "missing").length,
+      estimated_cogs: recognized.filter((row) => row.cogs_confidence.includes("estimate")).length,
+      missing_shipping_cost: recognized.filter((row) => row.shipping_confidence === "missing").length,
+      missing_payment_fees: recognized.filter((row) => row.payment_fee_confidence === "missing").length
+    },
+    active_integrations: {
+      shipping: ["imile", "oto", "smartship"].map((provider) => ({
+        provider,
+        enabled: shippingIntegrations[provider]?.is_enabled === true,
+        default: shippingIntegrations.default_provider === provider,
+        configured: provider === "imile" ? shippingIntegrations.imile?.has_secret_key === true : provider === "oto" ? shippingIntegrations.oto?.has_refresh_token === true : shippingIntegrations.smartship?.is_configured === true
+      })),
+      payments: [
+        { provider: "cash_on_delivery", enabled: paymentIntegrations.cash_on_delivery?.is_enabled === true, configured: true },
+        ...["tamara", "tabby", "edfapay"].map((provider) => ({ provider, enabled: paymentIntegrations.providers?.[provider]?.is_enabled === true, configured: paymentIntegrations.providers?.[provider]?.is_configured === true }))
+      ]
+    },
+    orders: all.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+  };
+}
+
+function notificationRecipients(value) {
+  const rows = Array.isArray(value) ? value : String(value || "").split(/[;,\n]/);
+  return [...new Set(rows.map((item) => String(item || "").trim().toLowerCase()).filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item)))];
+}
+
+function normalizeNotificationSettings(payload = {}, preserveSecrets = true) {
+  const saved = getSetting("notificationSettings") || {};
+  const current = {
+    ...defaultNotificationSettings,
+    ...saved,
+    channels:{ ...defaultNotificationSettings.channels, ...(saved.channels || {}) },
+    email:{ ...defaultNotificationSettings.email, ...(saved.email || {}) },
+    quiet_hours:{ ...defaultNotificationSettings.quiet_hours, ...(saved.quiet_hours || {}) },
+    digest:{ ...defaultNotificationSettings.digest, ...(saved.digest || {}) }
+  };
+  const requested = {
+    ...current,
+    ...payload,
+    channels:{ ...current.channels, ...(payload.channels || {}) },
+    email:{ ...current.email, ...(payload.email || {}) },
+    quiet_hours:{ ...current.quiet_hours, ...(payload.quiet_hours || {}) },
+    digest:{ ...current.digest, ...(payload.digest || {}) }
+  };
+  const suppliedPassword = String(requested.email.password || "");
+  return {
+    enabled: requested.enabled !== false,
+    scan_interval_minutes: Math.min(1440, Math.max(1, Number(requested.scan_interval_minutes || 5))),
+    retention_days: Math.min(3650, Math.max(30, Number(requested.retention_days || 365))),
+    channels:{ dashboard:requested.channels.dashboard !== false, email:requested.channels.email === true },
+    email:{
+      provider:"smtp",
+      host:String(requested.email.host || "").trim(),
+      port:Math.min(65535, Math.max(1, Number(requested.email.port || 587))),
+      secure:requested.email.secure === true,
+      username:String(requested.email.username || "").trim(),
+      password_encrypted:suppliedPassword ? encryptIntegrationSecret(suppliedPassword) : preserveSecrets ? String(current.email.password_encrypted || "") : "",
+      from_name:String(requested.email.from_name || "SITEYFY Store").trim(),
+      from_email:String(requested.email.from_email || "").trim(),
+      reply_to:String(requested.email.reply_to || "").trim(),
+      default_recipients:notificationRecipients(requested.email.default_recipients),
+      connection_timeout_ms:Math.min(30000, Math.max(3000, Number(requested.email.connection_timeout_ms || 10000)))
+    },
+    quiet_hours:{
+      enabled:requested.quiet_hours.enabled === true,
+      start:/^\d{2}:\d{2}$/.test(String(requested.quiet_hours.start || "")) ? requested.quiet_hours.start : "22:00",
+      end:/^\d{2}:\d{2}$/.test(String(requested.quiet_hours.end || "")) ? requested.quiet_hours.end : "08:00",
+      timezone:String(requested.quiet_hours.timezone || "Asia/Riyadh"),
+      critical_bypass:requested.quiet_hours.critical_bypass !== false
+    },
+    digest:{
+      daily_enabled:requested.digest.daily_enabled === true,
+      daily_hour:Math.min(23, Math.max(0, Number(requested.digest.daily_hour || 9))),
+      weekly_enabled:requested.digest.weekly_enabled === true,
+      weekly_day:Math.min(6, Math.max(0, Number(requested.digest.weekly_day || 1))),
+      weekly_hour:Math.min(23, Math.max(0, Number(requested.digest.weekly_hour || 9)))
+    },
+    updated_at:requested.updated_at || current.updated_at || null
+  };
+}
+
+function publicNotificationSettings() {
+  const settings = normalizeNotificationSettings();
+  return { ...settings, email:{ ...settings.email, password_encrypted:undefined, has_password:Boolean(decryptIntegrationSecret(settings.email.password_encrypted)) } };
+}
+
+function normalizeNotificationRule(payload = {}, current = {}) {
+  const severity = ["info", "warning", "high", "critical"].includes(String(payload.severity || current.severity)) ? String(payload.severity || current.severity) : "warning";
+  return {
+    ...current,
+    code:String(payload.code || current.code || `custom_${crypto.randomUUID().slice(0, 8)}`).trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_"),
+    module:String(payload.module || current.module || "system"),
+    trigger:String(payload.trigger || current.trigger || payload.code || current.code || "custom"),
+    name_en:String(payload.name_en || current.name_en || "Notification rule"),
+    name_ar:String(payload.name_ar || current.name_ar || "قاعدة إشعار"),
+    severity,
+    threshold:Number(payload.threshold ?? current.threshold ?? 0),
+    threshold_unit:String(payload.threshold_unit || current.threshold_unit || "count"),
+    cooldown_minutes:Math.min(43200, Math.max(1, Number(payload.cooldown_minutes ?? current.cooldown_minutes ?? 1440))),
+    escalation_minutes:Math.min(43200, Math.max(0, Number(payload.escalation_minutes ?? current.escalation_minutes ?? 0))),
+    dashboard:payload.dashboard === undefined ? current.dashboard !== false : payload.dashboard === true,
+    email:payload.email === undefined ? current.email === true : payload.email === true,
+    recipients:notificationRecipients(payload.recipients === undefined ? current.recipients : payload.recipients),
+    required_permission:String(payload.required_permission ?? current.required_permission ?? notificationPermissionForModule(payload.module || current.module || "system")),
+    audience_role_ids:[...new Set((Array.isArray(payload.audience_role_ids) ? payload.audience_role_ids : current.audience_role_ids || []).map(Number).filter(Boolean))],
+    audience_staff_ids:[...new Set((Array.isArray(payload.audience_staff_ids) ? payload.audience_staff_ids : current.audience_staff_ids || []).map(Number).filter(Boolean))],
+    is_active:payload.is_active === undefined ? current.is_active !== false : payload.is_active === true,
+    updated_at:new Date().toISOString()
+  };
+}
+
+function notificationPermissionForModule(module = "system") {
+  return ({ inventory:"inventory.view", orders:"orders.view", finance:"finance.view", shipping:"shipping.view", settlements:"shipping.view", integrations:"integrations.view", catalog:"catalog.view" })[module] || "notifications.view";
+}
+
+function notificationRuleVisibleToStaff(rule = {}, staff = null) {
+  if (!staff) return true;
+  const roleIds = Array.isArray(rule.audience_role_ids) ? rule.audience_role_ids.map(Number) : [];
+  const staffIds = Array.isArray(rule.audience_staff_ids) ? rule.audience_staff_ids.map(Number) : [];
+  if (staffIds.length && !staffIds.includes(Number(staff.id))) return false;
+  if (roleIds.length && !roleIds.includes(Number(staff.role_id))) return false;
+  return staffHasPermission(staff, rule.required_permission || notificationPermissionForModule(rule.module));
+}
+
+function notificationStaffRecipients(rule = {}) {
+  return entityRows("staff_users").filter((staff) => staff.status === "active" && staff.is_active !== false && staff.notification_preferences?.email === true && notificationRuleVisibleToStaff(rule, staff)).map((staff) => staff.notification_email || staff.email);
+}
+
+function notificationTargetName(product = {}, variant = null) {
+  const name = product.name_en || product.name_ar || `Product #${product.id}`;
+  const variantName = variant ? [variant.color, variant.option, variant.value].filter(Boolean).join(" / ") : "";
+  return variantName ? `${name} · ${variantName}` : name;
+}
+
+function notificationCandidates() {
+  const candidates = [];
+  const now = Date.now();
+  const products = entityRows("products").map(normalizeProductPayload).filter((product) => product.is_active !== false);
+  products.forEach((product) => {
+    const targets = product.variants?.length ? product.variants.filter((variant) => variant.is_active !== false).map((variant) => ({ variant, mode:variant.inventory_mode, stock:variant.stock })) : [{ variant:null, mode:product.inventory_mode, stock:product.stock }];
+    targets.filter((target) => target.mode !== "unlimited").forEach((target) => {
+      const stock = Math.max(0, Number(target.stock || 0));
+      const sourceId = `${product.id}:${target.variant?.id || "base"}`;
+      const data = { product_id:product.id, variant_id:target.variant?.id || null, product_name:notificationTargetName(product, target.variant), stock };
+      candidates.push({ event_code:stock <= 0 ? "inventory_out_of_stock" : "inventory_low_stock", source_type:"inventory_target", source_id:sourceId, metric:stock, occurred_at:product.updated_at || product.created_at, title_en:stock <= 0 ? `${data.product_name} is out of stock` : `${data.product_name} is low on stock`, title_ar:stock <= 0 ? `نفد مخزون ${data.product_name}` : `مخزون ${data.product_name} منخفض`, message_en:`Current available quantity: ${stock}.`, message_ar:`الكمية المتاحة حاليًا: ${stock}.`, action_url:`/admin#products`, data });
+    });
+  });
+  db.prepare("SELECT * FROM inventory_receipt_items ORDER BY id DESC LIMIT 500").all().forEach((item) => {
+    const before = Number(item.previous_unit_cost || 0);
+    const after = Number(item.resulting_average_cost || item.landed_unit_cost || 0);
+    if (before <= 0 || after <= 0) return;
+    const percent = Math.abs((after - before) / before * 100);
+    candidates.push({ event_code:"inventory_cost_change", source_type:"inventory_receipt_item", source_id:String(item.id), metric:percent, occurred_at:item.updated_at || item.created_at, title_en:`Cost changed for ${item.product_name || `product #${item.product_id}`}`, title_ar:`تغيرت تكلفة ${item.product_name || `المنتج #${item.product_id}`}`, message_en:`Cost moved from ${before.toFixed(2)} to ${after.toFixed(2)} SAR (${percent.toFixed(1)}%).`, message_ar:`تغيرت التكلفة من ${before.toFixed(2)} إلى ${after.toFixed(2)} ر.س (${percent.toFixed(1)}%).`, action_url:`/admin#inventoryReceipt/${item.receipt_id}`, data:{ receipt_id:item.receipt_id, product_id:item.product_id, before, after, percent } });
+  });
+  entityRows("orders").filter((order) => !order.is_historical).forEach((order) => {
+    const paymentStatus = String(order.payment?.status || "").toLowerCase();
+    const paymentCompleted = ["paid", "captured", "authorised", "authorized", "completed"].includes(paymentStatus) || Boolean(order.payment_completed_at);
+    if (!paymentCompleted && (order.payment_failed_at || ["failed", "declined", "rejected"].includes(paymentStatus))) candidates.push({ event_code:"order_payment_failed", source_type:"order", source_id:String(order.id), metric:1, occurred_at:order.payment_failed_at || order.updated_at, title_en:`Payment failed for order #${order.id}`, title_ar:`فشل دفع الطلب #${order.id}`, message_en:`${order.payment?.provider || order.payment?.method || "Payment gateway"} did not complete ${Number(order.total || 0).toFixed(2)} ${order.currency_snapshot?.code || "SAR"}.`, message_ar:`لم تكتمل عملية ${order.payment?.provider || order.payment?.method || "الدفع"} بقيمة ${Number(order.total || 0).toFixed(2)} ${order.currency_snapshot?.code || "SAR"}.`, action_url:`/admin#orderDetail/${order.id}`, data:{ order_id:order.id, provider:order.payment?.provider, total:order.total } });
+    if (order.return_state === "pending" && order.return_due_at && new Date(order.return_due_at).getTime() < now) {
+      const days = Math.max(1, Math.floor((now - new Date(order.return_due_at).getTime()) / 86400000));
+      candidates.push({ event_code:"order_return_overdue", source_type:"order", source_id:String(order.id), metric:days, occurred_at:order.return_due_at, title_en:`Return overdue for order #${order.id}`, title_ar:`مرتجع الطلب #${order.id} متأخر`, message_en:`The returned stock is ${days} day(s) overdue and has not been confirmed in the warehouse.`, message_ar:`تأخر رجوع المخزون ${days} يوم ولم يتم تأكيد استلامه في المخزن.`, action_url:`/admin#orderDetail/${order.id}`, data:{ order_id:order.id, days_overdue:days } });
+    }
+  });
+  const finance = financeOverview({ include_historical:"false" });
+  finance.orders.filter((row) => row.recognized).forEach((row) => {
+    if (Number(row.contribution_profit || 0) < 0) candidates.push({ event_code:"finance_negative_profit", source_type:"order", source_id:String(row.order_id || row.id), metric:Number(row.contribution_profit || 0), occurred_at:row.date, title_en:`Order #${row.order_id || row.id} has negative profit`, title_ar:`الطلب #${row.order_id || row.id} حقق خسارة`, message_en:`Contribution profit is ${Number(row.contribution_profit || 0).toFixed(2)} ${row.currency || "SAR"}.`, message_ar:`صافي المساهمة ${Number(row.contribution_profit || 0).toFixed(2)} ${row.currency || "SAR"}.`, action_url:`/admin#orderDetail/${row.order_id || row.id}`, data:row });
+    const missing = [row.cogs_confidence === "missing" ? "COGS" : "", row.shipping_confidence === "missing" ? "shipping" : "", row.payment_fee_confidence === "missing" ? "payment fee" : ""].filter(Boolean);
+    if (missing.length) candidates.push({ event_code:"finance_missing_cost", source_type:"order", source_id:String(row.order_id || row.id), metric:missing.length, occurred_at:row.date, title_en:`Order #${row.order_id || row.id} has incomplete costs`, title_ar:`تكاليف الطلب #${row.order_id || row.id} غير مكتملة`, message_en:`Missing: ${missing.join(", ")}.`, message_ar:`البيانات الناقصة: ${missing.join("، ")}.`, action_url:`/admin#finance`, data:{ order_id:row.order_id || row.id, missing } });
+  });
+  entityRows("shipping_shipments").filter((shipment) => ["pending", "picked_up", "in_transit", "out_for_delivery", "exception"].includes(String(shipment.status_group || "pending"))).forEach((shipment) => {
+    const last = new Date(shipment.latest_status_time || shipment.last_seen_at || shipment.updated_at || shipment.created_at).getTime();
+    const days = Number.isFinite(last) ? Math.max(0, Math.floor((now - last) / 86400000)) : 0;
+    candidates.push({ event_code:"shipping_stale", source_type:"shipment", source_id:String(shipment.id), metric:days, occurred_at:shipment.latest_status_time || shipment.updated_at, title_en:`Shipment ${shipment.waybill_no || shipment.id} has no recent update`, title_ar:`الشحنة ${shipment.waybill_no || shipment.id} بدون تحديث حديث`, message_en:`No carrier status update for ${days} day(s).`, message_ar:`لا يوجد تحديث من شركة الشحن منذ ${days} يوم.`, action_url:`/admin#shippingShipments`, data:{ shipment_id:shipment.id, waybill_no:shipment.waybill_no, provider:shipment.provider, days } });
+  });
+  entityRows("shipping_audit_findings").filter((finding) => ["open", "reviewing"].includes(finding.status) && finding.financially_confirmed === true && Number(finding.exposure_amount || 0) > 0).forEach((finding) => candidates.push({ event_code:"shipping_financial_finding", source_type:"shipping_audit_finding", source_id:String(finding.id), metric:Number(finding.exposure_amount || 0), occurred_at:finding.last_detected_at || finding.detected_at, title_en:finding.title_en || "Carrier charge needs review", title_ar:finding.title_ar || "رسم شحن يحتاج مراجعة", message_en:`Potential exposure: ${Number(finding.exposure_amount || 0).toFixed(2)} ${finding.currency || "SAR"}. Waybill ${finding.waybill_no || "-"}.`, message_ar:`قيمة تحتاج مراجعة: ${Number(finding.exposure_amount || 0).toFixed(2)} ${finding.currency || "SAR"}. البوليصة ${finding.waybill_no || "-"}.`, action_url:`/admin#shippingAuditFinding/${finding.id}`, data:{ finding_id:finding.id, waybill_no:finding.waybill_no, exposure_amount:finding.exposure_amount } }));
+  const syncRuns = entityRows("shipping_sync_runs");
+  const latestSyncBySource = new Map();
+  syncRuns.forEach((run) => { if (!latestSyncBySource.has(run.source)) latestSyncBySource.set(run.source, run); });
+  [...latestSyncBySource.values()].filter((run) => run.status === "failed").forEach((run) => candidates.push({ event_code:"shipping_sync_failed", source_type:"shipping_sync_run", source_id:String(run.id), metric:1, occurred_at:run.completed_at || run.updated_at, title_en:`${run.source || "Shipping"} sync failed`, title_ar:`فشلت مزامنة ${run.source || "الشحن"}`, message_en:String(run.error || "The shipping integration returned an error."), message_ar:String(run.error || "أرجع تكامل الشحن خطأ أثناء المزامنة."), action_url:`/admin#shippingIntegrations`, data:{ run_id:run.id, source:run.source, error:run.error } }));
+  entityRows("shipping_carrier_bills").filter((bill) => String(bill.settlement_status || bill.status || "").toLowerCase() === "completed").forEach((bill) => candidates.push({ event_code:"settlement_received", source_type:"carrier_bill", source_id:String(bill.id), metric:Number(bill.amount || 0), occurred_at:bill.bill_date || bill.updated_at, title_en:`${bill.bill_type_label || bill.bill_type || "Carrier"} closing is available`, title_ar:`تقفيلة ${bill.bill_type_label || bill.bill_type || "شركة الشحن"} متاحة`, message_en:`${bill.bill_code || "Bill"}: ${Number(bill.amount || 0).toFixed(2)} ${bill.currency || "SAR"}.`, message_ar:`${bill.bill_code || "الفاتورة"}: ${Number(bill.amount || 0).toFixed(2)} ${bill.currency || "SAR"}.`, action_url:`/admin#shippingCarrierBill/${bill.id}`, data:{ bill_id:bill.id, bill_code:bill.bill_code, amount:bill.amount } }));
+  entityRows("shipping_audit_findings").filter((finding) => ["open", "reviewing"].includes(finding.status) && finding.rule_code === "settlement_overdue").forEach((finding) => candidates.push({ event_code:"settlement_overdue", source_type:"shipping_audit_finding", source_id:String(finding.id), metric:Number(finding.days_overdue || finding.calculation?.days_overdue || 1), occurred_at:finding.last_detected_at || finding.detected_at, title_en:finding.title_en || "Carrier settlement is overdue", title_ar:finding.title_ar || "تحصيل شركة الشحن متأخر", message_en:finding.reason_en || "The expected carrier settlement has not been confirmed.", message_ar:finding.reason_ar || "لم يتم تأكيد استلام التحصيل المتوقع من شركة الشحن.", action_url:`/admin#shippingAuditFinding/${finding.id}`, data:{ finding_id:finding.id } }));
+  return candidates;
+}
+
+function notificationRuleMatches(rule, candidate) {
+  if (rule.is_active === false || String(rule.trigger) !== String(candidate.event_code)) return false;
+  const metric = Number(candidate.metric || 0);
+  const threshold = Number(rule.threshold || 0);
+  if (["inventory_low_stock", "inventory_out_of_stock"].includes(rule.trigger)) return metric <= threshold;
+  if (rule.trigger === "finance_negative_profit") return metric < threshold;
+  if (rule.trigger === "settlement_received") return new Date(candidate.occurred_at || 0).getTime() >= new Date(rule.created_at || 0).getTime();
+  return metric >= threshold;
+}
+
+function notificationQuietHours(settings, severity) {
+  if (!settings.quiet_hours.enabled || (severity === "critical" && settings.quiet_hours.critical_bypass)) return false;
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone:settings.quiet_hours.timezone, hour:"2-digit", minute:"2-digit", hour12:false }).formatToParts(new Date());
+  const minutes = Number(parts.find((part) => part.type === "hour")?.value || 0) * 60 + Number(parts.find((part) => part.type === "minute")?.value || 0);
+  const toMinutes = (value) => { const [hour, minute] = String(value).split(":").map(Number); return hour * 60 + minute; };
+  const start = toMinutes(settings.quiet_hours.start);
+  const end = toMinutes(settings.quiet_hours.end);
+  return start <= end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+}
+
+function notificationEmailTransport(settings) {
+  const password = decryptIntegrationSecret(settings.email.password_encrypted);
+  if (!settings.channels.email || !settings.email.host || !settings.email.username || !password || !settings.email.from_email) return null;
+  return nodemailer.createTransport({
+    host:settings.email.host,
+    port:settings.email.port,
+    secure:settings.email.secure,
+    auth:{ user:settings.email.username, pass:password },
+    connectionTimeout:settings.email.connection_timeout_ms,
+    greetingTimeout:settings.email.connection_timeout_ms,
+    socketTimeout:Math.max(15000, settings.email.connection_timeout_ms)
+  });
+}
+
+function notificationEmailHtml(notification) {
+  const safe = (value) => String(value || "").replace(/[&<>"']/g, (character) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" })[character]);
+  return `<div dir="rtl" style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#172033"><div style="border-top:4px solid #b51224;padding:24px;border:1px solid #e4e7ec"><small style="color:#b51224;font-weight:700">SITEYFY · ${safe(notification.severity).toUpperCase()}</small><h2>${safe(notification.title_ar)}</h2><p>${safe(notification.message_ar)}</p><hr style="border:0;border-top:1px solid #eee"><div dir="ltr"><h3>${safe(notification.title_en)}</h3><p>${safe(notification.message_en)}</p></div>${notification.action_url ? `<p><a href="${safe(publicStoreUrl(notification.action_url.replace(/^\/admin/, "/admin")))}" style="display:inline-block;background:#b51224;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px">Open in dashboard</a></p>` : ""}</div></div>`;
+}
+
+async function deliverNotificationEmail(notification, rule, settings, forceRecipients = null) {
+  const recipientSource = forceRecipients || [...(rule.recipients?.length ? rule.recipients : settings.email.default_recipients), ...notificationStaffRecipients(rule)];
+  const recipients = notificationRecipients(recipientSource);
+  if (!recipients.length) return createRecord("notification_deliveries", { notification_id:notification.id, channel:"email", status:"skipped", reason:"no_recipients", attempted_at:new Date().toISOString() });
+  if (notificationQuietHours(settings, notification.severity)) return createRecord("notification_deliveries", { notification_id:notification.id, channel:"email", status:"deferred", reason:"quiet_hours", recipients, attempted_at:new Date().toISOString() });
+  const transport = notificationEmailTransport(settings);
+  if (!transport) return createRecord("notification_deliveries", { notification_id:notification.id, channel:"email", status:"skipped", reason:"email_not_configured", recipients, attempted_at:new Date().toISOString() });
+  const delivery = createRecord("notification_deliveries", { notification_id:notification.id, channel:"email", status:"sending", recipients, attempted_at:new Date().toISOString() });
+  try {
+    const result = await transport.sendMail({ from:{ name:settings.email.from_name, address:settings.email.from_email }, to:recipients, replyTo:settings.email.reply_to || undefined, subject:`[${String(notification.severity || "info").toUpperCase()}] ${notification.title_en}`, html:notificationEmailHtml(notification) });
+    return updateRecord("notification_deliveries", delivery.id, { status:"sent", provider_message_id:String(result.messageId || ""), sent_at:new Date().toISOString() });
+  } catch (error) {
+    return updateRecord("notification_deliveries", delivery.id, { status:"failed", error:String(error.message || "EMAIL_SEND_FAILED").slice(0, 500), failed_at:new Date().toISOString() });
+  }
+}
+
+async function sendNotificationDigest(kind = "daily", settings = normalizeNotificationSettings()) {
+  const recipients = notificationRecipients(settings.email.default_recipients);
+  if (!settings.channels.email || !recipients.length) return { skipped:true, reason:"email_not_configured" };
+  const transport = notificationEmailTransport(settings);
+  if (!transport) return { skipped:true, reason:"email_not_configured" };
+  const periodMs = kind === "weekly" ? 7 * 86400000 : 86400000;
+  const cutoff = Date.now() - periodMs;
+  const rows = entityRows("notifications").filter((row) => ["unread", "read", "acknowledged", "snoozed"].includes(row.status) && new Date(row.last_seen_at || row.created_at).getTime() >= cutoff);
+  if (!rows.length) return { skipped:true, reason:"no_notifications" };
+  const safe = (value) => String(value || "").replace(/[&<>"']/g, (character) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" })[character]);
+  const counts = Object.fromEntries(["critical", "high", "warning", "info"].map((severity) => [severity, rows.filter((row) => row.severity === severity).length]));
+  const html = `<div dir="rtl" style="font-family:Arial,sans-serif;max-width:720px;margin:auto;color:#172033"><div style="border-top:4px solid #172033;padding:24px;border:1px solid #e4e7ec"><small style="color:#b51224;font-weight:700">SITEYFY · ${kind.toUpperCase()} DIGEST</small><h2>ملخص إشعارات المتجر</h2><p>حرج: ${counts.critical} · مهم: ${counts.high} · تنبيه: ${counts.warning} · معلومات: ${counts.info}</p>${rows.slice(0, 50).map((row) => `<div style="padding:12px 0;border-top:1px solid #eee"><strong>${safe(row.title_ar || row.title_en)}</strong><p style="margin:5px 0;color:#667085">${safe(row.message_ar || row.message_en)}</p></div>`).join("")}<p><a href="${safe(publicStoreUrl("/admin#notifications"))}" style="display:inline-block;background:#172033;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px">فتح مركز الإشعارات</a></p></div></div>`;
+  let run = createRecord("notification_digest_runs", { kind, status:"sending", recipient_count:recipients.length, notification_count:rows.length, period_start:new Date(cutoff).toISOString(), period_end:new Date().toISOString(), started_at:new Date().toISOString() });
+  try {
+    const result = await transport.sendMail({ from:{ name:settings.email.from_name, address:settings.email.from_email }, to:recipients, replyTo:settings.email.reply_to || undefined, subject:`SITEYFY ${kind === "weekly" ? "weekly" : "daily"} notification digest (${rows.length})`, html });
+    run = updateRecord("notification_digest_runs", run.id, { status:"sent", provider_message_id:String(result.messageId || ""), sent_at:new Date().toISOString(), completed_at:new Date().toISOString() });
+    createRecord("notification_deliveries", { notification_id:null, channel:"email_digest", status:"sent", digest_run_id:run.id, recipients, sent_at:run.sent_at });
+    return run;
+  } catch (error) {
+    run = updateRecord("notification_digest_runs", run.id, { status:"failed", error:String(error.message || "DIGEST_SEND_FAILED").slice(0, 500), completed_at:new Date().toISOString() });
+    createRecord("notification_deliveries", { notification_id:null, channel:"email_digest", status:"failed", digest_run_id:run.id, recipients, error:run.error, failed_at:new Date().toISOString() });
+    return run;
+  }
+}
+
+async function runDueNotificationDigests(settings = normalizeNotificationSettings()) {
+  if (!settings.enabled || !settings.channels.email) return [];
+  const zone = settings.quiet_hours.timezone || "Asia/Riyadh";
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone:zone, year:"numeric", month:"2-digit", day:"2-digit", weekday:"short", hour:"2-digit", hour12:false }).formatToParts(new Date());
+  const value = (type) => parts.find((part) => part.type === type)?.value || "";
+  const dateKey = `${value("year")}-${value("month")}-${value("day")}`;
+  const hour = Number(value("hour") || 0);
+  const weekDay = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(value("weekday"));
+  const runs = entityRows("notification_digest_runs");
+  const results = [];
+  const dailyKey = `${dateKey}:daily`;
+  if (settings.digest.daily_enabled && hour >= settings.digest.daily_hour && !runs.some((run) => run.kind === "daily" && run.schedule_key === dailyKey)) {
+    const result = await sendNotificationDigest("daily", settings);
+    if (result?.id) updateRecord("notification_digest_runs", result.id, { schedule_key:dailyKey });
+    results.push(result);
+  }
+  const weekKey = `${dateKey}:weekly`;
+  if (settings.digest.weekly_enabled && weekDay === settings.digest.weekly_day && hour >= settings.digest.weekly_hour && !runs.some((run) => run.kind === "weekly" && run.schedule_key === weekKey)) {
+    const result = await sendNotificationDigest("weekly", settings);
+    if (result?.id) updateRecord("notification_digest_runs", result.id, { schedule_key:weekKey });
+    results.push(result);
+  }
+  return results;
+}
+
+let notificationScanPromise = null;
+async function runNotificationScan(trigger = "manual") {
+  if (notificationScanPromise) return notificationScanPromise;
+  notificationScanPromise = (async () => {
+    const settings = normalizeNotificationSettings();
+    const startedAt = new Date().toISOString();
+    let run = createRecord("notification_runs", { trigger, status:"running", started_at:startedAt });
+    if (!settings.enabled) return updateRecord("notification_runs", run.id, { status:"skipped", reason:"disabled", completed_at:new Date().toISOString() });
+    try {
+      const rules = entityRows("notification_rules").filter((rule) => rule.is_active !== false);
+      const candidates = notificationCandidates();
+      const existing = entityRows("notifications");
+      const activeStatuses = new Set(["unread", "read", "acknowledged", "snoozed"]);
+      const detectedKeys = new Set();
+      let created = 0;
+      let updated = 0;
+      let emailed = 0;
+      for (const rule of rules) {
+        for (const candidate of candidates.filter((item) => notificationRuleMatches(rule, item))) {
+          const dedupeKey = `${rule.code}:${candidate.source_type}:${candidate.source_id}`;
+          detectedKeys.add(dedupeKey);
+          const current = existing.find((row) => row.dedupe_key === dedupeKey && activeStatuses.has(row.status));
+          const now = new Date().toISOString();
+          let notification;
+          let shouldDeliver = false;
+          if (current) {
+            const cooldownElapsed = Date.now() - new Date(current.last_notified_at || current.created_at).getTime() >= Number(rule.cooldown_minutes || 1440) * 60000;
+            notification = updateRecord("notifications", current.id, { ...candidate, rule_id:rule.id, rule_code:rule.code, module:rule.module, severity:rule.severity, last_seen_at:now, occurrence_count:Number(current.occurrence_count || 1) + (cooldownElapsed ? 1 : 0), ...(cooldownElapsed ? { last_notified_at:now } : {}) });
+            shouldDeliver = cooldownElapsed;
+            updated += 1;
+          } else {
+            notification = createRecord("notifications", { ...candidate, rule_id:rule.id, rule_code:rule.code, module:rule.module, severity:rule.severity, dedupe_key:dedupeKey, status:"unread", first_seen_at:now, last_seen_at:now, last_notified_at:now, occurrence_count:1 });
+            shouldDeliver = true;
+            created += 1;
+            if (rule.dashboard !== false && settings.channels.dashboard) createRecord("notification_deliveries", { notification_id:notification.id, channel:"dashboard", status:"delivered", delivered_at:now });
+          }
+          if (shouldDeliver && rule.email === true && settings.channels.email) {
+            const delivery = await deliverNotificationEmail(notification, rule, settings);
+            if (delivery.status === "sent") emailed += 1;
+          }
+        }
+      }
+      const statefulTriggers = new Set(["inventory_low_stock", "inventory_out_of_stock", "order_payment_failed", "order_return_overdue", "finance_negative_profit", "finance_missing_cost", "shipping_stale", "shipping_financial_finding", "shipping_sync_failed", "settlement_overdue"]);
+      let resolved = 0;
+      existing.filter((row) => activeStatuses.has(row.status) && statefulTriggers.has(row.rule_code) && !detectedKeys.has(row.dedupe_key)).forEach((row) => {
+        updateRecord("notifications", row.id, { status:"resolved_automatically", resolved_at:new Date().toISOString(), resolution_reason:"condition_no_longer_present" });
+        resolved += 1;
+      });
+      run = updateRecord("notification_runs", run.id, { status:"completed", candidate_count:candidates.length, created_count:created, updated_count:updated, resolved_count:resolved, email_sent_count:emailed, completed_at:new Date().toISOString() });
+      return run;
+    } catch (error) {
+      run = updateRecord("notification_runs", run.id, { status:"failed", error:String(error.message || "NOTIFICATION_SCAN_FAILED"), completed_at:new Date().toISOString() });
+      throw error;
+    }
+  })();
+  try { return await notificationScanPromise; }
+  finally { notificationScanPromise = null; }
+}
+
+function notificationViewerKey(viewer = {}) {
+  return viewer.user?.role === "staff" ? `staff:${viewer.staff?.id || viewer.user.staff_id}` : `admin:${viewer.user?.email || "environment"}`;
+}
+
+function notificationOverview(query = {}, viewer = {}) {
+  const rules = entityRows("notification_rules");
+  const ruleMap = new Map(rules.map((rule) => [Number(rule.id), rule]));
+  const viewerKey = notificationViewerKey(viewer);
+  const states = new Map(entityRows("notification_user_states").filter((state) => state.viewer_key === viewerKey).map((state) => [Number(state.notification_id), state]));
+  const visible = (row) => notificationRuleVisibleToStaff(ruleMap.get(Number(row.rule_id)) || { module:row.module }, viewer.staff || null);
+  const decorate = (row) => {
+    const state = states.get(Number(row.id));
+    if (!state || ["resolved", "archived", "resolved_automatically"].includes(row.status)) return row;
+    return { ...row, status:state.status || row.status, read_at:state.read_at || row.read_at, acknowledged_at:state.acknowledged_at || row.acknowledged_at, snoozed_until:state.snoozed_until || row.snoozed_until };
+  };
+  let rows = entityRows("notifications").filter(visible).map(decorate);
+  if (query.status && query.status !== "all") rows = rows.filter((row) => row.status === query.status);
+  if (query.module && query.module !== "all") rows = rows.filter((row) => row.module === query.module);
+  if (query.severity && query.severity !== "all") rows = rows.filter((row) => row.severity === query.severity);
+  const all = entityRows("notifications").filter(visible).map(decorate);
+  const active = all.filter((row) => ["unread", "read", "acknowledged", "snoozed"].includes(row.status));
+  const limit = Math.min(500, Math.max(10, Number(query.limit || 100)));
+  return {
+    notifications:rows.slice(0, limit),
+    rules,
+    staff_roles:staffRoleRows().map(publicStaffRole),
+    staff:entityRows("staff_users").filter((staff) => staff.status === "active").map((staff) => ({ id:staff.id, name:staff.name, email:staff.email, role_id:staff.role_id })),
+    permissions:adminPermissionCatalog,
+    settings:publicNotificationSettings(),
+    deliveries:entityRows("notification_deliveries").slice(0, 50),
+    latest_run:entityRows("notification_runs")[0] || null,
+    summary:{ total:all.length, active:active.length, unread:active.filter((row) => row.status === "unread").length, critical:active.filter((row) => row.severity === "critical").length, email_failures:entityRows("notification_deliveries").filter((row) => row.channel === "email" && row.status === "failed").length }
+  };
+}
+
 function normalizeSettingsPayload(payload = {}) {
   const websiteDomain = normalizeWebsiteDomain(payload.website_domain || defaultPublicDomain).replace(/\/+$/, "");
   return {
@@ -4175,6 +5998,36 @@ function currentSettings() {
 function normalizeHexColor(value, fallback) {
   const color = String(value || "").trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color.toUpperCase() : fallback;
+}
+
+function normalizeDashboardIdentity(payload = {}) {
+  const saved = getSetting("dashboardIdentity") || {};
+  const merged = {
+    ...defaultDashboardIdentity, ...saved, ...payload,
+    light: { ...defaultDashboardIdentity.light, ...(saved.light || {}), ...(payload.light || {}) },
+    dark: { ...defaultDashboardIdentity.dark, ...(saved.dark || {}), ...(payload.dark || {}) }
+  };
+  const normalizeMode = (mode, defaults) => ({
+    ...mode,
+    primary: normalizeHexColor(mode.primary, defaults.primary), secondary: normalizeHexColor(mode.secondary, defaults.secondary),
+    accent: normalizeHexColor(mode.accent, defaults.accent), canvas: normalizeHexColor(mode.canvas, defaults.canvas),
+    surface: normalizeHexColor(mode.surface, defaults.surface), surface_soft: normalizeHexColor(mode.surface_soft, defaults.surface_soft),
+    heading: normalizeHexColor(mode.heading, defaults.heading), text: normalizeHexColor(mode.text, defaults.text),
+    muted: normalizeHexColor(mode.muted, defaults.muted), border: normalizeHexColor(mode.border, defaults.border),
+    logo_horizontal: String(mode.logo_horizontal || defaults.logo_horizontal),
+    logo_vertical: String(mode.logo_vertical || defaults.logo_vertical),
+    icon: String(mode.icon || defaults.icon), icon_crop: mode.icon_crop !== false
+  });
+  return {
+    brand_name: String(merged.brand_name || "SITEYFY").slice(0, 80),
+    tagline_en: String(merged.tagline_en || "Digital Solutions").slice(0, 140),
+    tagline_ar: String(merged.tagline_ar || "الحلول الرقمية").slice(0, 140),
+    default_theme: merged.default_theme === "dark" ? "dark" : "light",
+    allow_theme_switch: merged.allow_theme_switch !== false,
+    light: normalizeMode(merged.light, defaultDashboardIdentity.light),
+    dark: normalizeMode(merged.dark, defaultDashboardIdentity.dark),
+    updated_at: merged.updated_at || null
+  };
 }
 
 function normalizeBrandIdentity(payload = {}) {
@@ -4323,6 +6176,8 @@ function normalizeMarketSettings(payload = {}) {
 function normalizeStorefrontLayout(payload = {}) {
   const saved = getSetting("storefrontLayout") || {};
   const announcement = { ...defaultStorefrontLayout.announcement, ...(saved.announcement || {}), ...(payload.announcement || {}) };
+  const header = { ...defaultStorefrontLayout.header, ...(saved.header || {}), ...(payload.header || {}) };
+  const requestedScrollSpeed = Number(header.category_strip_scroll_speed);
   return {
     ...defaultStorefrontLayout,
     ...saved,
@@ -4334,12 +6189,15 @@ function normalizeStorefrontLayout(payload = {}) {
       pause_on_hover: announcement.pause_on_hover !== false,
       messages: Array.isArray(payload.announcement?.messages) ? payload.announcement.messages : (saved.announcement?.messages || defaultStorefrontLayout.announcement.messages)
     },
-    header: { ...defaultStorefrontLayout.header, ...(saved.header || {}), ...(payload.header || {}) },
+    header: {
+      ...header,
+      category_strip_auto_scroll: header.category_strip_auto_scroll !== false,
+      category_strip_scroll_speed: Number.isFinite(requestedScrollSpeed) ? Math.min(36, Math.max(8, requestedScrollSpeed)) : 18
+    },
     footer: { ...defaultStorefrontLayout.footer, ...(saved.footer || {}), ...(payload.footer || {}) },
     updated_at: payload.updated_at || saved.updated_at || null
   };
 }
-
 function normalizeHomeBuilder(payload = {}) {
   const saved = getSetting("homeBuilder") || {};
   return {
@@ -4354,7 +6212,9 @@ function normalizeHomeBuilder(payload = {}) {
         : Number(section.collection_id),
       display_style: section.display_style === "slider" ? "slider" : "grid",
       limit: Math.min(100, Math.max(1, Number(section.limit || 12))),
-      show_view_all: section.show_view_all !== false
+      show_view_all: section.show_view_all !== false,
+      auto_scroll: section.auto_scroll !== false,
+      auto_scroll_speed: Number.isFinite(Number(section.auto_scroll_speed)) ? Math.min(36, Math.max(8, Number(section.auto_scroll_speed))) : 18
     })),
     updated_at: payload.updated_at || saved.updated_at || null
   };
@@ -5253,6 +7113,10 @@ function normalizedProductMediaItem(item = {}, index = 0) {
 
 function normalizeProductPayload(payload = {}) {
   const variants = asArray(payload.variants).map(normalizedProductVariant).filter((variant) => variant.color || variant.option || variant.value);
+  const requestedProductType = String(payload.product_type || payload.productType || "").toLowerCase();
+  const hasExplicitProductType = ["basic", "variable"].includes(requestedProductType);
+  const productType = hasExplicitProductType ? requestedProductType : (variants.length ? "variable" : "basic");
+  const normalizedVariants = hasExplicitProductType && productType === "basic" ? [] : variants;
   const legacySidePhotos = asArray(payload.side_photos || payload.gallery || payload.images).filter(Boolean);
   const explicitMedia = payload.media_gallery !== undefined ? asArray(payload.media_gallery) : legacySidePhotos;
   const mediaGallery = explicitMedia
@@ -5262,39 +7126,83 @@ function normalizeProductPayload(payload = {}) {
     .map((item, index) => ({ ...item, sort_order: index }));
   const nullableNumber = (value) => value === "" || value === null || value === undefined || Number(value) <= 0 ? null : Number(value);
   const requestedInventoryMode = String(payload.inventory_mode || "").toLowerCase();
-  const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(requestedInventoryMode)
+  const baseInventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(requestedInventoryMode)
     ? requestedInventoryMode
     : payload.stock === "" || payload.stock === null || payload.stock === undefined || Number(payload.stock || 0) === 0
       ? "unlimited"
       : "tracked";
+  const inventoryMode = hasExplicitProductType && productType === "variable" ? "unlimited" : baseInventoryMode;
+  const variableReset = hasExplicitProductType && productType === "variable";
+  const normalizedMainImage = variableReset ? "" : (payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim());
   return {
     ...payload,
-    sku: String(payload.sku || "").trim().toUpperCase(),
-    barcode: String(payload.barcode || "").trim(),
-    cost: Number(payload.cost || 0),
+    product_type: productType,
+    sku: variableReset ? "" : String(payload.sku || "").trim().toUpperCase(),
+    barcode: variableReset ? "" : String(payload.barcode || "").trim(),
+    price: variableReset ? 0 : Math.max(0, Number(payload.price || 0)),
+    sale_price: variableReset ? 0 : Math.max(0, Number(payload.sale_price || 0)),
+    compare_at_price: variableReset ? 0 : Math.max(0, Number(payload.compare_at_price || 0)),
+    cost: variableReset ? 0 : Number(payload.cost || 0),
     inventory_mode: inventoryMode,
-    stock: inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(0, Number(payload.stock || 0)),
-    is_in_stock: inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0),
-    stock_status: inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0) ? "in_stock" : "out_of_stock",
+    stock: variableReset || inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(0, Number(payload.stock || 0)),
+    is_in_stock: variableReset ? normalizedVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0),
+    stock_status: variableReset ? (normalizedVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) ? "in_stock" : "out_of_stock") : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0) ? "in_stock" : "out_of_stock",
     goods_type_id: String(payload.goods_type_id || "").trim(),
     shipping_profile_id: String(payload.shipping_profile_id || "").trim(),
     requires_shipping: payload.requires_shipping !== false && payload.requires_shipping !== "false",
-    weight: nullableNumber(payload.weight),
+    weight: variableReset ? null : nullableNumber(payload.weight),
     length: nullableNumber(payload.length),
     width: nullableNumber(payload.width),
     height: nullableNumber(payload.height),
     origin_country_code: String(payload.origin_country_code || "").trim().toUpperCase(),
     hs_code: String(payload.hs_code || "").trim(),
     shipping_data_source: ["manual", "imported", "estimated", "profile"].includes(payload.shipping_data_source) ? payload.shipping_data_source : "profile",
-    variants,
-    active_variants: variants.filter((variant) => variant.is_active !== false),
-    generated_images: asArray(payload.generated_images),
-    media_gallery: mediaGallery,
-    side_photos: mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
-    gallery: payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
-    images: payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
-    image_url: payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim()
+    variants: normalizedVariants,
+    category_id: payload.category_id === "" || payload.category_id === null || payload.category_id === undefined ? null : Number(payload.category_id),
+    category_slug: String(payload.category_slug || payload.category?.slug || "").trim(),
+    subcategory_ids: [...new Set(asArray(payload.subcategory_ids).map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))],
+    primary_subcategory_id: payload.primary_subcategory_id === "" || payload.primary_subcategory_id === null || payload.primary_subcategory_id === undefined ? null : Number(payload.primary_subcategory_id),
+    label_ids: [...new Set(asArray(payload.label_ids).map(value => String(value || "").trim()).filter(Boolean))],
+    facet_ids: [...new Set(asArray(payload.facet_ids).map(value => String(value || "").trim()).filter(Boolean))],
+    active_variants: normalizedVariants.filter((variant) => variant.is_active !== false),
+    generated_images: variableReset ? [] : asArray(payload.generated_images),
+    media_gallery: variableReset ? [] : mediaGallery,
+    side_photos: variableReset ? [] : mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
+    gallery: variableReset || payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
+    images: variableReset || payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
+    main_photo_url: normalizedMainImage,
+    image_url: normalizedMainImage
   };
+}
+
+function validateProductPayload(product = {}, { requireExplicitType = false } = {}) {
+  const requested = String(product.product_type || product.productType || "").toLowerCase();
+  if (requireExplicitType && !["basic", "variable"].includes(requested)) fail("Choose a product type: basic or variable");
+  const normalized = normalizeProductPayload(product);
+  const categories = entityRows("categories").map((row) => normalizeCategoryPayload(row, row));
+  const selectedSubcategories = normalized.subcategory_ids.map((id) => categories.find((row) => Number(row.id) === Number(id))).filter(Boolean);
+  if (selectedSubcategories.length !== normalized.subcategory_ids.length) fail("One or more selected subcategories do not exist");
+  if (selectedSubcategories.some((row) => !row.parent_id || row.category_type === "smart")) fail("Products can only be assigned to manual subcategories");
+  const selectedParentIds = new Set(selectedSubcategories.map((row) => Number(row.parent_id)));
+  if (selectedParentIds.size > 1) fail("Selected subcategories must belong to one main category");
+  const requestedCategory = categories.find((row) => Number(row.id) === Number(normalized.category_id))
+    || categories.find((row) => String(row.slug) === String(normalized.category_slug));
+  const parentId = selectedParentIds.size ? [...selectedParentIds][0] : Number(requestedCategory?.parent_id || requestedCategory?.id || 0);
+  const parentCategory = categories.find((row) => Number(row.id) === parentId && !row.parent_id);
+  if (selectedSubcategories.length && !parentCategory) fail("The selected subcategory parent was not found");
+  if (selectedSubcategories.length && requestedCategory && Number(requestedCategory.parent_id || requestedCategory.id) !== parentId) fail("The selected subcategories do not belong to the selected category");
+  if (parentCategory) {
+    normalized.category_id = Number(parentCategory.id);
+    normalized.category_slug = String(parentCategory.slug || normalized.category_slug || "");
+  }
+  if (!normalized.subcategory_ids.includes(Number(normalized.primary_subcategory_id))) normalized.primary_subcategory_id = normalized.subcategory_ids[0] || null;
+  if (normalized.product_type === "variable") {
+    if (normalized.variants.length < 2) fail("A variable product must contain at least two variants");
+    normalized.variants.forEach((variant, index) => {
+      if (variant.price === null || !Number.isFinite(Number(variant.price))) fail(`Variant ${index + 1} must have its own price`);
+    });
+  }
+  return normalized;
 }
 
 function effectiveVariantPrice(product = {}, variant = null) {
@@ -5796,8 +7704,8 @@ function normalizeCheckoutCustomer(customer = {}) {
     additional_number: String(addressSource.additional_number || "").trim(),
     short_address: normalizeSaudiShortAddress(addressSource.short_address),
     address_notes: String(customer.address_notes || customer.notes || "").trim(),
-    latitude: addressSource.latitude === "" || addressSource.latitude === undefined ? null : Number(addressSource.latitude),
-    longitude: addressSource.longitude === "" || addressSource.longitude === undefined ? null : Number(addressSource.longitude),
+    latitude: addressSource.latitude === "" || addressSource.latitude === undefined || addressSource.latitude === null ? null : Number(addressSource.latitude),
+    longitude: addressSource.longitude === "" || addressSource.longitude === undefined || addressSource.longitude === null ? null : Number(addressSource.longitude),
     address_verification: verifiedAddress ? { provider: "spl", status: "verified", verified_at: new Date().toISOString(), provider_reference: verifiedAddress.provider_reference || null } : { provider: null, status: "manual", verified_at: null }
   };
   if (countryCode === "SA" && normalized.short_address && !validSaudiShortAddress(normalized.short_address)) fail("INVALID_SAUDI_SHORT_ADDRESS");
@@ -5865,19 +7773,26 @@ function checkoutLineItems(items = []) {
     if (item.item_type === "bundle" || item.bundle_id || item.bundleId) {
       const bundle = findBundle(item.bundle_id || item.bundleId);
       if (!bundle) fail("Bundle was not found or is inactive", 404);
+      const requestedOptionId = item.bundle_variant_id || item.bundleVariantId || item.variant_id || item.variantId || bundle.default_variant_id || null;
+      const option = bundle.variants?.length ? bundle.variants.find((entry) => String(entry.id) === String(requestedOptionId)) : null;
+      if (bundle.variants?.length && !option) fail("Choose a valid bundle option");
+      const selected = option || bundle;
       const quantity = Math.max(1, Number(item.quantity || 1));
-      if (bundle.available_stock !== null && quantity > bundle.available_stock) fail("Bundle quantity is out of stock");
-      const unitPrice = Number(bundle.price || 0);
-      const componentShipping = bundle.items.map((component) => {
+      if (selected.available_stock !== null && quantity > selected.available_stock) fail("Bundle quantity is out of stock");
+      const unitPrice = Number(selected.price || 0);
+      const componentShipping = selected.items.map((component) => {
         const rawProduct = getRecord("products", component.product_id) || {};
-        return { product_id: component.product_id, quantity: component.quantity * quantity, ...productShippingSnapshot(rawProduct) };
+        const variant = component.variant_id ? normalizeProductPayload(rawProduct).variants.find((entry) => String(entry.id) === String(component.variant_id)) : null;
+        return { product_id:component.product_id, variant_id:component.variant_id || null, quantity:component.quantity * quantity, ...productShippingSnapshot(rawProduct, variant) };
       });
       return {
-        key: String(item.key || `bundle:${bundle.id}:${index}`),
+        key: String(item.key || `bundle:${bundle.id}:${option?.id || "default"}:${index}`),
         item_type: "bundle",
         bundle_id: Number(bundle.id),
+        bundle_variant_id: option?.id || null,
         product_id: 0,
-        variant_id: null,
+        variant_id: option?.id || null,
+        variant_label: option ? (option.label_ar || option.label_en || option.color || "") : "",
         name_ar: bundle.name_ar,
         name_en: bundle.name_en,
         category_slug: "bundles",
@@ -5885,18 +7800,22 @@ function checkoutLineItems(items = []) {
         price: unitPrice,
         quantity,
         subtotal: Number((unitPrice * quantity).toFixed(2)),
-        image_url: bundle.main_photo_url || bundle.image_url || "",
+        image_url: option?.image_url || bundle.main_photo_url || selected.items[0]?.image_url || "",
+        bundle_items: selected.items,
         shipping: {
           requires_shipping: componentShipping.some((component) => component.requires_shipping),
           weight: Number(componentShipping.reduce((sum, component) => sum + component.weight * component.quantity, 0).toFixed(3)),
           goods_type_ids: [...new Set(componentShipping.map((component) => component.goods_type_id))],
           components: componentShipping
         },
-        components: bundle.items.map((component) => ({
+        components: selected.items.map((component) => ({
           product_id: component.product_id,
+          variant_id: component.variant_id || null,
           quantity: component.quantity * quantity,
           name_ar: component.name_ar,
-          name_en: component.name_en
+          name_en: component.name_en,
+          variant_label: component.variant_label || "",
+          image_url: component.image_url || ""
         }))
       };
     }
@@ -5904,7 +7823,9 @@ function checkoutLineItems(items = []) {
     const product = getRecord("products", productId);
     if (!product || product.is_active === false || product.isActive === false || product.active === false) fail(`Product ${productId || "unknown"} was not found`, 404);
     const variantId = item.variant_id || item.variantId || item.optionId || null;
-    const variant = normalizeProductPayload(product).variants.find((entry) => String(entry.id) === String(variantId));
+    const normalizedProduct = normalizeProductPayload(product);
+    const variant = normalizedProduct.variants.find((entry) => String(entry.id) === String(variantId));
+    if (normalizedProduct.product_type === "variable" && !variantId) fail("Choose a product variant");
     if (variantId && (!variant || variant.is_active === false)) fail("Product option was not found or is inactive", 404);
     if (variant?.is_in_stock === false) fail("Product option is out of stock", 409);
     const unitPrice = effectiveVariantPrice(product, variant);
@@ -5948,15 +7869,62 @@ function publicVariant(variant = {}, colors = entityRows("colors")) {
 function productForStore(product = {}) {
   const normalized = normalizeProductPayload(product);
   const colors = entityRows("colors");
-  const activeVariants = normalized.variants.filter((variant) => variant.is_active !== false).map(variant => publicVariant(variant, colors));
+  const activeRawVariants = normalized.variants.filter((variant) => variant.is_active !== false);
+  const activeVariants = activeRawVariants.map(variant => publicVariant(variant, colors));
   const { cost, stock, ...publicProduct } = normalized;
+  const labelRows = entityRows("labels");
+  const facetRows = entityRows("facets");
+  const categoryRows = entityRows("categories").map((row) => normalizeCategoryPayload(row, row));
+  const labels = (normalized.label_ids || []).map(id => labelRows.find(row => String(row.id) === String(id)) || ({ id:String(id), nameAr:String(id), nameEn:String(id), backgroundColor:"#513b82", isActive:true })).filter(row => row && row.is_active !== false && row.isActive !== false);
+  const facets = (normalized.facet_ids || []).map(id => facetRows.find(row => String(row.id) === String(id))).filter(row => row && row.is_active !== false && row.isActive !== false);
+  const category = categoryRows.find((row) => Number(row.id) === Number(normalized.category_id)) || categoryRows.find((row) => String(row.slug) === String(normalized.category_slug)) || null;
+  const subcategories = (normalized.subcategory_ids || []).map((id) => categoryRows.find((row) => Number(row.id) === Number(id))).filter((row) => row && row.is_active !== false);
+  const primarySubcategory = subcategories.find((row) => Number(row.id) === Number(normalized.primary_subcategory_id)) || subcategories[0] || null;
+  const variablePrices = activeRawVariants.map((variant) => effectiveVariantPrice(normalized, variant)).filter((value) => Number.isFinite(value));
+  const trackedStocks = activeRawVariants.filter((variant) => variant.stock !== null && variant.stock !== undefined).map((variant) => Math.max(0, Number(variant.stock || 0)));
+  const variableImage = activeRawVariants.find((variant) => variant.image_url)?.image_url || "";
   return {
     ...publicProduct,
+    product_type: normalized.product_type,
+    main_photo_url: normalized.product_type === "variable" ? variableImage : (normalized.main_photo_url || normalized.image_url || ""),
+    image_url: normalized.product_type === "variable" ? variableImage : (normalized.image_url || normalized.main_photo_url || ""),
+    price: normalized.product_type === "variable" && variablePrices.length ? Math.min(...variablePrices) : Number(normalized.price || 0),
+    sale_price: normalized.product_type === "variable" && variablePrices.length ? Math.min(...variablePrices) : Number(normalized.sale_price || 0),
+    inventory_mode: normalized.product_type === "variable" ? (activeRawVariants.some((variant) => variant.stock === null && variant.is_in_stock !== false) ? "unlimited" : "tracked") : normalized.inventory_mode,
+    stock: normalized.product_type === "variable" ? (activeRawVariants.some((variant) => variant.stock === null && variant.is_in_stock !== false) ? null : trackedStocks.reduce((sum, value) => sum + value, 0)) : normalized.stock,
+    is_in_stock: normalized.product_type === "variable" ? activeRawVariants.some((variant) => variant.is_in_stock !== false) : normalized.is_in_stock,
+    category,
+    subcategories,
+    primary_subcategory: primarySubcategory,
+    labels,
+    facets,
     variants: activeVariants,
     active_variants: activeVariants
   };
 }
 
+function productForAdminList(product = {}) {
+  const normalized = normalizeProductPayload(product);
+  if (normalized.product_type !== "variable") return normalized;
+  const activeVariants = normalized.variants.filter((variant) => variant.is_active !== false);
+  const prices = activeVariants.map((variant) => effectiveVariantPrice(normalized, variant)).filter(Number.isFinite);
+  const costs = activeVariants.map((variant) => Number(variant.cost || 0)).filter(Number.isFinite);
+  const trackedStocks = activeVariants.filter((variant) => variant.stock !== null && variant.stock !== undefined).map((variant) => Math.max(0, Number(variant.stock || 0)));
+  const hasUnlimitedStock = activeVariants.some((variant) => variant.stock === null && variant.is_in_stock !== false);
+  const image = activeVariants.find((variant) => variant.image_url)?.image_url || "";
+  return {
+    ...normalized,
+    main_photo_url: image,
+    image_url: image,
+    price: prices.length ? Math.min(...prices) : 0,
+    sale_price: prices.length ? Math.min(...prices) : 0,
+    cost: costs.length ? Math.min(...costs) : 0,
+    stock: hasUnlimitedStock ? null : trackedStocks.reduce((sum, value) => sum + value, 0),
+    inventory_mode: hasUnlimitedStock ? "unlimited" : "tracked",
+    is_in_stock: activeVariants.some((variant) => variant.is_in_stock !== false),
+    stock_status: activeVariants.some((variant) => variant.is_in_stock !== false) ? "in_stock" : "out_of_stock"
+  };
+}
 function storeProductRows() {
   return activeRows("products").map(productForStore);
 }
@@ -5967,7 +7935,8 @@ const smartCategoryFallbacks = new Set(["empty", "latest"]);
 function normalizeCategoryPayload(payload = {}, existing = {}) {
   const merged = { ...(existing || {}), ...(payload || {}) };
   const rawRule = { ...(existing?.smart_rule || {}), ...(payload?.smart_rule || {}) };
-  const categoryType = merged.category_type === "smart" ? "smart" : "manual";
+  const parentId = merged.parent_id === "" || merged.parent_id === null || merged.parent_id === undefined ? null : Number(merged.parent_id);
+  const categoryType = parentId ? "manual" : (merged.category_type === "smart" ? "smart" : "manual");
   const ruleType = smartCategoryRuleTypes.has(rawRule.type) ? rawRule.type : "best_sellers";
   const lookbackDays = Math.min(3650, Math.max(0, Math.floor(Number(rawRule.lookback_days ?? 90))));
   const minimumUnits = Math.min(1000000, Math.max(0, Math.floor(Number(rawRule.minimum_units ?? 1))));
@@ -5977,6 +7946,7 @@ function normalizeCategoryPayload(payload = {}, existing = {}) {
     name_en: String(merged.name_en || "").trim(),
     name_ar: String(merged.name_ar || "").trim(),
     slug: String(merged.slug || "").trim(),
+    parent_id: Number.isInteger(parentId) && parentId > 0 ? parentId : null,
     category_type: categoryType,
     smart_rule: {
       type: ruleType,
@@ -5991,6 +7961,26 @@ function normalizeCategoryPayload(payload = {}, existing = {}) {
     show_on_home: boolValue(merged.show_on_home, true),
     is_active: boolValue(merged.is_active, true)
   };
+}
+
+function validateCategoryPayload(payload = {}, existing = null) {
+  const normalized = normalizeCategoryPayload(payload, existing || {});
+  const categories = entityRows("categories");
+  const currentId = Number(existing?.id || payload?.id || 0);
+  if (!normalized.name_ar && !normalized.name_en) fail("Category name is required");
+  if (!normalized.slug) fail("Category slug is required");
+  const duplicate = categories.find((row) => Number(row.id) !== currentId && String(row.slug || "").toLowerCase() === normalized.slug.toLowerCase());
+  if (duplicate) fail("Category slug already exists", 409);
+  if (normalized.parent_id) {
+    if (Number(normalized.parent_id) === currentId) fail("A category cannot be its own parent");
+    const parent = categories.find((row) => Number(row.id) === Number(normalized.parent_id));
+    if (!parent) fail("Parent category was not found", 404);
+    if (parent.parent_id) fail("Subcategories can only be placed under a main category");
+    if (parent.category_type === "smart") fail("Smart categories cannot contain subcategories");
+    normalized.category_type = "manual";
+  }
+  if (normalized.category_type === "smart" && categories.some((row) => Number(row.parent_id) === currentId)) fail("A category with subcategories cannot be converted to smart");
+  return normalized;
 }
 
 function smartCategoryOrderTimestamp(order = {}) {
@@ -6068,14 +8058,132 @@ function smartCategoryMatches(category = {}, products = storeProductRows()) {
   return scored.slice(0, rule.product_limit).map(({ product, score }, index) => ({ id: Number(product.id), score, rank: index + 1 }));
 }
 
+function productMatchesCatalogCategory(product = {}, category = {}, categories = entityRows("categories")) {
+  const normalizedCategory = normalizeCategoryPayload(category, category);
+  if (normalizedCategory.category_type === "smart") return smartCategoryMatches(normalizedCategory, [product]).some((match) => Number(match.id) === Number(product.id));
+  if (normalizedCategory.parent_id) return asArray(product.subcategory_ids).some((id) => Number(id) === Number(normalizedCategory.id));
+  const direct = Number(product.category_id) === Number(normalizedCategory.id)
+    || String(product.category_slug || product.category?.slug || "") === String(normalizedCategory.slug || "");
+  if (direct) return true;
+  const childIds = new Set(categories.filter((row) => Number(row.parent_id) === Number(normalizedCategory.id)).map((row) => Number(row.id)));
+  return asArray(product.subcategory_ids).some((id) => childIds.has(Number(id)));
+}
+
 function categoryForStore(category = {}, products = storeProductRows()) {
   const normalized = normalizeCategoryPayload(category, category);
-  const matches = smartCategoryMatches(normalized, products);
+  const categories = entityRows("categories");
+  const matches = normalized.category_type === "smart"
+    ? smartCategoryMatches(normalized, products)
+    : products.filter((product) => productMatchesCatalogCategory(product, normalized, categories)).map((product, index) => ({ id:Number(product.id), score:0, rank:index + 1 }));
+  const parent = normalized.parent_id ? categories.find((row) => Number(row.id) === Number(normalized.parent_id)) : null;
   return {
     ...normalized,
+    is_subcategory: Boolean(normalized.parent_id),
+    parent: parent ? { id:Number(parent.id), slug:String(parent.slug || ""), name_ar:String(parent.name_ar || ""), name_en:String(parent.name_en || "") } : null,
     product_ids: matches.map((match) => match.id),
     matched_product_count: matches.length
   };
+}
+
+const subcategoryTaxonomyDefinitions = [
+  { key:"plain", name_ar:"سادة", name_en:"Plain", slug:"سادة", facet_names:["سادة", "plain"] },
+  { key:"floral", name_ar:"مشجر", name_en:"Floral", slug:"مشجر", facet_names:["مشجر", "floral"] },
+  { key:"dotted", name_ar:"منقط", name_en:"Dotted", slug:"منقط", facet_names:["منقط", "dotted"] }
+];
+
+function taxonomyText(value) {
+  return String(value || "").trim().normalize("NFC").toLowerCase();
+}
+
+function findShraashRoot(categories = entityRows("categories")) {
+  return categories.find((row) => Number(row.id) === 108)
+    || categories.find((row) => taxonomyText(row.name_ar) === "شراشف")
+    || categories.find((row) => taxonomyText(row.slug) === "شراشف")
+    || null;
+}
+
+function subcategoryMigrationPreview() {
+  const categories = entityRows("categories");
+  const facets = entityRows("facets");
+  const products = entityRows("products").map(normalizeProductPayload);
+  const root = findShraashRoot(categories);
+  if (!root) fail("The main Shraash category was not found", 404);
+  const rootProducts = products.filter((product) => Number(product.category_id) === Number(root.id) || taxonomyText(product.category_slug || product.category?.slug) === taxonomyText(root.slug));
+  const definitions = subcategoryTaxonomyDefinitions.map((definition) => {
+    const facet = facets.find((row) => definition.facet_names.includes(taxonomyText(row.name_ar || row.nameAr)) || definition.facet_names.includes(taxonomyText(row.name_en || row.nameEn)));
+    const existing = categories.find((row) => Number(row.parent_id) === Number(root.id) && (taxonomyText(row.slug) === taxonomyText(definition.slug) || taxonomyText(row.name_ar) === taxonomyText(definition.name_ar)));
+    const productIds = facet ? rootProducts.filter((product) => asArray(product.facet_ids).some((id) => String(id) === String(facet.id))).map((product) => Number(product.id)) : [];
+    return { ...definition, facet_id:facet?.id || null, existing_subcategory_id:existing?.id || null, product_ids:productIds, product_count:productIds.length };
+  });
+  return {
+    version:1,
+    root_category:{ id:Number(root.id), slug:String(root.slug || ""), name_ar:String(root.name_ar || ""), name_en:String(root.name_en || "") },
+    definitions,
+    root_product_count:rootProducts.length,
+    unclassified_product_ids:rootProducts.filter((product) => !definitions.some((definition) => definition.product_ids.includes(Number(product.id)))).map((product) => Number(product.id)),
+    overlapping_product_ids:rootProducts.filter((product) => definitions.filter((definition) => definition.product_ids.includes(Number(product.id))).length > 1).map((product) => Number(product.id))
+  };
+}
+
+function migrateFacetProductsToSubcategories() {
+  const before = subcategoryMigrationPreview();
+  const result = db.transaction(() => {
+    const root = getRecord("categories", before.root_category.id);
+    const facets = entityRows("facets");
+    const subcategories = {};
+    for (const definition of subcategoryTaxonomyDefinitions) {
+      const existing = entityRows("categories").find((row) => Number(row.parent_id) === Number(root.id) && (taxonomyText(row.slug) === taxonomyText(definition.slug) || taxonomyText(row.name_ar) === taxonomyText(definition.name_ar)));
+      const facet = facets.find((row) => definition.facet_names.includes(taxonomyText(row.name_ar || row.nameAr)) || definition.facet_names.includes(taxonomyText(row.name_en || row.nameEn)));
+      const payload = validateCategoryPayload({
+        ...(existing || {}),
+        parent_id:Number(root.id),
+        name_ar:definition.name_ar,
+        name_en:definition.name_en,
+        slug:definition.slug,
+        image_url:String(existing?.image_url || facet?.image_url || ""),
+        category_type:"manual",
+        show_in_category_strip:false,
+        show_in_filters:true,
+        show_on_home:false,
+        is_active:true,
+        migrated_from_facet_id:facet?.id || null
+      }, existing || null);
+      subcategories[definition.key] = existing ? updateRecord("categories", existing.id, payload) : createRecord("categories", payload);
+    }
+    const products = entityRows("products").map(normalizeProductPayload).filter((product) => Number(product.category_id) === Number(root.id) || taxonomyText(product.category_slug || product.category?.slug) === taxonomyText(root.slug));
+    const facetByKey = Object.fromEntries(subcategoryTaxonomyDefinitions.map((definition) => [definition.key, facets.find((row) => definition.facet_names.includes(taxonomyText(row.name_ar || row.nameAr)) || definition.facet_names.includes(taxonomyText(row.name_en || row.nameEn))) || null]));
+    const priority = ["floral", "dotted", "plain"];
+    const migratedProducts = [];
+    for (const product of products) {
+      const matchedKeys = priority.filter((key) => facetByKey[key] && asArray(product.facet_ids).some((id) => String(id) === String(facetByKey[key].id)));
+      const subcategoryIds = matchedKeys.map((key) => Number(subcategories[key].id));
+      updateRecord("products", product.id, {
+        category_id:Number(root.id),
+        category_slug:String(root.slug || product.category_slug || ""),
+        subcategory_ids:subcategoryIds,
+        primary_subcategory_id:subcategoryIds[0] || null
+      });
+      migratedProducts.push({ product_id:Number(product.id), subcategory_ids:subcategoryIds, primary_subcategory_id:subcategoryIds[0] || null, facet_ids:[...asArray(product.facet_ids)] });
+    }
+    const report = { version:1, executed_at:new Date().toISOString(), root_category_id:Number(root.id), subcategories:Object.fromEntries(Object.entries(subcategories).map(([key,row]) => [key,{ id:Number(row.id), name_ar:row.name_ar, slug:row.slug }])), migrated_products:migratedProducts };
+    setSetting("subcategoryTaxonomyMigrationV1", report);
+    return report;
+  })();
+  invalidateStoreCategoryCache();
+  const afterProducts = entityRows("products").map(normalizeProductPayload);
+  const checks = before.definitions.map((definition) => {
+    const subcategoryId = Number(result.subcategories[definition.key].id);
+    const actualIds = afterProducts.filter((product) => product.subcategory_ids.includes(subcategoryId)).map((product) => Number(product.id)).sort((a,b) => a-b);
+    const expectedIds = [...definition.product_ids].sort((a,b) => a-b);
+    return { key:definition.key, expected_ids:expectedIds, actual_ids:actualIds, passed:JSON.stringify(expectedIds) === JSON.stringify(actualIds) };
+  });
+  const facetPreserved = result.migrated_products.every((snapshot) => {
+    const current = afterProducts.find((product) => Number(product.id) === snapshot.product_id);
+    return JSON.stringify(asArray(current?.facet_ids).map(String).sort()) === JSON.stringify(asArray(snapshot.facet_ids).map(String).sort());
+  });
+  const verification = { checks, facet_links_preserved:facetPreserved, passed:facetPreserved && checks.every((check) => check.passed) };
+  if (!verification.passed) fail("Subcategory migration verification failed", 500);
+  return { preview:before, report:result, verification };
 }
 
 let storeCategoryCache = { expires_at: 0, rows: [] };
@@ -6447,15 +8555,82 @@ function updateCustomerReview(review, payload = {}, actor = "admin") {
   return updated;
 }
 
+function normalizedBundleItem(item = {}) {
+  const source = typeof item === "object" ? item : { product_id:item };
+  return {
+    product_id: Number(source.product_id || source.productId || source.id || 0),
+    variant_id: source.variant_id || source.variantId || null,
+    quantity: Math.max(1, Math.floor(Number(source.quantity || 1)))
+  };
+}
+
+function bundleOptionPartLabel(group = "", value = "", language = "ar") {
+  const optionValue = String(value || "").trim();
+  if (!optionValue) return "";
+  const rawGroup = String(group || "").trim();
+  const hasArabic = /[\u0600-\u06ff]/.test(`${rawGroup}${optionValue}`);
+  if (/شرشف/.test(rawGroup)) return `${hasArabic ? "شرشف" : "Bedsheet"} ${optionValue}`.trim();
+  const cleanedGroup = rawGroup
+    .replace(/^(?:أختر|اختر|اختار)\s*/u, "")
+    .replace(/^نوع\s*/u, "")
+    .replace(/^(?:choose|select)\s+(?:the\s+)?/i, "")
+    .replace(/^type\s+(?:of\s+)?/i, "")
+    .trim();
+  if (!cleanedGroup) return optionValue;
+  return `${cleanedGroup} ${optionValue}`.trim();
+}
+
+function normalizedBundleVariant(variant = {}, index = 0) {
+  const items = asArray(variant.items || variant.bundle_items || variant.product_ids).map(normalizedBundleItem).filter((item) => item.product_id);
+  const uniqueItems = Array.from(new Map(items.map((item) => [`${item.product_id}:${item.variant_id || "base"}`, item])).values());
+  const colorNameAr = String(variant.color_name_ar || variant.colorNameAr || variant.color || "").trim();
+  const colorNameEn = String(variant.color_name_en || variant.colorNameEn || variant.color || colorNameAr).trim();
+  const optionGroup = String(variant.option || variant.option_group || "").trim();
+  const optionNameAr = String(variant.option_name_ar || variant.optionNameAr || variant.value || "").trim();
+  const optionNameEn = String(variant.option_name_en || variant.optionNameEn || variant.value || optionNameAr).trim();
+  const generatedLabelAr = [colorNameAr, bundleOptionPartLabel(optionGroup, optionNameAr, "ar")].filter(Boolean).join(" · ");
+  const generatedLabelEn = [colorNameEn, bundleOptionPartLabel(optionGroup, optionNameEn, "en")].filter(Boolean).join(" · ");
+  const fallbackId = `bundle-option-${crypto.createHash("sha1").update(JSON.stringify([variant.color_id || colorNameAr, variant.option_id || optionNameAr, index])).digest("hex").slice(0, 12)}`;
+  const useOwnStock = variant.use_own_stock === true || variant.useOwnStock === true || variant.use_own_stock === "true";
+  return {
+    id: String(variant.id || fallbackId),
+    label_en: String(variant.label_en || variant.name_en || variant.label || generatedLabelEn).trim(),
+    label_ar: String(variant.label_ar || variant.name_ar || variant.label || generatedLabelAr).trim(),
+    color_id: variant.color_id || variant.colorId || null,
+    color: colorNameAr || colorNameEn,
+    color_name_ar: colorNameAr,
+    color_name_en: colorNameEn,
+    hex_code: validSwatchHex(variant.hex_code || variant.color_hex || variant.hex),
+    option_id: variant.option_id || variant.optionId || null,
+    option: optionGroup,
+    value: optionNameAr || optionNameEn,
+    option_name_ar: optionNameAr,
+    option_name_en: optionNameEn,
+    sku: String(variant.sku || "").trim().toUpperCase(),
+    barcode: String(variant.barcode || "").trim(),
+    image_url: String(variant.image_url || variant.image || "").trim(),
+    price: Math.max(0, Number(variant.price || 0)),
+    compare_at_price: Math.max(0, Number(variant.compare_at_price || variant.price_before || 0)),
+    cost: Math.max(0, Number(variant.cost || 0)),
+    use_own_stock: useOwnStock,
+    stock: useOwnStock ? Math.max(0, Number(variant.stock || 0)) : null,
+    items: uniqueItems,
+    is_active: variant.is_active !== false && variant.isActive !== false && variant.active !== false,
+    sort_order: Number(variant.sort_order ?? index)
+  };
+}
+
 function normalizeBundlePayload(payload = {}) {
   const sourceItems = asArray(payload.items || payload.bundle_items || payload.product_ids);
-  const items = sourceItems.map((item) => ({
-    product_id: Number(typeof item === "object" ? (item.product_id || item.productId || item.id) : item),
-    quantity: Math.max(1, Number(typeof item === "object" ? item.quantity || 1 : 1))
-  })).filter((item) => item.product_id);
-  const uniqueItems = Array.from(new Map(items.map((item) => [item.product_id, item])).values());
+  const items = sourceItems.map(normalizedBundleItem).filter((item) => item.product_id);
+  const uniqueItems = Array.from(new Map(items.map((item) => [`${item.product_id}:${item.variant_id || "base"}`, item])).values());
+  const bundleVariants = asArray(payload.bundle_variants || payload.variants)
+    .map(normalizedBundleVariant)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((variant, index) => ({ ...variant, sort_order:index }));
   return {
     ...payload,
+    product_type: "bundle",
     name_en: String(payload.name_en || payload.name || "").trim(),
     name_ar: String(payload.name_ar || payload.name || "").trim(),
     slug: String(payload.slug || "").trim(),
@@ -6468,46 +8643,104 @@ function normalizeBundlePayload(payload = {}) {
     use_own_stock: payload.use_own_stock === true || payload.useOwnStock === true || payload.use_own_stock === "true",
     stock: payload.stock === "" || payload.stock === null || payload.stock === undefined ? null : Math.max(0, Number(payload.stock || 0)),
     items: uniqueItems,
+    bundle_variants: bundleVariants,
     is_active: payload.is_active !== false && payload.isActive !== false && payload.active !== false
+  };
+}
+
+function validateBundleItems(items = [], context = "Bundle") {
+  if (items.length < 2) fail(`${context} must contain at least two products`);
+  items.forEach((item) => {
+    const rawProduct = getRecord("products", item.product_id);
+    if (!rawProduct) fail(`Product ${item.product_id} was not found`, 404);
+    const product = normalizeProductPayload(rawProduct);
+    if (product.product_type === "variable" && !item.variant_id) fail(`Choose a specific variant for product ${item.product_id}`);
+    if (item.variant_id && !product.variants.some((variant) => String(variant.id) === String(item.variant_id) && variant.is_active !== false)) fail(`Product ${item.product_id} variant was not found or is inactive`);
+  });
+}
+
+function validateBundlePayload(payload = {}) {
+  const normalized = normalizeBundlePayload(payload);
+  if (normalized.bundle_variants.length) normalized.bundle_variants.forEach((variant, index) => validateBundleItems(variant.items, `Bundle option ${variant.label_ar || variant.label_en || index + 1}`));
+  else validateBundleItems(normalized.items);
+  return normalized;
+}
+
+function enrichedBundleItems(items = []) {
+  return items.map((item) => {
+    const rawProduct = getRecord("products", item.product_id);
+    if (!rawProduct || rawProduct.is_active === false) return null;
+    const normalizedProduct = normalizeProductPayload(rawProduct);
+    const product = productForStore(rawProduct);
+    const variant = item.variant_id ? normalizedProduct.variants.find((entry) => String(entry.id) === String(item.variant_id) && entry.is_active !== false) : null;
+    if (item.variant_id && !variant) return null;
+    const productStock = variant ? variant.stock : normalizedProduct.stock;
+    const unitPrice = effectiveVariantPrice(normalizedProduct, variant);
+    return {
+      product_id: Number(product.id),
+      variant_id: variant?.id || null,
+      quantity: item.quantity,
+      slug: product.slug || "",
+      name_ar: product.name_ar || "",
+      name_en: product.name_en || "",
+      variant_label: variant ? [variant.color, variant.option, variant.value].filter(Boolean).join(" / ") : "",
+      image_url: variant?.image_url || product.main_photo_url || product.image_url || "",
+      unit_price: Number(unitPrice || 0),
+      subtotal: Number((Number(unitPrice || 0) * item.quantity).toFixed(2)),
+      available_stock: productStock === null ? null : Math.max(0, Math.floor(Number(productStock || 0) / item.quantity))
+    };
+  }).filter(Boolean);
+}
+
+function enrichedBundleVariant(variant = {}) {
+  const items = enrichedBundleItems(variant.items);
+  const finiteStocks = items.map((item) => item.available_stock).filter((value) => value !== null);
+  const inheritedStock = finiteStocks.length ? Math.min(...finiteStocks) : null;
+  const regularTotal = Number(items.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+  const availableStock = variant.use_own_stock ? variant.stock : inheritedStock;
+  return {
+    ...variant,
+    items,
+    item_count: items.reduce((sum, item) => sum + item.quantity, 0),
+    regular_total: regularTotal,
+    savings: Number(Math.max(0, regularTotal - Number(variant.price || 0)).toFixed(2)),
+    available_stock: availableStock,
+    stock_source: variant.use_own_stock ? "bundle" : "products"
   };
 }
 
 function bundleForStore(bundle = {}) {
   const normalized = normalizeBundlePayload(bundle);
-  const items = normalized.items.map((item) => {
-    const rawProduct = getRecord("products", item.product_id);
-    if (!rawProduct || rawProduct.is_active === false) return null;
-    const product = productForStore(rawProduct);
-    const productStock = normalizeProductPayload(rawProduct).stock;
-    return {
-      product_id: Number(product.id),
-      quantity: item.quantity,
-      slug: product.slug || "",
-      name_ar: product.name_ar || "",
-      name_en: product.name_en || "",
-      image_url: product.main_photo_url || product.image_url || "",
-      unit_price: Number(product.sale_price || product.price || 0),
-      subtotal: Number((Number(product.sale_price || product.price || 0) * item.quantity).toFixed(2)),
-      available_stock: productStock === null ? null : Math.max(0, Math.floor(Number(productStock || 0) / item.quantity))
-    };
-  }).filter(Boolean);
-  const finiteStocks = items.map((item) => item.available_stock).filter((value) => value !== null);
-  const inheritedStock = finiteStocks.length ? Math.min(...finiteStocks) : null;
-  const availableStock = normalized.use_own_stock ? normalized.stock : inheritedStock;
+  const bundleVariants = normalized.bundle_variants.filter((variant) => variant.is_active !== false).map(enrichedBundleVariant).filter((variant) => variant.items.length >= 2);
+  const legacyItems = enrichedBundleItems(normalized.items);
+  const legacyFiniteStocks = legacyItems.map((item) => item.available_stock).filter((value) => value !== null);
+  const legacyInheritedStock = legacyFiniteStocks.length ? Math.min(...legacyFiniteStocks) : null;
+  const defaultVariant = bundleVariants[0] || null;
+  const items = defaultVariant ? defaultVariant.items : legacyItems;
+  const regularTotal = defaultVariant ? defaultVariant.regular_total : Number(legacyItems.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2));
+  const price = defaultVariant ? defaultVariant.price : normalized.price;
+  const availableStock = defaultVariant ? defaultVariant.available_stock : (normalized.use_own_stock ? normalized.stock : legacyInheritedStock);
   return {
     ...normalized,
     id: Number(bundle.id),
+    price,
+    compare_at_price: defaultVariant?.compare_at_price || normalized.compare_at_price,
+    cost: defaultVariant?.cost || normalized.cost,
+    main_photo_url: normalized.main_photo_url || defaultVariant?.image_url || items[0]?.image_url || "",
     items,
+    variants: bundleVariants,
+    bundle_variants: bundleVariants,
+    default_variant_id: defaultVariant?.id || null,
     item_count: items.reduce((sum, item) => sum + item.quantity, 0),
-    regular_total: Number(items.reduce((sum, item) => sum + item.subtotal, 0).toFixed(2)),
-    savings: Number(Math.max(0, items.reduce((sum, item) => sum + item.subtotal, 0) - normalized.price).toFixed(2)),
+    regular_total: regularTotal,
+    savings: Number(Math.max(0, regularTotal - Number(price || 0)).toFixed(2)),
     available_stock: availableStock,
-    stock_source: normalized.use_own_stock ? "bundle" : "products"
+    stock_source: defaultVariant ? defaultVariant.stock_source : (normalized.use_own_stock ? "bundle" : "products")
   };
 }
 
 function storeBundleRows() {
-  return activeRows("bundles").map(bundleForStore).filter((bundle) => bundle.items.length >= 2);
+  return activeRows("bundles").map(bundleForStore).filter((bundle) => bundle.items.length >= 2 || bundle.variants.length);
 }
 
 function findBundle(identifier) {
@@ -6517,8 +8750,7 @@ function findBundle(identifier) {
 
 function updateBundleRecord(id, payload = {}) {
   const existing = getRecord("bundles", id);
-  const normalized = normalizeBundlePayload({ ...(existing || {}), ...payload });
-  if (normalized.items.length < 2) fail("A bundle must contain at least two products");
+  const normalized = validateBundlePayload({ ...(existing || {}), ...payload });
   return existing ? updateRecord("bundles", id, normalized) : createRecord("bundles", normalized);
 }
 
@@ -6588,8 +8820,22 @@ function normalizeCollectionPayload(payload = {}, collectionId = null, existing 
     description_en: String(payload.description_en || payload.descriptionEn || "").trim(),
     cover_image_url: String(payload.cover_image_url || payload.coverImageUrl || payload.image_url || "").trim(),
     is_active: payload.is_active !== false && payload.isActive !== false && payload.active !== false,
+    facet_ids: [...new Set(asArray(payload.facet_ids).map(value => String(value || "").trim()).filter(Boolean))],
+    subcategory_ids: [...new Set(asArray(payload.subcategory_ids).map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))],
     items
   };
+}
+
+function collectionSourceItems(collection = {}, products = []) {
+  const facetIds = new Set(asArray(collection.facet_ids).map(String).filter(Boolean));
+  const subcategoryIds = new Set(asArray(collection.subcategory_ids).map(Number).filter(Boolean));
+  if (!facetIds.size && !subcategoryIds.size) return asArray(collection.items);
+  return products.filter((product) => {
+    if (product.is_active === false || product.isActive === false) return false;
+    const facetMatch = facetIds.size && asArray(product.facet_ids).some((id) => facetIds.has(String(id)));
+    const subcategoryMatch = subcategoryIds.size && asArray(product.subcategory_ids).some((id) => subcategoryIds.has(Number(id)));
+    return facetMatch || subcategoryMatch;
+  }).map((product, index) => ({ id:`rule-${product.id}`, product_id:Number(product.id), variant_id:"", sort_order:index + 1 }));
 }
 
 function collectionItemView(collection, item, publicView = false, productsById = null) {
@@ -6654,13 +8900,14 @@ function collectionItemView(collection, item, publicView = false, productsById =
 
 function collectionForAdmin(collection = {}, productsById = null) {
   const productLookup = productsById || new Map(entityRows("products").map((product) => [Number(product.id), product]));
-  const items = asArray(collection.items)
+  const items = collectionSourceItems(collection, productLookup ? [...productLookup.values()] : entityRows("products"))
     .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
     .map((item) => collectionItemView(collection, item, false, productLookup));
   return {
     ...collection,
     id: Number(collection.id),
     items,
+    manual_items: asArray(collection.items),
     item_count: items.length,
     available_item_count: items.filter((item) => item.is_available).length,
     unavailable_item_count: items.filter((item) => !item.is_available).length
@@ -6669,7 +8916,7 @@ function collectionForAdmin(collection = {}, productsById = null) {
 
 function collectionForStore(collection = {}, productsById = null) {
   const productLookup = productsById || new Map(entityRows("products").map((product) => [Number(product.id), product]));
-  const items = asArray(collection.items)
+  const items = collectionSourceItems(collection, productLookup ? [...productLookup.values()] : entityRows("products"))
     .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
     .map((item) => collectionItemView(collection, item, true, productLookup))
     .filter((item) => item.is_available);
@@ -6730,6 +8977,11 @@ function productForNextStore(product = {}) {
     image: variant.image_url || undefined
   }));
   const rawLabels = Array.isArray(product.labels) ? product.labels : String(product.labels || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const facetRows = entityRows("facets");
+  const linkedFacets = asArray(product.facet_ids).map(id => facetRows.find(row => String(row.id) === String(id))).filter(Boolean);
+  const labelRows = entityRows("labels");
+  const productLabelIds = Array.isArray(product.label_ids) ? product.label_ids : [];
+  const linkedLabels = productLabelIds.map(id => labelRows.find(row => String(row.id) === String(id) || String(row.slug || "") === String(id))).filter(Boolean);
   return {
     ...product,
     modelEn: product.name_en || product.modelEn || product.model || "",
@@ -6764,7 +9016,8 @@ function productForNextStore(product = {}) {
     priceRange: { min: Math.min(...prices), max: Math.max(...prices) },
     totalStock: product.stock === null || product.stock === undefined ? 999999 : Number(product.stock || 0),
     isActive: product.is_active !== false,
-    labels: rawLabels.map((name, index) => typeof name === "object" ? name : ({ id:`label-${index}`, nameEn:name, nameAr:name, color:"#ffffff", backgroundColor:(getSetting("companyInfo") || {}).primary_color || "#b20000", isActive:true }))
+    labels: [...linkedLabels, ...rawLabels.map((name, index) => typeof name === "object" ? name : ({ id:`label-${index}`, nameEn:name, nameAr:name, color:"#ffffff", backgroundColor:(getSetting("companyInfo") || {}).primary_color || "#b20000", isActive:true }))].filter((row, index, rows) => rows.findIndex(item => String(item.id || item.nameEn) === String(row.id || row.nameEn)) === index),
+    facets: linkedFacets
   };
 }
 
@@ -7623,13 +9876,227 @@ function cartPageHtml({ checkout = false } = {}) {
 </html>`;
 }
 
+function staffRoleRows() {
+  return entityRows("staff_roles").filter((role) => role.is_active !== false);
+}
+
+function staffRoleFor(staff = {}) {
+  return staffRoleRows().find((role) => Number(role.id) === Number(staff.role_id) || String(role.code) === String(staff.role_code || "")) || null;
+}
+
+function effectiveStaffPermissions(staff = {}) {
+  const role = staffRoleFor(staff);
+  const permissions = new Set(Array.isArray(role?.permissions) ? role.permissions : []);
+  const overrides = staff.permission_overrides || {};
+  (Array.isArray(overrides.allow) ? overrides.allow : []).forEach((permission) => permissions.add(String(permission)));
+  (Array.isArray(overrides.deny) ? overrides.deny : []).forEach((permission) => permissions.delete(String(permission)));
+  if (permissions.has("*")) return ["*"];
+  return [...permissions].filter((permission) => allAdminPermissionKeys.includes(permission));
+}
+
+function staffHasPermission(staff = {}, permission = "") {
+  const permissions = Array.isArray(staff.effective_permissions) ? staff.effective_permissions : effectiveStaffPermissions(staff);
+  return permissions.includes("*") || permissions.includes(permission);
+}
+
+function publicStaffView(staff = {}) {
+  const { password_hash, password, ...safe } = staff;
+  const role = staffRoleFor(staff);
+  return {
+    ...safe,
+    role:role ? { id:role.id, code:role.code, name_en:role.name_en, name_ar:role.name_ar } : null,
+    effective_permissions:effectiveStaffPermissions(staff)
+  };
+}
+
+function normalizeStaffPayload(input = {}, existing = null) {
+  const email = String(input.email ?? existing?.email ?? "").trim().toLowerCase();
+  const name = String(input.name ?? existing?.name ?? "").trim();
+  const status = String(input.status ?? existing?.status ?? "active").toLowerCase();
+  const roleId = Number(input.role_id ?? existing?.role_id ?? 0);
+  const role = getRecord("staff_roles", roleId);
+  if (name.length < 2) fail("STAFF_NAME_REQUIRED", 422);
+  if (!/^\S+@\S+\.\S+$/.test(email)) fail("STAFF_EMAIL_INVALID", 422);
+  if (!role || role.is_active === false) fail("STAFF_ROLE_INVALID", 422);
+  if (!["active", "inactive", "blocked"].includes(status)) fail("STAFF_STATUS_INVALID", 422);
+  const duplicate = entityRows("staff_users").find((staff) => String(staff.email || "").toLowerCase() === email && Number(staff.id) !== Number(existing?.id));
+  if (duplicate) fail("STAFF_EMAIL_EXISTS", 409);
+  const requestedOverrides = input.permission_overrides || existing?.permission_overrides || {};
+  const validOverride = (rows) => [...new Set((Array.isArray(rows) ? rows : []).map(String).filter((permission) => allAdminPermissionKeys.includes(permission)))];
+  const payload = {
+    ...(existing || {}),
+    name,
+    email,
+    phone:String(input.phone ?? existing?.phone ?? "").trim(),
+    avatar_url:normalizeProfileImage(input.avatar_url, existing?.avatar_url),
+    job_title:String(input.job_title ?? existing?.job_title ?? "").trim(),
+    role_id:roleId,
+    role_code:role.code,
+    status,
+    is_active:status === "active",
+    language:["ar", "en"].includes(String(input.language ?? existing?.language)) ? String(input.language ?? existing?.language) : "ar",
+    timezone:String(input.timezone ?? existing?.timezone ?? "Asia/Riyadh"),
+    notification_email:String(input.notification_email ?? existing?.notification_email ?? email).trim().toLowerCase(),
+    notification_preferences:{
+      dashboard:input.notification_preferences?.dashboard === undefined ? existing?.notification_preferences?.dashboard !== false : input.notification_preferences.dashboard === true,
+      email:input.notification_preferences?.email === undefined ? existing?.notification_preferences?.email === true : input.notification_preferences.email === true,
+      quiet_hours:input.notification_preferences?.quiet_hours || existing?.notification_preferences?.quiet_hours || { enabled:false, start:"22:00", end:"08:00" }
+    },
+    permission_overrides:{ allow:validOverride(requestedOverrides.allow), deny:validOverride(requestedOverrides.deny) },
+    must_change_password:input.must_change_password === undefined ? existing?.must_change_password !== false : input.must_change_password === true,
+    updated_at:new Date().toISOString()
+  };
+  const password = String(input.password || "");
+  if (!existing && password.length < 8) fail("STAFF_PASSWORD_TOO_SHORT", 422);
+  if (password) {
+    if (password.length < 8) fail("STAFF_PASSWORD_TOO_SHORT", 422);
+    payload.password_hash = hashUserPassword(password);
+    payload.password_changed_at = new Date().toISOString();
+  }
+  return payload;
+}
+
+function createStaffSession(staff, req) {
+  const tokenId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
+  const session = createRecord("staff_sessions", {
+    staff_id:staff.id,
+    token_id:tokenId,
+    status:"active",
+    ip_address:String(req.ip || req.socket?.remoteAddress || ""),
+    user_agent:String(req.headers["user-agent"] || "").slice(0, 500),
+    last_seen_at:new Date().toISOString(),
+    expires_at:expiresAt
+  });
+  return { session, expiresAt };
+}
+
 function adminPayload() {
+  const profile = getSetting("adminProfile") || {};
   return {
     id: 1,
     name: process.env.ADMIN_NAME || "SITEYFY Admin",
     email: process.env.ADMIN_EMAIL || "admin@siteyfy.com",
-    role: "admin"
+    role: "admin",
+    account_type:"super_admin",
+    avatar_url:normalizeProfileImage(profile.avatar_url),
+    permissions:["*"]
   };
+}
+
+function normalizeProfileImage(value, fallback = "") {
+  const image = String(value ?? fallback ?? "").trim();
+  if (!image) return "";
+  if (!image.startsWith("/uploads/")) fail("PROFILE_IMAGE_INVALID", 422);
+  return image.slice(0, 500);
+}
+
+function internalShippingIsEnabled() {
+  const store = currentSettings();
+  const shipping = publicShippingIntegrations();
+  return store.shipping_active === true && [shipping.default_provider, shipping.active_provider].includes("internal");
+}
+
+function adminNavigationContext() {
+  return { internal_shipping_enabled:internalShippingIsEnabled() };
+}
+
+function requestCan(req, permission) {
+  return req.adminPermissions.includes("*") || req.adminPermissions.includes(permission);
+}
+
+function dashboardDate(value) {
+  const date = new Date(value || 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dashboardOrderDate(order = {}) {
+  return dashboardDate(order.created_at || order.placed_at || order.legacy_created_at || order.updated_at);
+}
+
+function dashboardOverview(req) {
+  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const requestedModule = String(req.query.module || "").toLowerCase();
+  const wants = (module) => !requestedModule || requestedModule === module;
+  const end = new Date();
+  const start = new Date(end.getTime() - (days - 1) * 86400000);
+  start.setUTCHours(0, 0, 0, 0);
+  const allOrders = entityRows("orders");
+  const orders = allOrders.filter((order) => {
+    const date = dashboardOrderDate(order);
+    return date && date >= start && date <= end;
+  });
+  const activeOrders = orders.filter((order) => String(order.status || "").toLowerCase() !== "cancelled");
+  const currency = String(currentSettings().currency_code || currentSettings().currency || "SAR").toUpperCase();
+  const modules = {};
+  const countBy = (rows, getter) => Object.entries(rows.reduce((result, row) => {
+    const key = String(getter(row) || "unspecified");
+    result[key] = Number(result[key] || 0) + 1;
+    return result;
+  }, {})).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  const daily = new Map();
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = new Date(start.getTime() + offset * 86400000).toISOString().slice(0, 10);
+    daily.set(date, { label:date, orders:0, revenue:0 });
+  }
+  activeOrders.forEach((order) => {
+    const key = dashboardOrderDate(order)?.toISOString().slice(0, 10);
+    if (!daily.has(key)) return;
+    const row = daily.get(key);
+    row.orders += 1;
+    row.revenue = moneyValue(row.revenue + Number(order.total || 0));
+  });
+
+  if (wants("orders") && requestCan(req, "orders.view")) {
+    modules.orders = {
+      summary:{ total:orders.length, pending:orders.filter((row) => ["pending", "confirmed"].includes(String(row.status))).length, processing:orders.filter((row) => ["processing", "ready_to_ship", "shipped"].includes(String(row.status))).length, delivered:orders.filter((row) => String(row.status) === "delivered").length, cancelled:orders.filter((row) => String(row.status) === "cancelled").length, revenue:moneyValue(activeOrders.reduce((sum, row) => sum + Number(row.total || 0), 0)), currency },
+      trend:[...daily.values()],
+      statuses:countBy(orders, (row) => row.status),
+      payment_methods:countBy(orders, (row) => row.payment_method || row.payment?.method || row.payment?.provider),
+      recent:orders.sort((a, b) => Number(dashboardOrderDate(b)) - Number(dashboardOrderDate(a))).slice(0, 6).map((row) => ({ id:row.id, number:row.order_number || row.id, customer:row.customer_name || row.customer?.name || row.customer?.full_name || "", total:Number(row.total || 0), status:row.status, created_at:dashboardOrderDate(row)?.toISOString() || null }))
+    };
+  }
+  if (wants("inventory") && requestCan(req, "inventory.view")) {
+    const summary = inventoryOverview();
+    modules.inventory = { summary, stock_status:[{ label:"available", value:Math.max(0, Number(summary.tracked_targets || 0) - Number(summary.low_stock || 0) - Number(summary.out_of_stock || 0)) }, { label:"low_stock", value:Number(summary.low_stock || 0) }, { label:"out_of_stock", value:Number(summary.out_of_stock || 0) }], receipts:Object.entries(summary.receipts || {}).map(([label, value]) => ({ label, value:Number(value || 0) })) };
+  }
+  if (wants("finance") && requestCan(req, "finance.view")) {
+    const finance = financeOverview({ date_from:start.toISOString().slice(0, 10), date_to:end.toISOString().slice(0, 10) });
+    modules.finance = { summary:finance.summary, payments:(finance.payments || []).slice(0, 8), promotions:(finance.promotions || []).slice(0, 6), data_quality:finance.data_quality };
+  }
+  if (wants("shipping") && requestCan(req, "shipping.view")) {
+    const shipments = entityRows("shipping_shipments").filter((row) => {
+      const date = dashboardDate(row.created_at || row.shipped_at || row.updated_at);
+      return !date || (date >= start && date <= end);
+    });
+    modules.shipping = { summary:shippingLedgerSummary(shipments), statuses:countBy(shipments, (row) => row.status_group || row.status), providers:countBy(shipments, (row) => row.provider || row.actual_carrier || row.carrier_name), late:shipments.filter((row) => row.is_late === true || row.sla_breached === true).length };
+  }
+  if (wants("customers") && requestCan(req, "customers.view")) {
+    const users = entityRows("users");
+    modules.customers = { summary:{ total:users.length, active:users.filter((row) => row.is_active !== false && !["inactive", "blocked"].includes(String(row.status || "active"))).length, blocked:users.filter((row) => String(row.status || "").toLowerCase() === "blocked").length, verified:users.filter((row) => row.is_verified === true || row.email_verified === true || row.verified_at).length }, growth:countBy(users.filter((row) => dashboardDate(row.created_at) >= start), (row) => dashboardDate(row.created_at)?.toISOString().slice(0, 10)) };
+  }
+  if (wants("staff") && requestCan(req, "staff.view")) {
+    const staff = entityRows("staff_users");
+    modules.staff = { summary:{ total:staff.length, active:staff.filter((row) => row.status === "active").length, inactive:staff.filter((row) => row.status !== "active").length, roles:staffRoleRows().length }, roles:countBy(staff, (row) => row.role_code), recent_activity:entityRows("staff_audit_logs").slice(0, 8).map((row) => ({ id:row.id, actor_name:row.actor_name, action:row.action, outcome:row.outcome, created_at:row.created_at })) };
+  }
+  if (wants("catalog") && requestCan(req, "catalog.view")) {
+    const products = entityRows("products");
+    const productSales = new Map();
+    activeOrders.flatMap((order) => Array.isArray(order.items) ? order.items : []).forEach((item) => {
+      const key = String(item.product_id || item.id || item.sku || item.name_ar || item.name_en || "unknown");
+      const current = productSales.get(key) || { id:item.product_id || item.id, label_en:item.name_en || item.product_name_en || item.name_ar || item.product_name || item.sku || key, label_ar:item.name_ar || item.product_name_ar || item.name_en || item.product_name || item.sku || key, value:0, revenue:0 };
+      current.value += Number(item.quantity || 1);
+      current.revenue = moneyValue(current.revenue + Number(item.subtotal || Number(item.price || 0) * Number(item.quantity || 1)));
+      productSales.set(key, current);
+    });
+    modules.catalog = { summary:{ products:products.length, active:products.filter((row) => row.is_active !== false).length, categories:entityRows("categories").length, brands:entityRows("brands").length }, top_products:[...productSales.values()].sort((a, b) => b.value - a.value).slice(0, 8) };
+  }
+  if (wants("promotions") && requestCan(req, "promotions.view")) {
+    const discounts = entityRows("discounts");
+    modules.promotions = { summary:{ total:discounts.length, active:discounts.filter((row) => row.is_active !== false && (!row.ends_at || dashboardDate(row.ends_at) >= end)).length, uses:discounts.reduce((sum, row) => sum + Number(row.used_count || 0), 0), checkout_recoveries:entityRows("checkout_recovery_sessions").filter((row) => dashboardDate(row.created_at) >= start).length } };
+  }
+  if (wants("notifications") && requestCan(req, "notifications.view")) modules.notifications = { summary:notificationOverview({ limit:1 }, req).summary };
+  return { period:{ days, date_from:start.toISOString().slice(0, 10), date_to:end.toISOString().slice(0, 10) }, navigation:adminNavigationContext(), modules };
 }
 
 function authOptional(req, _res, next) {
@@ -7644,6 +10111,8 @@ function authOptional(req, _res, next) {
 }
 
 app.use(authOptional);
+
+app.get("/api/dashboard-identity", (_req, res) => res.json(ok(normalizeDashboardIdentity())));
 
 function customerSessionUser(req) {
   if (!req.user || String(req.user.role || "").toLowerCase() === "admin") return null;
@@ -7665,22 +10134,331 @@ function customerSessionUser(req) {
 app.post("/api/admin/auth/login", (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   const password = String(req.body.password || "");
-  if (email !== String(process.env.ADMIN_EMAIL || "admin@siteyfy.com").toLowerCase() || password !== String(process.env.ADMIN_PASSWORD || "admin12345")) {
-    fail("Invalid email or password", 401);
+  if (email === String(process.env.ADMIN_EMAIL || "admin@siteyfy.com").toLowerCase() && password === String(process.env.ADMIN_PASSWORD || "admin12345")) {
+    const admin = adminPayload();
+    const token = jwt.sign(admin, jwtSecret, { expiresIn: "12h" });
+    createRecord("staff_audit_logs", { actor_type:"super_admin", actor_id:"environment", actor_name:admin.name, actor_email:admin.email, action:"auth.login", method:"POST", path:"/api/admin/auth/login", status_code:200, outcome:"success", ip_address:String(req.ip || ""), user_agent:String(req.headers["user-agent"] || "").slice(0, 500) });
+    return res.json(ok({ token, admin:{ ...admin, navigation:adminNavigationContext() } }));
   }
-  const admin = adminPayload();
-  const token = jwt.sign(admin, jwtSecret, { expiresIn: "7d" });
-  res.json(ok({ token, admin }));
+  const staff = entityRows("staff_users").find((row) => String(row.email || "").toLowerCase() === email);
+  if (!staff || !verifyUserPassword(password, staff.password_hash)) fail("Invalid email or password", 401);
+  if (staff.is_active === false || ["inactive", "blocked"].includes(String(staff.status || "").toLowerCase())) fail("STAFF_ACCOUNT_INACTIVE", 403);
+  const { session, expiresAt } = createStaffSession(staff, req);
+  const token = jwt.sign({ id:staff.id, staff_id:staff.id, session_id:session.id, token_id:session.token_id, name:staff.name, email:staff.email, role:"staff", account_type:"staff" }, jwtSecret, { expiresIn:"12h" });
+  updateRecord("staff_users", staff.id, { last_login_at:new Date().toISOString(), last_login_ip:String(req.ip || "") });
+  createRecord("staff_audit_logs", { actor_type:"staff", actor_id:staff.id, actor_name:staff.name, actor_email:staff.email, role_code:staff.role_code, action:"auth.login", method:"POST", path:"/api/admin/auth/login", status_code:200, outcome:"success", session_id:session.id, ip_address:String(req.ip || ""), user_agent:String(req.headers["user-agent"] || "").slice(0, 500) });
+  res.json(ok({ token, admin:{ ...publicStaffView(getRecord("staff_users", staff.id)), navigation:adminNavigationContext() }, expires_at:expiresAt }));
 });
 
 app.use("/api/admin", (req, _res, next) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
+  if (req.user.role === "staff") {
+    const staff = getRecord("staff_users", req.user.staff_id || req.user.id);
+    const session = getRecord("staff_sessions", req.user.session_id);
+    if (!staff || staff.is_active === false || staff.status !== "active") fail("STAFF_ACCOUNT_INACTIVE", 403);
+    if (!session || session.status !== "active" || session.token_id !== req.user.token_id || new Date(session.expires_at).getTime() <= Date.now()) fail("STAFF_SESSION_EXPIRED", 401);
+    req.staff = staff;
+    req.adminPermissions = effectiveStaffPermissions(staff);
+    if (!session.last_seen_at || Date.now() - new Date(session.last_seen_at).getTime() > 5 * 60 * 1000) updateRecord("staff_sessions", session.id, { last_seen_at:new Date().toISOString() });
+  } else {
+    req.adminPermissions = ["*"];
+  }
   next();
+});
+
+function payloadContainsSecret(value, depth = 0) {
+  if (!value || depth > 5 || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, child]) => /(^|_)(secret|password|token|api_key|private_key|merchant_password)(_|$)/i.test(key) || payloadContainsSecret(child, depth + 1));
+}
+
+function adminPermissionForRequest(req) {
+  const path = `${req.baseUrl || ""}${req.path || ""}`.replace("/api/admin", "") || "/";
+  const mutation = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+  if (path.startsWith("/auth/")) return null;
+  if (path.startsWith("/profile-images")) return null;
+  if (path.startsWith("/dashboard-identity")) return mutation ? "settings.manage" : "settings.view";
+  if (path.startsWith("/dashboard/overview")) return null;
+  if (path.startsWith("/staff-activity")) return "audit.view";
+  if (path.startsWith("/staff-roles")) return mutation ? "roles.manage" : "roles.view";
+  if (path.startsWith("/staff")) return path.startsWith("/staff/me") ? "dashboard.view" : mutation ? "staff.manage" : "staff.view";
+  if (path === "/notifications/mark-all-read" || (/^\/notifications\/[^/]+$/.test(path) && req.method === "PATCH")) return "notifications.view";
+  if (path.startsWith("/notifications")) return mutation ? "notifications.resolve" : "notifications.view";
+  if (path.startsWith("/users")) return mutation ? "customers.manage" : "customers.view";
+  if (path.startsWith("/finance")) return mutation ? "finance.manage" : "finance.view";
+  if (path.startsWith("/inventory")) return mutation ? "inventory.manage" : "inventory.view";
+  if (path.startsWith("/returns")) return mutation ? "returns.manage" : "returns.view";
+  if (path.startsWith("/orders") || path.startsWith("/manual-orders") || path.startsWith("/order-management") || path.startsWith("/checkout-recovery")) {
+    if (/cancel/i.test(path)) return "orders.cancel";
+    if (/refund/i.test(path)) return "orders.refund";
+    return mutation ? "orders.manage" : "orders.view";
+  }
+  if (path.startsWith("/shipping/integrations")) return mutation ? "integrations.manage" : "integrations.view";
+  if (path.startsWith("/shipping")) {
+    if (/dispatch|shipment/i.test(path) && mutation) return "shipping.dispatch";
+    return mutation ? "shipping.manage" : "shipping.view";
+  }
+  if (/^\/(integration|payment|marketing-pixels)/.test(path)) {
+    if (mutation && payloadContainsSecret(req.body)) return "integrations.manage_secrets";
+    return mutation ? "integrations.manage" : "integrations.view";
+  }
+  if (/^\/(discounts|promotion|bundles)/.test(path)) return mutation ? "promotions.manage" : "promotions.view";
+  if (/^\/(products|categories|brands|colors|options|labels|facets|collections|reviews|recommendations|upload)/.test(path)) return mutation ? "catalog.manage" : "catalog.view";
+  if (/^\/ai/.test(path)) return mutation ? "ai.manage" : "ai.view";
+  if (/^\/(content|pages|gallery|home|storefront|brand)/.test(path)) return mutation ? "content.manage" : "content.view";
+  if (/^\/(settings|market|currencies|countries|goods-types|shipping-profiles|locations|robots|lighthouse|company-info)/.test(path)) return mutation ? "settings.manage" : "settings.view";
+  return mutation ? "settings.manage" : "dashboard.view";
+}
+
+app.use("/api/admin", (req, _res, next) => {
+  const required = adminPermissionForRequest(req);
+  if (required && !req.adminPermissions.includes("*") && !req.adminPermissions.includes(required)) {
+    createRecord("staff_audit_logs", {
+      actor_type:req.user.role === "staff" ? "staff" : "super_admin",
+      actor_id:req.user.staff_id || req.user.id || "environment",
+      actor_name:req.user.name || "",
+      actor_email:req.user.email || "",
+      role_code:req.staff?.role_code || "super_admin",
+      session_id:req.user.session_id || null,
+      action:"access.denied",
+      permission:required,
+      method:req.method,
+      path:`/api/admin${req.path}`,
+      status_code:403,
+      outcome:"failed",
+      ip_address:String(req.ip || ""),
+      user_agent:String(req.headers["user-agent"] || "").slice(0, 500)
+    });
+    fail(`PERMISSION_REQUIRED:${required}`, 403);
+  }
+  req.requiredPermission = required;
+  next();
+});
+
+app.use("/api/admin", (req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method) || req.path.startsWith("/auth/login")) return next();
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    createRecord("staff_audit_logs", {
+      actor_type:req.user.role === "staff" ? "staff" : "super_admin",
+      actor_id:req.user.staff_id || req.user.id || "environment",
+      actor_name:req.user.name || "",
+      actor_email:req.user.email || "",
+      role_code:req.staff?.role_code || "super_admin",
+      session_id:req.user.session_id || null,
+      action:`${req.method.toLowerCase()}.${String(req.path || "").split("/").filter(Boolean).slice(0, 3).join(".") || "admin"}`,
+      permission:req.requiredPermission || null,
+      method:req.method,
+      path:`/api/admin${req.path}`,
+      status_code:res.statusCode,
+      outcome:res.statusCode < 400 ? "success" : "failed",
+      duration_ms:Date.now() - startedAt,
+      ip_address:String(req.ip || ""),
+      user_agent:String(req.headers["user-agent"] || "").slice(0, 500)
+    });
+  });
+  next();
+});
+
+function publicStaffRole(role = {}) {
+  return {
+    ...role,
+    permissions:Array.isArray(role.permissions) ? role.permissions : [],
+    staff_count:entityRows("staff_users").filter((staff) => Number(staff.role_id) === Number(role.id) && staff.is_active !== false).length
+  };
+}
+
+function publicStaffSession(session = {}) {
+  const { token_id, ...safe } = session;
+  return safe;
+}
+
+function assertCanGrantRole(req, role) {
+  if (!role) fail("STAFF_ROLE_INVALID", 422);
+  if (req.adminPermissions.includes("*")) return;
+  const own = new Set(req.adminPermissions || []);
+  const excessive = (role.permissions || []).filter((permission) => permission === "*" || !own.has(permission));
+  if (excessive.length) fail("CANNOT_GRANT_HIGHER_PERMISSIONS", 403);
+}
+
+app.get("/api/admin/auth/me", (req, res) => {
+  const admin = req.user.role === "staff" ? publicStaffView(req.staff) : adminPayload();
+  res.json(ok({ admin:{ ...admin, navigation:adminNavigationContext() } }));
+});
+
+app.get("/api/admin/dashboard/overview", (req, res) => {
+  res.json(ok(dashboardOverview(req)));
+});
+
+app.post("/api/admin/auth/logout", (req, res) => {
+  if (req.user.role === "staff" && req.user.session_id) updateRecord("staff_sessions", req.user.session_id, { status:"revoked", revoked_at:new Date().toISOString(), revoked_by:req.user.email || "self" });
+  res.json(ok({ logged_out:true }));
+});
+
+app.get("/api/admin/staff-permissions", (_req, res) => {
+  res.json(ok({ permissions:adminPermissionCatalog }));
+});
+
+app.get("/api/admin/staff", (req, res) => {
+  let staff = entityRows("staff_users");
+  if (req.query.status && req.query.status !== "all") staff = staff.filter((row) => row.status === req.query.status);
+  if (req.query.role_id) staff = staff.filter((row) => Number(row.role_id) === Number(req.query.role_id));
+  const search = String(req.query.search || "").trim().toLowerCase();
+  if (search) staff = staff.filter((row) => [row.name, row.email, row.phone, row.job_title].some((value) => String(value || "").toLowerCase().includes(search)));
+  res.json(ok({ staff:staff.map(publicStaffView), roles:staffRoleRows().map(publicStaffRole), permissions:adminPermissionCatalog }));
+});
+
+app.post("/api/admin/staff", (req, res) => {
+  const role = getRecord("staff_roles", req.body?.role_id);
+  assertCanGrantRole(req, role);
+  const staff = createRecord("staff_users", { ...normalizeStaffPayload(req.body || {}), created_by:req.user.email || "admin", created_at:new Date().toISOString() });
+  res.status(201).json(ok({ staff:publicStaffView(staff) }));
+});
+
+app.get("/api/admin/staff/me", (req, res) => {
+  if (req.user.role !== "staff") return res.json(ok({ staff:adminPayload(), sessions:[] }));
+  res.json(ok({ staff:publicStaffView(req.staff), sessions:entityRows("staff_sessions").filter((session) => Number(session.staff_id) === Number(req.staff.id)).slice(0, 20).map(publicStaffSession) }));
+});
+
+app.put("/api/admin/staff/me", (req, res) => {
+  if (req.user.role !== "staff") {
+    const current = getSetting("adminProfile") || {};
+    setSetting("adminProfile", { ...current, avatar_url:normalizeProfileImage(req.body?.avatar_url, current.avatar_url), updated_at:new Date().toISOString() });
+    return res.json(ok({ staff:adminPayload() }));
+  }
+  const current = getRecord("staff_users", req.staff.id);
+  const patch = {
+    name:String(req.body?.name || current.name).trim(),
+    phone:String(req.body?.phone ?? current.phone ?? "").trim(),
+    avatar_url:normalizeProfileImage(req.body?.avatar_url, current.avatar_url),
+    language:["ar", "en"].includes(String(req.body?.language)) ? String(req.body.language) : current.language,
+    timezone:String(req.body?.timezone || current.timezone || "Asia/Riyadh"),
+    notification_email:String(req.body?.notification_email || current.notification_email || current.email).trim().toLowerCase(),
+    notification_preferences:{ ...current.notification_preferences, ...(req.body?.notification_preferences || {}) },
+    updated_at:new Date().toISOString()
+  };
+  if (req.body?.password) {
+    if (!verifyUserPassword(String(req.body.current_password || ""), current.password_hash)) fail("CURRENT_PASSWORD_INVALID", 422);
+    if (String(req.body.password).length < 8) fail("STAFF_PASSWORD_TOO_SHORT", 422);
+    patch.password_hash = hashUserPassword(req.body.password);
+    patch.password_changed_at = new Date().toISOString();
+    patch.must_change_password = false;
+  }
+  res.json(ok({ staff:publicStaffView(updateRecord("staff_users", current.id, patch)) }));
+});
+
+app.get("/api/admin/staff/:id", (req, res) => {
+  const staff = getRecord("staff_users", req.params.id);
+  if (!staff) fail("STAFF_NOT_FOUND", 404);
+  const sessions = entityRows("staff_sessions").filter((session) => Number(session.staff_id) === Number(staff.id)).slice(0, 30).map(publicStaffSession);
+  const activity = entityRows("staff_audit_logs").filter((entry) => String(entry.actor_id) === String(staff.id) && entry.actor_type === "staff").slice(0, 100);
+  res.json(ok({ staff:publicStaffView(staff), sessions, activity }));
+});
+
+app.put("/api/admin/staff/:id", (req, res) => {
+  const current = getRecord("staff_users", req.params.id);
+  if (!current) fail("STAFF_NOT_FOUND", 404);
+  if (req.user.role === "staff" && Number(req.user.staff_id) === Number(current.id) && (req.body?.role_id !== undefined || req.body?.status !== undefined)) fail("STAFF_SELF_ACCESS_CHANGE_FORBIDDEN", 403);
+  const role = getRecord("staff_roles", req.body?.role_id ?? current.role_id);
+  assertCanGrantRole(req, role);
+  const staff = updateRecord("staff_users", current.id, normalizeStaffPayload(req.body || {}, current));
+  res.json(ok({ staff:publicStaffView(staff) }));
+});
+
+app.patch("/api/admin/staff/:id/status", (req, res) => {
+  const current = getRecord("staff_users", req.params.id);
+  if (!current) fail("STAFF_NOT_FOUND", 404);
+  const status = String(req.body?.status || "").toLowerCase();
+  if (!["active", "inactive", "blocked"].includes(status)) fail("STAFF_STATUS_INVALID", 422);
+  if (req.user.role === "staff" && Number(req.user.staff_id) === Number(current.id)) fail("STAFF_SELF_ACCESS_CHANGE_FORBIDDEN", 403);
+  const staff = updateRecord("staff_users", current.id, { status, is_active:status === "active", status_changed_at:new Date().toISOString(), status_changed_by:req.user.email || "admin" });
+  if (status !== "active") entityRows("staff_sessions").filter((session) => Number(session.staff_id) === Number(current.id) && session.status === "active").forEach((session) => updateRecord("staff_sessions", session.id, { status:"revoked", revoked_at:new Date().toISOString(), revoked_by:req.user.email || "admin" }));
+  res.json(ok({ staff:publicStaffView(staff) }));
+});
+
+app.post("/api/admin/staff/:id/revoke-sessions", (req, res) => {
+  const staff = getRecord("staff_users", req.params.id);
+  if (!staff) fail("STAFF_NOT_FOUND", 404);
+  let revoked = 0;
+  entityRows("staff_sessions").filter((session) => Number(session.staff_id) === Number(staff.id) && session.status === "active").forEach((session) => { updateRecord("staff_sessions", session.id, { status:"revoked", revoked_at:new Date().toISOString(), revoked_by:req.user.email || "admin" }); revoked += 1; });
+  res.json(ok({ revoked }));
+});
+
+app.get("/api/admin/staff-roles", (_req, res) => {
+  res.json(ok({ roles:staffRoleRows().map(publicStaffRole), permissions:adminPermissionCatalog }));
+});
+
+function normalizeStaffRolePayload(input = {}, existing = null) {
+  const code = String(input.code || existing?.code || input.name_en || "custom_role").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+  const permissions = [...new Set((Array.isArray(input.permissions) ? input.permissions : existing?.permissions || []).map(String).filter((permission) => permission === "*" || allAdminPermissionKeys.includes(permission)))];
+  if (!String(input.name_en || existing?.name_en || "").trim() || !String(input.name_ar || existing?.name_ar || "").trim()) fail("ROLE_NAME_REQUIRED", 422);
+  return { ...(existing || {}), code, name_en:String(input.name_en || existing.name_en).trim(), name_ar:String(input.name_ar || existing.name_ar).trim(), description_en:String(input.description_en ?? existing?.description_en ?? "").trim(), description_ar:String(input.description_ar ?? existing?.description_ar ?? "").trim(), permissions, is_active:input.is_active === undefined ? existing?.is_active !== false : input.is_active === true, updated_at:new Date().toISOString() };
+}
+
+app.post("/api/admin/staff-roles", (req, res) => {
+  const role = normalizeStaffRolePayload(req.body || {});
+  if (role.permissions.includes("*") && !req.adminPermissions.includes("*")) fail("CANNOT_GRANT_HIGHER_PERMISSIONS", 403);
+  if (entityRows("staff_roles").some((row) => row.code === role.code)) fail("ROLE_CODE_EXISTS", 409);
+  res.status(201).json(ok({ role:publicStaffRole(createRecord("staff_roles", { ...role, is_system:false, created_by:req.user.email || "admin" })) }));
+});
+
+app.put("/api/admin/staff-roles/:id", (req, res) => {
+  const current = getRecord("staff_roles", req.params.id);
+  if (!current) fail("ROLE_NOT_FOUND", 404);
+  if (current.code === "super_admin") fail("SUPER_ADMIN_ROLE_IMMUTABLE", 403);
+  const role = normalizeStaffRolePayload(req.body || {}, current);
+  if (!req.adminPermissions.includes("*")) {
+    const own = new Set(req.adminPermissions || []);
+    if (role.permissions.some((permission) => permission === "*" || !own.has(permission))) fail("CANNOT_GRANT_HIGHER_PERMISSIONS", 403);
+  }
+  res.json(ok({ role:publicStaffRole(updateRecord("staff_roles", current.id, role)) }));
+});
+
+app.delete("/api/admin/staff-roles/:id", (req, res) => {
+  const current = getRecord("staff_roles", req.params.id);
+  if (!current) fail("ROLE_NOT_FOUND", 404);
+  if (current.is_system) fail("SYSTEM_ROLE_CANNOT_BE_DELETED", 403);
+  if (entityRows("staff_users").some((staff) => Number(staff.role_id) === Number(current.id) && staff.is_active !== false)) fail("ROLE_HAS_ACTIVE_STAFF", 409);
+  softDelete("staff_roles", current.id);
+  res.json(ok({ deleted:true }));
+});
+
+app.get("/api/admin/staff-activity", (req, res) => {
+  let rows = entityRows("staff_audit_logs");
+  if (req.query.staff_id) rows = rows.filter((row) => String(row.actor_id) === String(req.query.staff_id));
+  if (req.query.outcome && req.query.outcome !== "all") rows = rows.filter((row) => row.outcome === req.query.outcome);
+  if (req.query.action) rows = rows.filter((row) => String(row.action || "").includes(String(req.query.action)));
+  if (req.query.date_from) rows = rows.filter((row) => new Date(row.created_at).getTime() >= new Date(`${req.query.date_from}T00:00:00`).getTime());
+  if (req.query.date_to) rows = rows.filter((row) => new Date(row.created_at).getTime() <= new Date(`${req.query.date_to}T23:59:59`).getTime());
+  const limit = Math.min(500, Math.max(25, Number(req.query.limit || 200)));
+  res.json(ok({ activity:rows.slice(0, limit), staff:entityRows("staff_users").map((row) => ({ id:row.id, name:row.name, email:row.email })) }));
 });
 
 app.post(["/api/admin/upload/single", "/api/admin/company-info/logo", "/api/admin/company-info/favicon"], upload.single("file"), (req, res) => {
   const url = req.file ? `/uploads/${req.file.filename}` : "";
   res.json(ok({ url, fileUrl: url, path: url }));
+});
+
+app.post("/api/admin/profile-images", (req, res, next) => profileImageUpload.single("file")(req, res, (error) => {
+  if (error) return res.status(422).json({ success:false, error:{ message:error.message } });
+  next();
+}), (req, res) => {
+  if (!req.file) fail("PROFILE_IMAGE_REQUIRED", 422);
+  const url = `/uploads/${req.file.filename}`;
+  res.status(201).json(ok({ url }));
+});
+
+app.get("/api/admin/dashboard-identity", (_req, res) => res.json(ok(normalizeDashboardIdentity())));
+app.put("/api/admin/dashboard-identity", (req, res) => {
+  const next = normalizeDashboardIdentity({ ...(req.body || {}), updated_at: new Date().toISOString() });
+  setSetting("dashboardIdentity", next);
+  res.json(ok(next));
+});
+app.post("/api/admin/dashboard-identity/assets", (req, res, next) => profileImageUpload.single("file")(req, res, (error) => {
+  if (error) return res.status(422).json({ success:false, error:{ message:error.message } });
+  next();
+}), (req, res) => {
+  if (!req.file) fail("DASHBOARD_IDENTITY_IMAGE_REQUIRED", 422);
+  res.status(201).json(ok({ url:`/uploads/${req.file.filename}` }));
 });
 
 const entityMap = {
@@ -7689,6 +10467,7 @@ const entityMap = {
   colors: "colors",
   options: "options",
   labels: "labels",
+  facets: "facets",
   pages: "pages",
   content: "content",
   products: "products",
@@ -7742,6 +10521,7 @@ function normalizeUserPayload(input = {}, existing = null) {
     full_name: name,
     email,
     phone,
+    avatar_url:normalizeProfileImage(input.avatar_url, existing?.avatar_url),
     role,
     status,
     is_active: status === "active",
@@ -7756,6 +10536,116 @@ function normalizeUserPayload(input = {}, existing = null) {
   }
   delete payload.password;
   return payload;
+}
+
+const customerAddressTypes = new Set(["home", "work", "other"]);
+
+function customerAddressRows(userId) {
+  return entityRows("customer_addresses")
+    .filter((row) => String(row.user_id) === String(userId) && row.is_active !== false)
+    .sort((a, b) => Number(b.is_default === true) - Number(a.is_default === true) || String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+}
+
+function publicCustomerAddress(address = {}) {
+  const { address_verification_token, ...safe } = address;
+  return safe;
+}
+
+function normalizeCustomerAddressPayload(input = {}, user = {}, existing = null) {
+  const market = normalizeMarketSettings();
+  const countryCode = String(input.country_code ?? existing?.country_code ?? market.default_country_code ?? "SA").trim().toUpperCase();
+  const type = String(input.type ?? existing?.type ?? "home").trim().toLowerCase();
+  if (!customerAddressTypes.has(type)) fail("INVALID_ADDRESS_TYPE");
+  const profileName = String(user.name || user.full_name || "").trim().split(/\s+/).filter(Boolean);
+  const firstName = String(input.first_name ?? existing?.first_name ?? user.first_name ?? profileName.shift() ?? "").trim();
+  const lastName = String(input.last_name ?? existing?.last_name ?? user.last_name ?? profileName.join(" ") ?? "").trim();
+  const source = {
+    ...(existing || {}),
+    ...input,
+    first_name:firstName,
+    last_name:lastName,
+    phone:String(input.phone ?? existing?.phone ?? user.phone ?? "").trim(),
+    email:String(input.email ?? existing?.email ?? user.email ?? "").trim(),
+    country_code:countryCode
+  };
+  const normalized = normalizeCheckoutCustomer(source);
+  return {
+    ...(existing || {}),
+    user_id:Number(user.id),
+    type,
+    label:String(input.label ?? existing?.label ?? (type === "work" ? "العمل" : type === "home" ? "المنزل" : "عنوان آخر")).trim().slice(0, 60),
+    ...normalized,
+    is_default:input.is_default === true || input.is_default === "true" || Boolean(existing?.is_default),
+    is_active:input.is_active !== false,
+    source:String(input.source || existing?.source || "customer").slice(0, 40),
+    updated_by:String(input.updated_by || user.email || `user:${user.id}`).slice(0, 120)
+  };
+}
+
+function setDefaultCustomerAddress(userId, addressId) {
+  const rows = customerAddressRows(userId);
+  const selected = rows.find((row) => Number(row.id) === Number(addressId));
+  if (!selected) fail("ADDRESS_NOT_FOUND", 404);
+  rows.forEach((row) => {
+    if (Boolean(row.is_default) !== (Number(row.id) === Number(selected.id))) updateRecord("customer_addresses", row.id, { is_default:Number(row.id) === Number(selected.id) });
+  });
+  return getRecord("customer_addresses", selected.id);
+}
+
+function createCustomerAddress(user, input = {}) {
+  const current = customerAddressRows(user.id);
+  if (current.length >= 12) fail("ADDRESS_BOOK_LIMIT_REACHED", 409);
+  const normalized = normalizeCustomerAddressPayload({ ...input, is_default:input.is_default === true || current.length === 0 }, user);
+  const address = createRecord("customer_addresses", normalized);
+  if (address.is_default) setDefaultCustomerAddress(user.id, address.id);
+  return getRecord("customer_addresses", address.id);
+}
+
+function bootstrapCustomerAddresses(user) {
+  const current = customerAddressRows(user.id);
+  if (current.length) return current;
+  const email = String(user.email || "").trim().toLowerCase();
+  const phone = String(user.phone || "").replace(/\D/g, "");
+  const order = entityRows("orders")
+    .filter((row) => {
+      const customer = row.shipping_address || row.customer || {};
+      return String(row.customer_identity?.user_id || "") === String(user.id)
+        || (email && String(customer.email || "").trim().toLowerCase() === email)
+        || (phone && String(customer.phone || "").replace(/\D/g, "") === phone);
+    })
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    .find((row) => row.shipping_address || row.customer);
+  if (!order) return [];
+  const source = order.shipping_address || order.customer || {};
+  try {
+    createCustomerAddress(user, { ...source, type:"home", label:"المنزل", is_default:true, source:"order_migration", migrated_from_order_id:order.id });
+  } catch (error) {
+    console.warn(`Unable to migrate address for user ${user.id}: ${error.message}`);
+  }
+  return customerAddressRows(user.id);
+}
+
+function customerAddressForSession(req, addressId) {
+  const user = customerSessionUser(req);
+  if (!user) fail("LOGIN_REQUIRED_FOR_SAVED_ADDRESS", 401);
+  const address = customerAddressRows(user.id).find((row) => Number(row.id) === Number(addressId));
+  if (!address) fail("ADDRESS_NOT_FOUND", 404);
+  return { user, address };
+}
+
+async function checkoutCustomerFromRequest(req, actor = "checkout") {
+  const addressId = Number(req.body?.address_id || req.body?.customer?.address_id || 0);
+  if (!addressId) return normalizeVerifiedCheckoutCustomer(req.body?.customer || {}, actor);
+  const { user, address } = customerAddressForSession(req, addressId);
+  const submitted = req.body?.customer || {};
+  return normalizeVerifiedCheckoutCustomer({
+    ...address,
+    first_name:address.first_name || user.name.split(/\s+/)[0],
+    last_name:address.last_name || user.name.split(/\s+/).slice(1).join(" "),
+    phone:address.phone || user.phone,
+    email:user.email || address.email,
+    address_notes:submitted.address_notes ?? address.address_notes
+  }, actor);
 }
 
 const managedOrderStatuses = new Set(["pending", "confirmed", "processing", "ready_to_ship", "shipped", "delivered", "cancelled"]);
@@ -8568,13 +11458,16 @@ async function createEdfaPayCheckout(order, req) {
 }
 
 app.post("/api/admin/catalog/reset", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const entities = ["products", "categories", "brands", "colors", "options"];
   const placeholders = entities.map(() => "?").join(",");
   const removed = db.prepare(`SELECT entity, COUNT(*) AS count FROM records WHERE entity IN (${placeholders}) GROUP BY entity`).all(...entities);
   db.prepare(`DELETE FROM records WHERE entity IN (${placeholders})`).run(...entities);
   res.json(ok({ message: "Catalog reset", removed }));
 });
+
+app.get("/api/admin/categories/subcategory-migration/preview", (_req, res) => res.json(ok(subcategoryMigrationPreview())));
+app.post("/api/admin/categories/subcategory-migration/execute", (_req, res) => res.json(ok(migrateFacetProductsToSubcategories())));
 
 app.post("/api/admin/categories/preview", (req, res) => {
   const category = normalizeCategoryPayload(req.body || {});
@@ -8593,7 +11486,7 @@ app.post("/api/admin/categories/preview", (req, res) => {
 for (const [route, entity] of Object.entries(entityMap)) {
   app.get(`/api/admin/${route}`, (req, res) => {
     const rows = entityRows(entity);
-    if (entity === "products") return res.json(ok({ products: rows, total: rows.length, page: Number(req.query.page || 1), limit: Number(req.query.limit || 20) }));
+    if (entity === "products") return res.json(ok({ products: rows.map(productForAdminList), total: rows.length, page: Number(req.query.page || 1), limit: Number(req.query.limit || 20) }));
     if (entity === "categories") {
       const products = storeProductRows();
       return res.json(ok(rows.map((category) => categoryForStore(category, products))));
@@ -8616,6 +11509,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
         });
         return adminUserView({
           ...user,
+          address_count:customerAddressRows(user.id).length,
           order_count: userOrders.length,
           completed_order_count: userOrders.filter((order) => order.status === "delivered").length,
           total_spent: Number(userOrders.filter((order) => order.status !== "cancelled").reduce((sum, order) => sum + Number(order.total || 0), 0).toFixed(2)),
@@ -8673,11 +11567,11 @@ for (const [route, entity] of Object.entries(entityMap)) {
   app.post(`/api/admin/${route}`, (req, res) => {
     if (entity === "orders") fail("Orders can only be created through checkout", 405);
     const payload = entity === "products"
-      ? normalizeProductPayload(req.body || {})
+      ? validateProductPayload(req.body || {}, { requireExplicitType: true })
       : entity === "categories"
-        ? normalizeCategoryPayload(req.body || {})
+        ? validateCategoryPayload(req.body || {})
       : entity === "bundles"
-        ? normalizeBundlePayload(req.body || {})
+        ? validateBundlePayload(req.body || {})
         : entity === "collections"
           ? normalizeCollectionPayload(req.body || {})
           : entity === "discounts"
@@ -8687,7 +11581,6 @@ for (const [route, entity] of Object.entries(entityMap)) {
               : entity === "pages"
                 ? normalizeDynamicPagePayload(req.body || {})
               : (req.body || {});
-    if (entity === "bundles" && payload.items.length < 2) fail("A bundle must contain at least two products");
     const record = createRecord(entity, payload);
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
@@ -8703,7 +11596,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
       : entity === "categories"
-        ? updateRecord(entity, req.params.id, normalizeCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
+        ? updateRecord(entity, req.params.id, validateCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
       : entity === "bundles"
         ? updateBundleRecord(req.params.id, req.body || {})
         : entity === "collections"
@@ -8729,7 +11622,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
       : entity === "categories"
-        ? updateRecord(entity, req.params.id, normalizeCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
+        ? updateRecord(entity, req.params.id, validateCategoryPayload(req.body || {}, getRecord(entity, req.params.id)))
       : entity === "bundles"
         ? updateBundleRecord(req.params.id, req.body || {})
         : entity === "collections"
@@ -8784,6 +11677,46 @@ app.patch("/api/admin/users/:id/status", (req, res) => {
   if (!user) fail("User not found", 404);
   res.json(ok({ user: adminUserView(updateRecord("users", req.params.id, { status, is_active: status === "active" })) }));
 });
+app.get("/api/admin/users/:id/addresses", (req, res) => {
+  const user = getRecord("users", req.params.id);
+  if (!user) fail("User not found", 404);
+  res.json(ok({ user:adminUserView(user), addresses:bootstrapCustomerAddresses(customerSessionUser({ user }) || user).map(publicCustomerAddress) }));
+});
+app.post("/api/admin/users/:id/addresses", (req, res) => {
+  const stored = getRecord("users", req.params.id);
+  if (!stored) fail("User not found", 404);
+  const user = customerSessionUser({ user:stored }) || { ...stored, name:stored.name || stored.full_name, permissions:defaultUserPermissions };
+  const address = createCustomerAddress(user, { ...(req.body || {}), source:"admin", updated_by:req.user.email || "admin" });
+  res.json(ok({ address:publicCustomerAddress(address), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+});
+for (const method of ["put", "patch"]) {
+  app[method]("/api/admin/users/:userId/addresses/:id", (req, res) => {
+    const stored = getRecord("users", req.params.userId);
+    if (!stored) fail("User not found", 404);
+    const user = customerSessionUser({ user:stored }) || { ...stored, name:stored.name || stored.full_name, permissions:defaultUserPermissions };
+    const existing = customerAddressRows(user.id).find((row) => Number(row.id) === Number(req.params.id));
+    if (!existing) fail("ADDRESS_NOT_FOUND", 404);
+    const address = updateRecord("customer_addresses", existing.id, normalizeCustomerAddressPayload({ ...(req.body || {}), source:existing.source || "admin", updated_by:req.user.email || "admin" }, user, existing));
+    if (address.is_default) setDefaultCustomerAddress(user.id, address.id);
+    res.json(ok({ address:publicCustomerAddress(getRecord("customer_addresses", address.id)), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+  });
+}
+app.patch("/api/admin/users/:userId/addresses/:id/default", (req, res) => {
+  const user = getRecord("users", req.params.userId);
+  if (!user) fail("User not found", 404);
+  const address = setDefaultCustomerAddress(user.id, req.params.id);
+  res.json(ok({ address:publicCustomerAddress(address), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+});
+app.delete("/api/admin/users/:userId/addresses/:id", (req, res) => {
+  const user = getRecord("users", req.params.userId);
+  if (!user) fail("User not found", 404);
+  const existing = customerAddressRows(user.id).find((row) => Number(row.id) === Number(req.params.id));
+  if (!existing) fail("ADDRESS_NOT_FOUND", 404);
+  softDelete("customer_addresses", existing.id);
+  const remaining = customerAddressRows(user.id);
+  if (existing.is_default && remaining.length) setDefaultCustomerAddress(user.id, remaining[0].id);
+  res.json(ok({ addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+});
 
 app.get("/api/admin/orders/orders-stats", (_req, res) => {
   const rows = entityRows("orders");
@@ -8797,7 +11730,7 @@ app.get("/api/admin/orders/orders-stats", (_req, res) => {
   }));
 });
 app.get("/api/admin/order-management/stats/summary", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const rows = entityRows("orders");
   res.json(ok({
     totalOrders: rows.length,
@@ -8817,6 +11750,86 @@ app.put("/api/admin/fulfillment/settings", (req, res) => {
   const settings = normalizeFulfillmentSettings({ ...normalizeFulfillmentSettings(), ...(req.body || {}), updated_at:new Date().toISOString() });
   setSetting("fulfillmentSettings", settings);
   res.json(ok({ settings }));
+});
+app.get("/api/admin/inventory/overview", (req, res) => {
+  const recentReceipts = db.prepare("SELECT * FROM inventory_receipts ORDER BY id DESC LIMIT 8").all().map(inventoryReceiptView);
+  const recentMovements = db.prepare("SELECT * FROM inventory_movements ORDER BY id DESC LIMIT 30").all().map((row) => {
+    try { return { ...row, details:JSON.parse(row.details || "{}") }; } catch { return { ...row, details:{} }; }
+  });
+  res.json(ok({ summary:inventoryOverview(), recent_receipts:recentReceipts, recent_movements:recentMovements }));
+});
+app.get("/api/admin/inventory/catalog", (req, res) => {
+  const products = entityRows("products").map((row) => {
+    const product = normalizeProductPayload(row);
+    return {
+      id:product.id,
+      name_ar:product.name_ar,
+      name_en:product.name_en,
+      sku:product.sku,
+      main_photo_url:product.main_photo_url || product.image_url || "",
+      category_slug:product.category_slug || "",
+      is_active:product.is_active !== false,
+      inventory_mode:product.inventory_mode,
+      stock:product.stock,
+      cost:product.cost,
+      variants:product.variants.map((variant) => ({
+        id:variant.id,
+        color:variant.color,
+        option:variant.option,
+        value:variant.value,
+        sku:variant.sku,
+        image_url:variant.image_url,
+        is_active:variant.is_active !== false,
+        inventory_mode:variant.inventory_mode,
+        stock:variant.stock,
+        cost:variant.cost
+      }))
+    };
+  });
+  res.json(ok({ products }));
+});
+app.get("/api/admin/inventory/receipts", (req, res) => {
+  const status = String(req.query.status || "").trim().toLowerCase();
+  const query = String(req.query.q || "").trim().toLowerCase();
+  let receipts = db.prepare("SELECT * FROM inventory_receipts ORDER BY id DESC").all().map(inventoryReceiptView);
+  if (status) receipts = receipts.filter((receipt) => receipt.status === status);
+  if (query) receipts = receipts.filter((receipt) => [receipt.receipt_number, receipt.invoice_number, receipt.supplier_name].some((value) => String(value || "").toLowerCase().includes(query)));
+  res.json(ok({ receipts, summary:inventoryOverview() }));
+});
+app.get("/api/admin/inventory/receipts/:id", (req, res) => {
+  const receipt = inventoryReceiptView(req.params.id);
+  if (!receipt) fail("INVENTORY_RECEIPT_NOT_FOUND", 404);
+  res.json(ok({ receipt }));
+});
+app.post("/api/admin/inventory/receipts", (req, res) => {
+  const actor = req.user?.email || "admin";
+  let receipt = saveInventoryReceiptDraft(req.body || {}, actor);
+  if (req.body?.receive_now === true) receipt = receiveInventoryReceipt(receipt.id, actor);
+  res.status(201).json(ok({ receipt }));
+});
+app.put("/api/admin/inventory/receipts/:id", (req, res) => {
+  const receipt = saveInventoryReceiptDraft(req.body || {}, req.user?.email || "admin", req.params.id);
+  res.json(ok({ receipt }));
+});
+app.post("/api/admin/inventory/receipts/:id/receive", (req, res) => {
+  const receipt = receiveInventoryReceipt(req.params.id, req.user?.email || "admin");
+  res.json(ok({ receipt }));
+});
+app.post("/api/admin/inventory/receipts/:id/reverse", (req, res) => {
+  const reason = String(req.body?.reason || "").trim();
+  if (reason.length < 3) fail("INVENTORY_RECEIPT_REVERSAL_REASON_REQUIRED", 422);
+  const receipt = reverseInventoryReceipt(req.params.id, req.user?.email || "admin", reason);
+  res.json(ok({ receipt }));
+});
+app.delete("/api/admin/inventory/receipts/:id", (req, res) => {
+  const receipt = inventoryReceiptView(req.params.id);
+  if (!receipt) fail("INVENTORY_RECEIPT_NOT_FOUND", 404);
+  if (receipt.status !== "draft") fail("ONLY_DRAFT_RECEIPTS_CAN_BE_DELETED", 409);
+  db.transaction(() => {
+    db.prepare("DELETE FROM inventory_receipt_items WHERE receipt_id=?").run(receipt.id);
+    db.prepare("DELETE FROM inventory_receipts WHERE id=?").run(receipt.id);
+  })();
+  res.json(ok({ deleted:true }));
 });
 app.get("/api/admin/returns", (req, res) => {
   const query = String(req.query.q || "").trim().toLowerCase();
@@ -8876,7 +11889,7 @@ app.post("/api/admin/order-management/manual", async (req, res, next) => {
   }
 });
 app.get("/api/admin/order-migrations/legacy", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const orders = entityRows("orders").filter((order) => order.source === "komrz_woocommerce");
   const runs = entityRows("legacy_order_import_runs").sort((a, b) => String(b.completed_at || b.created_at).localeCompare(String(a.completed_at || a.created_at)));
   const linkedOrderIds = new Set(entityRows("shipping_shipments").map((shipment) => Number(shipment.store_order_id)).filter(Boolean));
@@ -8894,7 +11907,7 @@ app.get("/api/admin/order-migrations/legacy", (req, res) => {
   }));
 });
 app.get("/api/admin/order-management/:id", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const order = getRecord("orders", req.params.id);
   if (!order) fail("ORDER_NOT_FOUND", 404);
   const events = entityRows("order_events").filter((event) => Number(event.order_id) === Number(order.id)).sort((a, b) => String(b.occurred_at || b.created_at).localeCompare(String(a.occurred_at || a.created_at)));
@@ -8905,7 +11918,7 @@ app.get("/api/admin/order-management/:id", (req, res) => {
   res.json(ok({ order: adminOrderView(order), events, inventory_movements:inventoryMovementsForOrder(order.id), fulfillment_settings:normalizeFulfillmentSettings(), checkout_events:checkoutEvents, checkout_session:recoverySession ? { id:recoverySession.id, session_key:recoverySession.session_key } : null, integrations: publicShippingIntegrations() }));
 });
 app.patch("/api/admin/order-management/:id/status", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const order = getRecord("orders", req.params.id);
   if (!order) fail("ORDER_NOT_FOUND", 404);
   const status = String(req.body?.status || "").toLowerCase();
@@ -8942,7 +11955,7 @@ app.post("/api/admin/order-management/:id/return-confirm", (req, res) => {
 });
 app.put("/api/admin/order-management/:id/address", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const order = getRecord("orders", req.params.id);
     if (!order) fail("ORDER_NOT_FOUND", 404);
     const current = order.shipping_address || order.customer || {};
@@ -8962,7 +11975,7 @@ app.put("/api/admin/order-management/:id/address", async (req, res, next) => {
 });
 app.post("/api/admin/order-management/:id/shipping-update", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const order = getRecord("orders", req.params.id);
     if (!order) fail("ORDER_NOT_FOUND", 404);
     const shipment = orderShipment(order);
@@ -8983,7 +11996,7 @@ app.post("/api/admin/order-management/:id/shipping-update", async (req, res, nex
 });
 app.post("/api/admin/order-management/:id/dispatch", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const order = getRecord("orders", req.params.id);
     if (!order) fail("ORDER_NOT_FOUND", 404);
     const provider = String(req.body?.provider || "").toLowerCase();
@@ -9221,11 +12234,11 @@ app.put("/api/admin/settings", (req, res) => {
   }));
 });
 app.get("/api/admin/shipping/integrations", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   res.json(ok({ settings: publicShippingIntegrations(), connection: { connected: false, tested_at: null } }));
 });
 app.put("/api/admin/shipping/integrations", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const settings = normalizeShippingIntegrations({ ...(req.body || {}), updated_at: new Date().toISOString() });
   setSetting("shippingIntegrations", settings);
   const estimatesUpdated = refreshConfiguredShippingEstimates({ overwriteConfigured: true });
@@ -9259,7 +12272,7 @@ app.patch("/api/admin/shipping/integrations/:provider/state", (req, res) => {
 });
 app.post("/api/admin/shipping/integrations/imile/test", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const token = await imileAccessToken();
     res.json(ok({ connected: Boolean(token), environment: normalizeShippingIntegrations().imile.environment, tested_at: new Date().toISOString() }));
   } catch (error) {
@@ -9268,7 +12281,7 @@ app.post("/api/admin/shipping/integrations/imile/test", async (req, res, next) =
 });
 app.post("/api/admin/shipping/integrations/oto/test", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     otoTokenCache.clear();
     const settings = normalizeShippingIntegrations();
     const token = await otoAccessToken(settings);
@@ -9281,7 +12294,7 @@ app.post("/api/admin/shipping/integrations/oto/test", async (req, res, next) => 
   }
 });
 app.post("/api/admin/shipping/integrations/smartship/test", async (req, res, next) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const testedAt = new Date().toISOString();
   const current = normalizeShippingIntegrations();
   try {
@@ -9302,7 +12315,7 @@ app.post("/api/admin/shipping/integrations/smartship/test", async (req, res, nex
 });
 app.post("/api/admin/shipping/integrations/oto/webhook", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const current = normalizeShippingIntegrations();
     const baseUrl = publicStoreUrl("/api/webhooks/oto").replace(/\/$/, "");
     const registered = await otoRequest("/rest/v2/webhook", { method: "GET" });
@@ -9331,17 +12344,26 @@ app.post("/api/admin/shipping/integrations/oto/webhook", async (req, res, next) 
 });
 app.post("/api/admin/shipping/integrations/oms/test", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     imileOmsTokenCache.clear();
-    const session = await imileOmsLogin(normalizeShippingIntegrations(), true);
-    res.json(ok({ connected: Boolean(session.access_token), username: session.user?.userCode || session.user?.username || "", tested_at: new Date().toISOString() }));
+    const current = normalizeShippingIntegrations();
+    const session = await imileOmsLogin(current, true);
+    const testedAt = new Date().toISOString();
+    const saved = normalizeShippingIntegrations({
+      ...current,
+      oms_connector: { ...current.oms_connector, resume_sync: true, last_success_at: current.oms_connector.last_success_at, last_error: "" },
+      updated_at: testedAt
+    });
+    setSetting("shippingIntegrations", saved);
+    res.json(ok({ connected: Boolean(session.access_token), username: session.user?.userCode || session.user?.username || "", tested_at: testedAt, sync_resumed: true }));
   } catch (error) {
+    recordImileOmsFailure(normalizeShippingIntegrations(), error);
     next(error);
   }
 });
 app.post("/api/admin/shipping/integrations/spl/test", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const shortAddress = normalizeSaudiShortAddress(req.body?.short_address);
     const result = await resolveSaudiShortAddress(shortAddress, { force: true, actor: `admin:${req.user.email || req.user.id || "admin"}` });
     res.json(ok({ ...result, verification_token: undefined, connected: true, tested_at: new Date().toISOString() }));
@@ -9621,7 +12643,7 @@ app.get("/api/admin/shipping/carrier-bills", (req, res) => {
 app.get("/api/admin/shipping/carrier-bills/:id", (req, res) => {
   const bill = getRecord("shipping_carrier_bills", req.params.id);
   if (!bill || bill.provider !== "imile") fail("Carrier bill not found", 404);
-  const reconciliations = entityRows("shipping_weekly_reconciliations").filter((row) => Number(row.cod_bill_id) === Number(bill.id) || Number(row.fee_bill_id) === Number(bill.id));
+  const reconciliations = entityRows("shipping_weekly_reconciliations").filter((row) => Number(row.cod_bill_id) === Number(bill.id) || Number(row.fee_bill_id) === Number(bill.id) || (row.cod_bill_ids || []).map(Number).includes(Number(bill.id)) || (row.fee_bill_ids || []).map(Number).includes(Number(bill.id)));
   const linkedIds = new Set(reconciliations.flatMap((row) => row.linked_shipment_ids || []).map(Number));
   const shipments = entityRows("shipping_shipments").filter((shipment) => linkedIds.has(Number(shipment.id)) || (shipment.carrier_bill_numbers || []).includes(bill.bill_code) || shipmentFeeRows(shipment).some((fee) => String(fee.bill_code || "") === String(bill.bill_code)));
   const shipmentIds = new Set(shipments.map((shipment) => Number(shipment.id)));
@@ -9630,12 +12652,12 @@ app.get("/api/admin/shipping/carrier-bills/:id", (req, res) => {
   res.json(ok({ bill, reconciliations, shipments, reports, findings, summary: shippingLedgerSummary(shipments) }));
 });
 app.get("/api/admin/shipping/reports/latest", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const reports = entityRows("shipping_reports").filter((report) => report.source === "oms_fee_report").sort((a, b) => String(b.report_date || "").localeCompare(String(a.report_date || "")));
   res.json(ok({ latest_report: reports[0] || null, reports: reports.slice(0, 24), connector: publicShippingIntegrations().oms_connector }));
 });
 app.get("/api/admin/shipping/reports/:id", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const report = getRecord("shipping_reports", req.params.id);
   if (!report || report.source !== "oms_fee_report") fail("Shipping report not found", 404);
   const shipments = new Map(entityRows("shipping_shipments").map((shipment) => [Number(shipment.id), shipment]));
@@ -9674,11 +12696,12 @@ app.get("/api/admin/shipping/reports/:id", (req, res) => {
 });
 app.post("/api/admin/shipping/reports/sync", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     const result = await syncImileOmsReports({
       date_from: req.body?.date_from,
       date_to: req.body?.date_to,
       force: req.body?.force === true,
+      sync_official_export: req.body?.sync_official_export === true,
       trigger: req.body?.trigger
     });
     res.json(ok(result));
@@ -9687,13 +12710,13 @@ app.post("/api/admin/shipping/reports/sync", async (req, res, next) => {
   }
 });
 app.get("/api/admin/shipping/sync-runs", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const limit = Math.min(100, Math.max(5, Number(req.query.limit || 20)));
   const runs = entityRows("shipping_sync_runs").slice(0, limit);
   res.json(ok({ runs, latest: runs[0] || null }));
 });
 app.get("/api/admin/shipping/weekly-reconciliations", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   let rows = entityRows("shipping_weekly_reconciliations").filter((row) => row.provider === "imile");
   if (req.query.date_from) rows = rows.filter((row) => row.cycle_end >= String(req.query.date_from));
   if (req.query.date_to) rows = rows.filter((row) => row.cycle_start <= String(req.query.date_to));
@@ -9715,17 +12738,23 @@ app.get("/api/admin/shipping/weekly-reconciliations", (req, res) => {
   res.json(ok({ reconciliations: rows, summary }));
 });
 app.get("/api/admin/shipping/weekly-reconciliations/:id", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const reconciliation = getRecord("shipping_weekly_reconciliations", req.params.id);
   if (!reconciliation || reconciliation.provider !== "imile") fail("Weekly reconciliation not found", 404);
-  const bills = [reconciliation.cod_bill_id, reconciliation.fee_bill_id].filter(Boolean).map((id) => getRecord("shipping_carrier_bills", id)).filter(Boolean);
+  const billIds = [
+    ...(Array.isArray(reconciliation.cod_bill_ids) ? reconciliation.cod_bill_ids : []),
+    ...(Array.isArray(reconciliation.fee_bill_ids) ? reconciliation.fee_bill_ids : []),
+    reconciliation.cod_bill_id,
+    reconciliation.fee_bill_id
+  ].filter(Boolean);
+  const bills = [...new Set(billIds.map(Number))].map((id) => getRecord("shipping_carrier_bills", id)).filter(Boolean);
   const shipmentsById = new Map(entityRows("shipping_shipments").map((shipment) => [Number(shipment.id), shipment]));
   const shipments = (reconciliation.linked_shipment_ids || []).map((id) => shipmentsById.get(Number(id))).filter(Boolean);
   const findings = entityRows("shipping_audit_findings").filter((finding) => finding.source?.reconciliations?.some((row) => Number(row.id) === Number(reconciliation.id)));
   res.json(ok({ reconciliation, bills, shipments, findings }));
 });
 app.get("/api/admin/shipping/intelligence", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const evidence = entityRows("legacy_sales_evidence");
   const products = new Map(entityRows("products").map((product) => [Number(product.id), product]));
   const productSales = [...evidence.reduce((map, row) => {
@@ -9749,8 +12778,119 @@ app.get("/api/admin/shipping/intelligence", (req, res) => {
     operations: { total_shipments: shipmentRows.length, delayed_shipments: delayed.length, delayed_after_days: overdueDays, delayed: delayed.slice(0, 100) }
   }));
 });
+app.get("/api/admin/finance/overview", (req, res) => {
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
+  const result = financeOverview(req.query || {});
+  const limit = Math.min(200, Math.max(10, Number(req.query.limit || 50)));
+  const page = Math.max(1, Number(req.query.page || 1));
+  const recognizedOnly = req.query.recognized === "true";
+  const orders = recognizedOnly ? result.orders.filter((row) => row.recognized) : result.orders;
+  res.json(ok({ ...result, orders: orders.slice((page - 1) * limit, page * limit), pagination: { page, limit, total: orders.length, total_pages: Math.max(1, Math.ceil(orders.length / limit)) } }));
+});
+app.put("/api/admin/finance/settings", (req, res) => {
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
+  const current = getSetting("financeSettings") || defaults.financeSettings;
+  const settings = {
+    ...current,
+    recognition_basis: "paid_or_delivered",
+    include_historical_orders: req.body?.include_historical_orders !== false,
+    shipping_variance_tolerance: Math.max(0, Number(req.body?.shipping_variance_tolerance ?? current.shipping_variance_tolerance ?? 1)),
+    currency: String(req.body?.currency || current.currency || "SAR").toUpperCase(),
+    updated_at: new Date().toISOString()
+  };
+  setSetting("financeSettings", settings);
+  res.json(ok({ settings }));
+});
+app.get("/api/admin/notifications", (req, res) => {
+  res.json(ok(notificationOverview(req.query || {}, req)));
+});
+app.put("/api/admin/notifications/settings", (req, res) => {
+  const settings = normalizeNotificationSettings({ ...(req.body || {}), updated_at:new Date().toISOString() });
+  setSetting("notificationSettings", settings);
+  res.json(ok({ settings:publicNotificationSettings() }));
+});
+app.post("/api/admin/notifications/test-email", async (req, res) => {
+  const settings = normalizeNotificationSettings();
+  const recipients = notificationRecipients(req.body?.recipient || settings.email.default_recipients);
+  if (!recipients.length) fail("NOTIFICATION_TEST_RECIPIENT_REQUIRED", 422);
+  const notification = { id:0, severity:"info", title_en:"SITEYFY notification test", title_ar:"اختبار إشعارات SITEYFY", message_en:"Your email notification connection is working correctly.", message_ar:"إعدادات إرسال إشعارات البريد تعمل بصورة صحيحة.", action_url:"/admin#notifications" };
+  const delivery = await deliverNotificationEmail(notification, { recipients }, { ...settings, quiet_hours:{ ...settings.quiet_hours, enabled:false } }, recipients);
+  if (delivery.status !== "sent") fail(delivery.error || delivery.reason || "NOTIFICATION_EMAIL_TEST_FAILED", 502);
+  res.json(ok({ delivery }));
+});
+app.post("/api/admin/notifications/scan", async (req, res) => {
+  const run = await runNotificationScan(String(req.body?.trigger || "manual"));
+  res.json(ok({ run, ...notificationOverview({ limit:100 }, req) }));
+});
+app.post("/api/admin/notifications/rules", (req, res) => {
+  const rule = normalizeNotificationRule(req.body || {});
+  if (entityRows("notification_rules").some((row) => row.code === rule.code)) fail("NOTIFICATION_RULE_CODE_EXISTS", 409);
+  res.json(ok({ rule:createRecord("notification_rules", { ...rule, created_by:req.user.email || "admin" }) }));
+});
+app.put("/api/admin/notifications/rules/:id", (req, res) => {
+  const current = getRecord("notification_rules", req.params.id);
+  if (!current) fail("NOTIFICATION_RULE_NOT_FOUND", 404);
+  res.json(ok({ rule:updateRecord("notification_rules", current.id, normalizeNotificationRule(req.body || {}, current)) }));
+});
+app.delete("/api/admin/notifications/rules/:id", (req, res) => {
+  const current = getRecord("notification_rules", req.params.id);
+  if (!current) fail("NOTIFICATION_RULE_NOT_FOUND", 404);
+  softDelete("notification_rules", current.id);
+  res.json(ok({ deleted:true }));
+});
+app.patch("/api/admin/notifications/:id", (req, res) => {
+  const notification = getRecord("notifications", req.params.id);
+  if (!notification) fail("NOTIFICATION_NOT_FOUND", 404);
+  const action = String(req.body?.action || "read");
+  const allowed = new Set(["read", "unread", "acknowledged", "resolved", "archived", "snoozed"]);
+  if (!allowed.has(action)) fail("NOTIFICATION_ACTION_INVALID", 422);
+  if (["resolved", "archived"].includes(action) && !req.adminPermissions.includes("*") && !req.adminPermissions.includes("notifications.resolve")) fail("PERMISSION_REQUIRED:notifications.resolve", 403);
+  const now = new Date().toISOString();
+  if (["read", "unread", "acknowledged", "snoozed"].includes(action)) {
+    const viewerKey = notificationViewerKey(req);
+    const current = entityRows("notification_user_states").find((state) => state.viewer_key === viewerKey && Number(state.notification_id) === Number(notification.id));
+    const personal = { viewer_key:viewerKey, notification_id:notification.id, status:action, staff_id:req.staff?.id || null, updated_at:now };
+    if (action === "read") personal.read_at = now;
+    if (action === "acknowledged") personal.acknowledged_at = now;
+    if (action === "snoozed") personal.snoozed_until = req.body?.snoozed_until || new Date(Date.now() + 86400000).toISOString();
+    current ? updateRecord("notification_user_states", current.id, personal) : createRecord("notification_user_states", personal);
+    return res.json(ok({ notification:{ ...notification, ...personal }, summary:notificationOverview({ limit:10 }, req).summary }));
+  }
+  const patch = { status:action, updated_by:req.user.email || "admin" };
+  if (action === "read") patch.read_at = now;
+  if (action === "acknowledged") patch.acknowledged_at = now;
+  if (["resolved", "archived"].includes(action)) patch.resolved_at = now;
+  if (action === "snoozed") patch.snoozed_until = req.body?.snoozed_until || new Date(Date.now() + 86400000).toISOString();
+  res.json(ok({ notification:updateRecord("notifications", notification.id, patch), summary:notificationOverview({ limit:10 }, req).summary }));
+});
+app.post("/api/admin/notifications/mark-all-read", (req, res) => {
+  const now = new Date().toISOString();
+  let updated = 0;
+  const viewerKey = notificationViewerKey(req);
+  notificationOverview({ limit:500 }, req).notifications.filter((row) => row.status === "unread").forEach((row) => {
+    const current = entityRows("notification_user_states").find((state) => state.viewer_key === viewerKey && Number(state.notification_id) === Number(row.id));
+    const personal = { viewer_key:viewerKey, notification_id:row.id, status:"read", read_at:now, staff_id:req.staff?.id || null, updated_at:now };
+    current ? updateRecord("notification_user_states", current.id, personal) : createRecord("notification_user_states", personal);
+    updated += 1;
+  });
+  res.json(ok({ updated, summary:notificationOverview({ limit:10 }, req).summary }));
+});
+app.post("/api/admin/shipping/reconcile-providers", (req, res) => {
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
+  const result = syncShippingProviderLinks();
+  res.json(ok({ ...result, links: entityRows("shipping_provider_links") }));
+});
+app.get("/api/admin/shipping/fee-movements", (req, res) => {
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
+  let rows = entityRows("shipping_fee_movements");
+  if (req.query.waybill_no) rows = rows.filter((row) => String(row.waybill_no || "") === String(req.query.waybill_no));
+  if (req.query.direction) rows = rows.filter((row) => row.direction === req.query.direction);
+  rows.sort((a, b) => String(b.movement_date || b.last_seen_at || "").localeCompare(String(a.movement_date || a.last_seen_at || "")));
+  res.json(ok({ movements: rows, summary: { total: rows.length, charges: rows.filter((row) => row.direction === "charge").length, corrections: rows.filter((row) => row.direction === "correction").length, net: moneyValue(rows.filter((row) => row.movement_kind === "fee").reduce((sum, row) => sum + Number(row.amount || 0), 0)) } }));
+});
+
 app.get("/api/admin/shipping/overview", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const rows = entityRows("shipping_shipments");
   const statusCounts = rows.reduce((counts, row) => ({ ...counts, [row.status_group || "pending"]: Number(counts[row.status_group || "pending"] || 0) + 1 }), {});
   const latestRuns = entityRows("shipping_sync_runs");
@@ -9761,7 +12901,7 @@ app.get("/api/admin/shipping/overview", (req, res) => {
     latest_fee_sync: latestRuns.find((run) => run.source === "oms_fee_report" && run.status === "completed") || null,
     latest_tracking_sync: latestRuns.find((run) => run.source === "tracking" && run.status === "completed") || null,
     automation: {
-      fee_sync_enabled: integrations.oms_connector.is_enabled === true && integrations.oms_connector.has_password === true && integrations.oms_connector.auto_sync_on_open !== false,
+      fee_sync_enabled: integrations.imile.is_enabled === true && integrations.oms_connector.is_enabled === true && integrations.oms_connector.has_password === true && integrations.oms_connector.auto_sync_on_open !== false && integrations.oms_connector.sync_paused !== true,
       fee_sync_interval_minutes: integrations.oms_connector.sync_interval_minutes,
       tracking_sync_enabled: integrations.imile.is_enabled === true && integrations.imile.has_secret_key === true && integrations.imile.auto_sync_tracking === true,
       tracking_sync_interval_minutes: integrations.imile.sync_interval_minutes
@@ -9769,7 +12909,7 @@ app.get("/api/admin/shipping/overview", (req, res) => {
   }));
 });
 app.get("/api/admin/shipping/ledger", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const { rows, date_basis } = filterShippingLedger(req.query || {});
   const page = Math.max(1, Number(req.query.page || 1));
   const limit = Math.min(200, Math.max(10, Number(req.query.limit || 50)));
@@ -9786,7 +12926,7 @@ app.get("/api/admin/shipping/ledger", (req, res) => {
   res.json(ok({ shipments: rows.slice(start, start + limit), summary: shippingLedgerSummary(rows), facets, date_basis, pagination: { page: safePage, limit, total: rows.length, total_pages: totalPages } }));
 });
 app.get("/api/admin/shipping/ledger/report", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const { rows, date_basis } = filterShippingLedger(req.query || {});
   const items = rows.map(shipmentReportItem);
   const summary = shippingLedgerSummary(rows);
@@ -9820,7 +12960,7 @@ app.get("/api/admin/shipping/ledger/report", (req, res) => {
   } }));
 });
 app.get("/api/admin/shipping/shipments", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   let rows = entityRows("shipping_shipments");
   const query = String(req.query.q || "").trim().toLowerCase();
   if (query) rows = rows.filter((row) => [row.waybill_no, row.external_order_no, row.client_order_no, row.customer_name, row.customer_phone, row.latest_site, row.latest_locus].some((value) => String(value || "").toLowerCase().includes(query)));
@@ -9839,7 +12979,7 @@ app.get("/api/admin/shipping/shipments", (req, res) => {
   res.json(ok({ shipments: rows.slice(start, start + limit), summary, pagination: { page: safePage, limit, total: rows.length, total_pages: totalPages } }));
 });
 app.patch("/api/admin/shipping/shipments/:id", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const existing = getRecord("shipping_shipments", req.params.id);
   if (!existing) fail("Shipment not found", 404);
   const patch = { ...(req.body || {}) };
@@ -9851,7 +12991,7 @@ app.patch("/api/admin/shipping/shipments/:id", (req, res) => {
   res.json(ok({ shipment: updateRecord("shipping_shipments", req.params.id, patch) }));
 });
 app.post("/api/admin/shipping/shipments/import", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const rows = Array.isArray(req.body?.shipments) ? req.body.shipments.slice(0, 5000) : [];
   let imported = 0;
   rows.forEach((row) => {
@@ -9863,14 +13003,14 @@ app.post("/api/admin/shipping/shipments/import", (req, res) => {
 });
 app.post("/api/admin/shipping/shipments/sync", async (req, res, next) => {
   try {
-    if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+    if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
     res.json(ok(await syncImileTracking({ shipment_ids: req.body?.shipment_ids, force_all: req.body?.force_all === true, trigger: "manual" })));
   } catch (error) {
     next(error);
   }
 });
 app.get("/api/admin/shipping/settlements", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   let rows = entityRows("shipping_settlements");
   if (req.query.year) rows = rows.filter((row) => String(row.period_start || "").startsWith(String(req.query.year)));
   if (req.query.status) rows = rows.filter((row) => row.status === req.query.status);
@@ -9882,7 +13022,7 @@ app.get("/api/admin/shipping/settlements", (req, res) => {
   res.json(ok({ settlements: rows }));
 });
 app.get("/api/admin/shipping/settlements/:id/report", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const settlement = getRecord("shipping_settlements", req.params.id);
   if (!settlement) fail("Settlement not found", 404);
   const liveById = new Map(entityRows("shipping_shipments").map((row) => [Number(row.id), row]));
@@ -9922,7 +13062,7 @@ app.get("/api/admin/shipping/settlements/:id/report", (req, res) => {
   }, settlement }));
 });
 app.post("/api/admin/shipping/settlements/generate", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const periodStart = String(req.body?.period_start || "");
   const periodEnd = String(req.body?.period_end || "");
   if (!periodStart || !periodEnd) fail("Settlement period is required");
@@ -9949,7 +13089,7 @@ app.post("/api/admin/shipping/settlements/generate", (req, res) => {
   res.json(ok({ settlement }));
 });
 app.patch("/api/admin/shipping/settlements/:id", (req, res) => {
-  if (!req.user || req.user.role !== "admin") fail("Unauthorized", 401);
+  if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const existing = getRecord("shipping_settlements", req.params.id);
   if (!existing) fail("Settlement not found", 404);
   const status = ["draft", "reviewed", "closed"].includes(req.body?.status) ? req.body.status : existing.status;
@@ -9968,7 +13108,7 @@ app.get("/api/admin/shipping/audit/overview", (_req, res) => {
   const findings = entityRows("shipping_audit_findings");
   const runs = entityRows("shipping_audit_runs");
   const disputes = entityRows("shipping_dispute_cases");
-  const active = findings.filter((row) => !["resolved", "ignored", "resolved_automatically"].includes(row.status));
+  const active = findings.filter((row) => !["resolved", "ignored", "resolved_automatically", "resolved_by_correction"].includes(row.status));
   const byRule = [...active.reduce((map, row) => {
     const current = map.get(row.rule_code) || { rule_code: row.rule_code, count: 0, exposure_amount: 0 };
     current.count += 1;
@@ -9982,7 +13122,7 @@ app.get("/api/admin/shipping/audit/findings", (req, res) => {
   let rows = entityRows("shipping_audit_findings");
   const q = String(req.query.q || "").trim().toLowerCase();
   if (q) rows = rows.filter((row) => [row.waybill_no, row.client_order_no, row.rule_code, row.title_en, row.title_ar, row.reason_en, row.reason_ar, row.notes, ...(row.source?.bill_codes || []), ...(row.source?.reports || []).map((report) => report.report_date)].some((value) => String(value || "").toLowerCase().includes(q)));
-  if (req.query.status === "active") rows = rows.filter((row) => !["resolved", "ignored", "resolved_automatically"].includes(row.status));
+  if (req.query.status === "active") rows = rows.filter((row) => !["resolved", "ignored", "resolved_automatically", "resolved_by_correction"].includes(row.status));
   else if (req.query.status) rows = rows.filter((row) => row.status === req.query.status);
   if (req.query.severity) rows = rows.filter((row) => row.severity === req.query.severity);
   if (req.query.rule_code) rows = rows.filter((row) => row.rule_code === req.query.rule_code);
@@ -10003,11 +13143,13 @@ app.get("/api/admin/shipping/audit/findings/:id", (req, res) => {
   const shipment = getRecord("shipping_shipments", finding.shipment_id);
   const order = finding.store_order_id ? getRecord("orders", finding.store_order_id) : null;
   const disputes = entityRows("shipping_dispute_cases").filter((row) => Number(row.finding_id) === Number(finding.id));
+  const history = entityRows("shipping_audit_finding_events").filter((row) => Number(row.finding_id) === Number(finding.id)).sort((a, b) => String(b.occurred_at || b.created_at || "").localeCompare(String(a.occurred_at || a.created_at || "")));
   res.json(ok({
     finding,
     shipment,
     order,
     disputes,
+    history,
     order_contents: shippingAuditOrderContents(order),
     unified_timeline: shippingAuditUnifiedTimeline(shipment || {}, finding),
     timeline_evidence: {
@@ -10129,6 +13271,31 @@ app.put("/api/admin/home-builder", (req, res) => {
   const next = normalizeHomeBuilder({ ...req.body, updated_at: new Date().toISOString() });
   setSetting("homeBuilder", next);
   res.json(ok(next));
+});
+app.put("/api/admin/home-builder/item", (req, res) => {
+  const kind = String(req.body?.kind || "");
+  const property = kind === "slide" ? "slides" : kind === "section" ? "sections" : null;
+  const item = req.body?.item;
+  const id = String(item?.id || "").trim();
+  if (!property || !item || typeof item !== "object" || Array.isArray(item) || !id) fail("INVALID_HOME_BUILDER_ITEM", 400);
+  const builder = normalizeHomeBuilder();
+  const rows = [...builder[property]];
+  const index = rows.findIndex((row) => String(row.id || "") === id);
+  if (index < 0) rows.push({ ...item, id });
+  else rows[index] = { ...rows[index], ...item, id };
+  const next = normalizeHomeBuilder({ ...builder, [property]: rows, updated_at: new Date().toISOString() });
+  setSetting("homeBuilder", next);
+  res.json(ok({ item: next[property].find((row) => String(row.id || "") === id) || null, updated_at: next.updated_at }));
+});
+app.delete("/api/admin/home-builder/item", (req, res) => {
+  const kind = String(req.body?.kind || "");
+  const property = kind === "slide" ? "slides" : kind === "section" ? "sections" : null;
+  const id = String(req.body?.id || "").trim();
+  if (!property || !id) fail("INVALID_HOME_BUILDER_ITEM", 400);
+  const builder = normalizeHomeBuilder();
+  const next = normalizeHomeBuilder({ ...builder, [property]: builder[property].filter((row) => String(row.id || "") !== id), updated_at: new Date().toISOString() });
+  setSetting("homeBuilder", next);
+  res.json(ok({ removed: true, updated_at: next.updated_at }));
 });
 app.get("/api/admin/robots", (_req, res) => {
   res.json(ok({
@@ -10707,7 +13874,7 @@ app.post("/api/store/shipping/quote", async (req, res, next) => {
   try {
     const items = checkoutLineItems(req.body?.items || cartFromRequest(req));
     if (!items.length) fail("Cart is empty");
-    const customer = await normalizeVerifiedCheckoutCustomer(req.body?.customer || {}, "shipping_quote");
+    const customer = await checkoutCustomerFromRequest(req, "shipping_quote");
     const subtotal = items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
     const result = await customerShippingQuotes({ items, subtotal, customer, paymentMethod: req.body?.payment_method || "cod" });
     res.json(ok(result));
@@ -10745,7 +13912,60 @@ app.post("/api/users/register", (req, res) => res.status(403).json({ success: fa
 app.get("/api/users/profile", (req, res) => {
   const user = customerSessionUser(req);
   if (!user) return res.status(401).json({ success: false, error: { message: "Unauthorized" } });
-  res.json(ok({ user }));
+  const addresses = bootstrapCustomerAddresses(user).map(publicCustomerAddress);
+  res.json(ok({ user:{ ...user, addresses, default_address:addresses.find((row) => row.is_default) || addresses[0] || null } }));
+});
+for (const method of ["put", "patch"]) app[method]("/api/users/profile", (req, res) => {
+  const sessionUser = customerSessionUser(req);
+  if (!sessionUser) fail("Unauthorized", 401);
+  if (!sessionUser.permissions.includes("manage_profile")) fail("You do not have permission to manage this profile", 403);
+  const existing = getRecord("users", sessionUser.id);
+  if (!existing) fail("User not found", 404);
+  const user = updateRecord("users", existing.id, normalizeUserPayload({ ...existing, ...req.body, password:"" }, existing));
+  const addresses = customerAddressRows(user.id).map(publicCustomerAddress);
+  res.json(ok({ user:{ ...customerSessionUser({ user }), addresses, default_address:addresses.find((row) => row.is_default) || addresses[0] || null } }));
+});
+app.get(["/api/users/addresses", "/api/addresses"], (req, res) => {
+  const user = customerSessionUser(req);
+  if (!user) fail("Unauthorized", 401);
+  res.json(ok({ addresses:bootstrapCustomerAddresses(user).map(publicCustomerAddress) }));
+});
+app.post(["/api/users/addresses", "/api/addresses"], (req, res) => {
+  const user = customerSessionUser(req);
+  if (!user) fail("Unauthorized", 401);
+  if (!user.permissions.includes("manage_profile")) fail("You do not have permission to manage addresses", 403);
+  const address = createCustomerAddress(user, req.body || {});
+  res.json(ok({ address:publicCustomerAddress(address), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+});
+for (const method of ["put", "patch"]) {
+  app[method](["/api/users/addresses/:id", "/api/addresses/:id"], (req, res) => {
+    const user = customerSessionUser(req);
+    if (!user) fail("Unauthorized", 401);
+    if (!user.permissions.includes("manage_profile")) fail("You do not have permission to manage addresses", 403);
+    const existing = customerAddressRows(user.id).find((row) => Number(row.id) === Number(req.params.id));
+    if (!existing) fail("ADDRESS_NOT_FOUND", 404);
+    const address = updateRecord("customer_addresses", existing.id, normalizeCustomerAddressPayload(req.body || {}, user, existing));
+    if (address.is_default) setDefaultCustomerAddress(user.id, address.id);
+    res.json(ok({ address:publicCustomerAddress(getRecord("customer_addresses", address.id)), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+  });
+}
+app.patch(["/api/users/addresses/:id/default", "/api/addresses/:id/default"], (req, res) => {
+  const user = customerSessionUser(req);
+  if (!user) fail("Unauthorized", 401);
+  if (!user.permissions.includes("manage_profile")) fail("You do not have permission to manage addresses", 403);
+  const address = setDefaultCustomerAddress(user.id, req.params.id);
+  res.json(ok({ address:publicCustomerAddress(address), addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
+});
+app.delete(["/api/users/addresses/:id", "/api/addresses/:id"], (req, res) => {
+  const user = customerSessionUser(req);
+  if (!user) fail("Unauthorized", 401);
+  if (!user.permissions.includes("manage_profile")) fail("You do not have permission to manage addresses", 403);
+  const existing = customerAddressRows(user.id).find((row) => Number(row.id) === Number(req.params.id));
+  if (!existing) fail("ADDRESS_NOT_FOUND", 404);
+  softDelete("customer_addresses", existing.id);
+  const remaining = customerAddressRows(user.id);
+  if (existing.is_default && remaining.length) setDefaultCustomerAddress(user.id, remaining[0].id);
+  res.json(ok({ addresses:customerAddressRows(user.id).map(publicCustomerAddress) }));
 });
 app.post("/api/password-reset/request", (_req, res) => res.json(ok({ message: "If an account exists, a reset link will be sent." })));
 app.post("/api/password-reset/reset", (_req, res) => res.json(ok({ message: "Password reset disabled in empty copy." })));
@@ -10778,7 +13998,7 @@ app.post("/api/orders", async (req, res, next) => {
   }
   const items = checkoutLineItems(reconciliation.items);
   if (!items.length) fail("Cart is empty");
-  const customer = await normalizeVerifiedCheckoutCustomer(req.body?.customer || {}, "place_order");
+  const customer = await checkoutCustomerFromRequest(req, "place_order");
   const requestedPaymentMethod = String(req.body?.payment_method || "cod").toLowerCase();
   const gatewaySettings = normalizePaymentGateways();
   if (!["cod", "tamara", "edfapay", "tabby"].includes(requestedPaymentMethod)) fail("PAYMENT_METHOD_NOT_SUPPORTED", 409);
@@ -10889,8 +14109,18 @@ app.post("/api/orders", async (req, res, next) => {
       requires_shipping: orderItems.some((item) => item.shipping?.requires_shipping !== false)
     },
     discount_breakdown: applied?.line_discounts || [],
-    customer_identity: identities
+    customer_identity: identities,
+    customer_address_id:Number(req.body?.address_id || 0) || null,
+    customer_address_snapshot_version:Number(req.body?.address_id || 0) ? String(customerAddressForSession(req, req.body.address_id).address.updated_at || "") : null
   });
+  if (sessionUser && !req.body?.address_id && req.body?.save_address === true) {
+    try {
+      const savedAddress = createCustomerAddress(sessionUser, { ...customer, type:req.body?.address_type || "home", label:req.body?.address_label || "المنزل", is_default:customerAddressRows(sessionUser.id).length === 0, source:"checkout" });
+      order = updateRecord("orders", order.id, { customer_address_id:savedAddress.id, customer_address_snapshot_version:String(savedAddress.updated_at || "") });
+    } catch (error) {
+      addOrderEvent(order.id, "customer_address_save_failed", { message:String(error.message || "ADDRESS_SAVE_FAILED") }, `user:${sessionUser.id}`);
+    }
+  }
   try {
     order = reserveInventoryForOrder(order, requestedPaymentMethod || "checkout");
   } catch (error) {
@@ -11170,6 +14400,8 @@ app.get("/api/store/company-info", (_req, res) => {
 });
 app.get("/api/store/categories", (_req, res) => res.json(ok({ categories: storeCategoryRows() })));
 app.get("/api/store/brands", (_req, res) => res.json(ok({ brands: activeRows("brands") })));
+app.get("/api/store/labels", (_req, res) => res.json(ok({ labels: activeRows("labels").filter(row => row.is_active !== false && row.isActive !== false) })));
+app.get("/api/store/facets", (_req, res) => res.json(ok({ facets: activeRows("facets").filter(row => row.is_active !== false && row.isActive !== false) })));
 app.get("/api/store/bundles", (_req, res) => res.json(ok({ bundles: storeBundleRows() })));
 app.get("/api/store/collections", (_req, res) => {
   const collections = storeCollectionRows();
@@ -11479,10 +14711,15 @@ function storefrontProductDocument(product) {
     .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
     .replace("</head>", `    ${meta}\n  </head>`);
 }
-app.get(["/", "/products", "/shop", "/cart", "/checkout", "/payment/tamara/success", "/payment/tamara/failure", "/payment/tamara/cancel", "/payment/edfapay/return", "/payment/tabby/success", "/payment/tabby/failure", "/payment/tabby/cancel"], (_req, res) => res.sendFile(storefrontHtml));
+app.get(["/", "/products", "/shop", "/cart", "/checkout", "/account", "/payment/tamara/success", "/payment/tamara/failure", "/payment/tamara/cancel", "/payment/edfapay/return", "/payment/tabby/success", "/payment/tabby/failure", "/payment/tabby/cancel"], (_req, res) => res.sendFile(storefrontHtml));
 app.get("/product/:id", (req, res) => {
   const product = findProduct(req.params.id);
-  if (!product) return res.status(404).send("Product not found");
+  if (!product) {
+    const legacyProduct = entityRows("products").find((row) => String(row.id) === String(req.params.id) || row.slug === String(req.params.id));
+    const migratedBundle = legacyProduct?.migrated_bundle_id ? findBundle(legacyProduct.migrated_bundle_id) : null;
+    if (migratedBundle) return res.redirect(301, `/bundle/${encodeURIComponent(migratedBundle.slug || migratedBundle.id)}`);
+    return res.status(404).send("Product not found");
+  }
   res.set("Cache-Control", "no-cache");
   res.type("html").send(storefrontProductDocument(product));
 });
@@ -11520,16 +14757,19 @@ ensureCoreDynamicPages();
 
 app.listen(port, () => {
   refreshConfiguredShippingEstimates({ overwriteConfigured: false });
+  const movementBackfill = backfillImileFeeMovements();
+  const providerLinkBackfill = syncShippingProviderLinks();
   backfillShippingSettlementSnapshots();
   refreshCheckoutRecoveryStatuses();
   pruneCheckoutRecoveryHistory();
-  console.log(`Slyrah commerce copy running on port ${port}`);
+  console.log(`Slyrah commerce copy running on port ${port}; fee movements ${movementBackfill.inserted || 0}, provider links ${providerLinkBackfill.inserted || 0}`);
   const runScheduledShippingSync = async () => {
     const integrations = publicShippingIntegrations();
     const connector = integrations.oms_connector;
-    if (connector.is_enabled && connector.has_password && connector.auto_sync_on_open !== false) {
+    if (integrations.imile.is_enabled && connector.is_enabled && connector.has_password && connector.auto_sync_on_open !== false && connector.sync_paused !== true) {
       const intervalMs = Math.max(15, Number(connector.sync_interval_minutes || 15)) * 60_000;
-      if (!connector.last_success_at || Date.now() - new Date(connector.last_success_at).getTime() >= intervalMs) {
+      const lastAttemptAt = connector.last_sync_at || connector.last_success_at;
+      if (!lastAttemptAt || Date.now() - new Date(lastAttemptAt).getTime() >= intervalMs) {
         try { await syncImileOmsReports({ trigger: "scheduler" }); }
         catch (error) { console.error(`Scheduled iMile fee sync failed: ${error.message}`); }
       }
@@ -11546,6 +14786,21 @@ app.listen(port, () => {
   };
   setTimeout(runScheduledShippingSync, 30_000);
   setInterval(runScheduledShippingSync, 60_000);
+  const runScheduledNotificationScan = async () => {
+    const settings = normalizeNotificationSettings();
+    if (!settings.enabled) return;
+    const latest = entityRows("notification_runs")[0];
+    const intervalMs = settings.scan_interval_minutes * 60_000;
+    if (latest?.started_at && Date.now() - new Date(latest.started_at).getTime() < intervalMs) return;
+    try { await runNotificationScan("scheduler"); }
+    catch (error) { console.error(`Scheduled notification scan failed: ${error.message}`); }
+    try { await runDueNotificationDigests(settings); }
+    catch (error) { console.error(`Scheduled notification digest failed: ${error.message}`); }
+    const cutoff = Date.now() - settings.retention_days * 86400000;
+    entityRows("notifications").filter((row) => ["resolved", "resolved_automatically", "archived"].includes(row.status) && new Date(row.resolved_at || row.updated_at || row.created_at).getTime() < cutoff).forEach((row) => softDelete("notifications", row.id));
+  };
+  setTimeout(runScheduledNotificationScan, 45_000);
+  setInterval(runScheduledNotificationScan, 60_000);
   setInterval(() => {
     try { refreshCheckoutRecoveryStatuses(); pruneCheckoutRecoveryHistory(); expirePendingInventoryReservations(); }
     catch (error) { console.error(`Checkout recovery maintenance failed: ${error.message}`); }
