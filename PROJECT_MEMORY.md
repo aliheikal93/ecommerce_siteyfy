@@ -227,3 +227,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - The mobile drawer uses the same category tree as a two-level accordion: products first, then per-category subcategories. Links and images are generated from current catalog data rather than a manual menu.
 - Categories marked `migration_status: replaced_by_bundles` are excluded from this navigation because those legacy categories no longer represent a sellable catalog route.
 - Verified at 1440x1000 and 390x844 with Playwright: desktop hover/focus, شراشف panel switching, سادة/مشجر/منقط links, mobile nested expansion, and actual navigation to the filtered سادة products page. No browser runtime errors were reported.
+
+## Compact products navigation refinement — 2026-09-24
+
+- The desktop products dropdown is compact by default (310px). `عرض كل المنتجات` is the first item in the same list instead of a separate mega-menu header action.
+- Catalog parents are intentionally ordered with categories that own subcategories first, ordinary categories next, and Best Sellers last. Current order is شراشف, سجاد صلاة, الأكثر مبيعًا.
+- Only categories with children render an expansion arrow. Hovering or focusing شراشف expands the menu to 650px and reveals its subcategories; moving to a direct category collapses it back to the compact width.
+- The mobile drawer uses the same order and renders exactly one nested-expansion control for شراشف. Direct categories have no misleading arrows.
+- Verified with Playwright: 310px collapsed width, 650px expanded width, one expandable desktop/mobile category, correct ordering, automatic collapse, all three subcategories, and no runtime errors.
