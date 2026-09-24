@@ -219,3 +219,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - Migrated set detail pages use a real gallery. Selecting a set option makes that option image the lead image; the preserved legacy set cover, exact component images, and distinct option images remain navigable with thumbnails and previous/next arrows.
 - Imported product and set descriptions are rendered through a browser-side allowlist sanitizer. Import metadata attributes and unsafe elements are removed, literal escaped newlines are normalized, explicit line breaks are preserved, and semantic paragraphs, headings, lists, emphasis, and safe links remain formatted. Whitespace-only HTML indentation must not become visible breaks.
 - Legacy saved Arabic bundle name `بندل 2` was normalized to `طقم 2`. Pre-change database backup: `/root/hst_backups/siteyfy-set-language-20260924/siteyfy-before-set-language.sqlite`.
+
+## Storefront hierarchical products navigation — 2026-09-24
+
+- The desktop header labels the catalog entry as `المنتجات`. Hovering or focusing it opens a two-panel mega menu sourced from active catalog categories.
+- Parent categories appear in the first panel. Hovering or focusing a parent switches the second panel to its subcategories; each subcategory link preserves both `category` and `subcategory` query parameters so the products page opens with the correct filters.
+- The mobile drawer uses the same category tree as a two-level accordion: products first, then per-category subcategories. Links and images are generated from current catalog data rather than a manual menu.
+- Categories marked `migration_status: replaced_by_bundles` are excluded from this navigation because those legacy categories no longer represent a sellable catalog route.
+- Verified at 1440x1000 and 390x844 with Playwright: desktop hover/focus, شراشف panel switching, سادة/مشجر/منقط links, mobile nested expansion, and actual navigation to the filtered سادة products page. No browser runtime errors were reported.

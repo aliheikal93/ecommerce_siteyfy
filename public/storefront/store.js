@@ -438,13 +438,77 @@ function bindAnnouncement() {
   if(bar.dataset.pause==="true"){bar.addEventListener("mouseenter",()=>{paused=true;});bar.addEventListener("mouseleave",()=>{paused=false;});}
 }
 
+function storefrontCategoryTree() {
+  const rows=(state.categories||[]).filter(category=>category.is_active!==false&&category.isActive!==false&&category.migration_status!=="replaced_by_bundles");
+  const order=(a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)||(a.name_ar||a.name_en||"").localeCompare(b.name_ar||b.name_en||"","ar");
+  const parents=rows.filter(category=>!category.parent_id).sort(order);
+  return parents.map(category=>({category,children:rows.filter(child=>Number(child.parent_id)===Number(category.id)).sort(order)}));
+}
+
+function storefrontCategoryHref(category,parent=null) {
+  const root=parent||category;
+  const params=new URLSearchParams({category:String(root.slug||root.id)});
+  if(parent)params.set("subcategory",String(category.slug||category.id));
+  return `/products?${params.toString()}`;
+}
+
+function productsDesktopMenuHtml(pathname) {
+  const tree=storefrontCategoryTree();
+  if(!tree.length)return `<a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المنتجات</a>`;
+  const active=pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/");
+  return `<div class="products-nav-root" data-products-nav>
+    <a class="products-nav-trigger ${active?"active":""}" href="/products" aria-haspopup="true" aria-expanded="false"><span>المنتجات</span>${icon("chevron-down",15)}</a>
+    <div class="products-mega-menu" role="menu" aria-label="أقسام المنتجات">
+      <div class="products-mega-head"><div><small>تصفحي حسب القسم</small><strong>كل المنتجات في مكان واحد</strong></div><a href="/products">عرض كل المنتجات ${icon("arrow-left",16)}</a></div>
+      <div class="products-mega-body">
+        <div class="products-category-tabs" role="tablist" aria-label="التصنيفات">
+          ${tree.map(({category,children},index)=>`<a href="${esc(storefrontCategoryHref(category))}" class="products-category-tab ${index===0?"active":""}" data-products-category="${category.id}" role="tab" aria-selected="${index===0}" tabindex="${index===0?0:-1}">${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:`<span class="products-category-placeholder">${icon("package",18)}</span>`}<span><strong>${esc(category.name_ar||category.name_en||"")}</strong><small>${children.length?`${children.length} تصنيفات فرعية`:"عرض المنتجات"}</small></span>${children.length?icon("chevron-left",16):icon("arrow-left",16)}</a>`).join("")}
+        </div>
+        <div class="products-subcategory-panels">
+          ${tree.map(({category,children},index)=>`<section class="products-subcategory-panel ${index===0?"active":""}" data-products-panel="${category.id}" role="tabpanel" ${index===0?"":"hidden"}><div class="products-subcategory-title">${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}<div><small>التصنيف</small><h3>${esc(category.name_ar||category.name_en||"")}</h3></div></div><a class="products-view-category" href="${esc(storefrontCategoryHref(category))}">عرض كل منتجات ${esc(category.name_ar||category.name_en||"")} ${icon("arrow-left",16)}</a>${children.length?`<div class="products-subcategory-grid">${children.map(child=>`<a href="${esc(storefrontCategoryHref(child,category))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span><strong>${esc(child.name_ar||child.name_en||"")}</strong><small>${Number(child.matched_product_count||child.product_ids?.length||0)} منتجات</small></span>${icon("arrow-left",15)}</a>`).join("")}</div>`:`<p class="products-no-subcategories">لا توجد تصنيفات فرعية لهذا القسم. يمكنك فتح القسم لمشاهدة منتجاته.</p>`}</section>`).join("")}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function productsMobileMenuHtml() {
+  const tree=storefrontCategoryTree();
+  return `<div class="drawer-products" data-drawer-products><button class="drawer-products-toggle" type="button" aria-expanded="false"><span>المنتجات</span>${icon("chevron-down",18)}</button><div class="drawer-products-content" hidden><a class="drawer-all-products" href="/products">عرض كل المنتجات ${icon("arrow-left",16)}</a>${tree.map(({category,children})=>`<div class="drawer-category-item"><div class="drawer-category-row"><a href="${esc(storefrontCategoryHref(category))}">${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}<span>${esc(category.name_ar||category.name_en||"")}</span></a>${children.length?`<button type="button" data-drawer-category-toggle aria-expanded="false" aria-label="فتح التصنيفات الفرعية لـ ${esc(category.name_ar||category.name_en||"")}">${icon("chevron-down",17)}</button>`:""}</div>${children.length?`<div class="drawer-subcategories" hidden>${children.map(child=>`<a href="${esc(storefrontCategoryHref(child,category))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span>${esc(child.name_ar||child.name_en||"")}</span></a>`).join("")}</div>`:""}</div>`).join("")}</div></div>`;
+}
+
+function bindProductsNavigation() {
+  const root=document.querySelector("[data-products-nav]");
+  if(root){
+    const trigger=root.querySelector(".products-nav-trigger");
+    const setExpanded=value=>trigger?.setAttribute("aria-expanded",String(value));
+    root.addEventListener("mouseenter",()=>setExpanded(true));
+    root.addEventListener("mouseleave",()=>setExpanded(false));
+    root.addEventListener("focusin",()=>setExpanded(true));
+    root.addEventListener("focusout",event=>{if(!root.contains(event.relatedTarget))setExpanded(false);});
+    const activate=id=>{
+      root.querySelectorAll("[data-products-category]").forEach(tab=>{const selected=String(tab.dataset.productsCategory)===String(id);tab.classList.toggle("active",selected);tab.setAttribute("aria-selected",String(selected));tab.tabIndex=selected?0:-1;});
+      root.querySelectorAll("[data-products-panel]").forEach(panel=>{const selected=String(panel.dataset.productsPanel)===String(id);panel.classList.toggle("active",selected);panel.hidden=!selected;});
+    };
+    root.querySelectorAll("[data-products-category]").forEach(tab=>{tab.addEventListener("mouseenter",()=>activate(tab.dataset.productsCategory));tab.addEventListener("focus",()=>activate(tab.dataset.productsCategory));});
+  }
+}
+
+function bindDrawerProductsNavigation() {
+  const root=overlayRoot.querySelector("[data-drawer-products]");
+  if(!root)return;
+  const toggle=root.querySelector(".drawer-products-toggle"),content=root.querySelector(".drawer-products-content");
+  toggle.onclick=()=>{const open=toggle.getAttribute("aria-expanded")!=="true";toggle.setAttribute("aria-expanded",String(open));content.hidden=!open;};
+  root.querySelectorAll("[data-drawer-category-toggle]").forEach(button=>button.onclick=()=>{const open=button.getAttribute("aria-expanded")!=="true";button.setAttribute("aria-expanded",String(open));const panel=button.closest(".drawer-category-item")?.querySelector(".drawer-subcategories");if(panel)panel.hidden=!open;});
+}
+
 function headerHtml() {
   const company = state.appearance?.company || {};
   const layout = state.appearance?.layout?.header || {};
   const pathname = location.pathname;
   return `${announcementHtml()}<header class="store-header ${layout.sticky ? "is-sticky" : ""}"><div class="container header-main">
     <a class="header-logo" href="/"><img src="${esc(company.logo_url)}" alt="${esc(company.site_name_ar || "رداء الحشمة")}" /></a>
-    <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a><a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المتجر</a><a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="/page/about-us" class="${pathname==="/page/about-us"?"active":""}">من نحن</a></nav>
+    <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a>${productsDesktopMenuHtml(pathname)}<a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="/page/about-us" class="${pathname==="/page/about-us"?"active":""}">من نحن</a></nav>
     <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<button class="round-action" aria-label="المفضلة">${icon("heart")}</button>`:""}<a class="login-button" href="${state.customer?"/account":"/login.html"}"><span>${state.customer?"حسابي":"تسجيل الدخول"}</span>${icon("user-round",18)}</a></div>
     <button class="round-action mobile-only" type="button" data-menu-open aria-label="القائمة">${icon("menu")}</button>
     <div class="header-actions mobile-only"><button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button><a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a></div>
@@ -547,8 +611,9 @@ function closeOverlay() {
 
 function openMenu() {
   const company=state.appearance.company||{};
-  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a><a href="/products">المتجر</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="${state.customer?"/account":"/login.html"}">${state.customer?"حسابي وعناويني":"تسجيل الدخول"}</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
+  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a>${productsMobileMenuHtml()}<a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="${state.customer?"/account":"/login.html"}">${state.customer?"حسابي وعناويني":"تسجيل الدخول"}</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
   overlayRoot.querySelectorAll("[data-overlay-close]").forEach(button=>button.onclick=closeOverlay);
+  bindDrawerProductsNavigation();
 }
 
 function openSearch() {
@@ -562,6 +627,7 @@ function openSearch() {
 function bindGlobal() {
   updateCartCount();
   bindAnnouncement();
+  bindProductsNavigation();
   document.querySelectorAll("[data-menu-open]").forEach(button=>button.onclick=openMenu);
   document.querySelectorAll("[data-search-open]").forEach(button=>button.onclick=openSearch);
   document.querySelectorAll("[data-card-product]").forEach(button=>button.onclick=()=>{const product=state.products.find(item=>String(item.id)===button.dataset.cardProduct);if(!product)return;const pinnedVariant=button.dataset.cardVariant?activeVariants(product).find(item=>String(item.id)===button.dataset.cardVariant):null;const purchase=pinnedVariant?{mode:variantInStock(pinnedVariant)?"direct":"sold_out",variant:pinnedVariant}:productCardPurchase(product);if(purchase.mode==="sold_out"){toast("نفدت كمية هذا المنتج");return;}if(purchase.mode==="select"){location.href=button.dataset.cardLink||`/product/${product.id}`;return;}addToCart(product,purchase.variant,1,button.dataset.cardAction!=="buy");if(button.dataset.cardAction==="buy")location.href="/cart";});
