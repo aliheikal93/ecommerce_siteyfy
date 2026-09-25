@@ -9547,10 +9547,10 @@ function productDetailHtml(product) {
       <div class="gallery-column">
         <div class="gallery-main" id="productGallery">
           <img id="mainProductImage" src="${escapeHtml(image)}" width="900" height="900" alt="${escapeHtml(title)}" fetchpriority="high" decoding="async" />
-          ${gallery.length > 1 ? `<button class="gallery-arrow prev" id="galleryPrev" type="button" aria-label="Previous image">&#8249;</button><button class="gallery-arrow next" id="galleryNext" type="button" aria-label="Next image">&#8250;</button>` : ""}
+          <button class="gallery-arrow prev" id="galleryPrev" type="button" aria-label="Previous image"${gallery.length > 1 ? "" : " hidden"}>&#8249;</button><button class="gallery-arrow next" id="galleryNext" type="button" aria-label="Next image"${gallery.length > 1 ? "" : " hidden"}>&#8250;</button>
           <button class="gallery-fullscreen" id="galleryFullscreen" type="button" aria-label="Fullscreen">&#x26F6;</button>
         </div>
-        ${gallery.length > 1 ? `<div class="thumbs" id="galleryThumbs">${gallery.map((src, index) => `<button class="thumb${index === 0 ? " active" : ""}" type="button" data-gallery-index="${index}"><img src="${escapeHtml(src)}" width="120" height="120" alt="" loading="lazy" decoding="async" /></button>`).join("")}</div>` : ""}
+        <div class="thumbs" id="galleryThumbs">${gallery.map((src, index) => `<button class="thumb${index === 0 ? " active" : ""}" type="button" data-gallery-index="${index}"><img src="${escapeHtml(src)}" width="120" height="120" alt="" loading="lazy" decoding="async" /></button>`).join("")}</div>
       </div>
       <div class="panel-column">
       <article class="panel">
@@ -9655,6 +9655,10 @@ function productDetailHtml(product) {
             thumbs.innerHTML = galleryImages.map((src,index) => "<button class=\"thumb" + (index === 0 ? " active" : "") + "\" type=\"button\" data-gallery-index=\"" + index + "\"><img src=\"" + src + "\" width=\"120\" height=\"120\" alt=\"\" loading=\"lazy\" decoding=\"async\" /></button>").join("");
             document.querySelectorAll("[data-gallery-index]").forEach(node => node.addEventListener("click", () => renderGallery(Number(node.dataset.galleryIndex))));
           }
+          const previous = document.getElementById("galleryPrev");
+          const next = document.getElementById("galleryNext");
+          if (previous) previous.hidden = galleryImages.length < 2;
+          if (next) next.hidden = galleryImages.length < 2;
           renderGallery(0);
         }
         const price = Number(button.dataset.price || 0).toLocaleString("ar-EG");
