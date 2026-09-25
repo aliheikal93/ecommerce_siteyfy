@@ -453,20 +453,45 @@ function storefrontCategoryHref(category,parent=null) {
   return `/products?${params.toString()}`;
 }
 
-function productsDesktopMenuHtml(pathname) {
+function storefrontNavigationEntries() {
   const tree=storefrontCategoryTree();
-  if(!tree.length)return `<a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")?"active":""}">المنتجات</a>`;
-  const active=pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/");
+  const saved=state.appearance?.layout?.header?.shortcuts;
+  const configured=Array.isArray(saved)?saved.filter(item=>item.is_active!==false):[];
+  if(!configured.length)return [{key:"all",type:"all",href:"/products",title:"عرض كل المنتجات",image:"",children:[]},...tree.map(({category,children})=>({key:`category-${category.id}`,type:"category",source:category,href:storefrontCategoryHref(category),title:category.name_ar||category.name_en||"",image:category.image_url||"",children}))];
+  return configured.map((item,index)=>{
+    const type=String(item.type||"category"),ref=String(item.ref||"");
+    if(type==="all")return {key:`all-${index}`,type,href:"/products",title:item.title_ar||item.title_en||"عرض كل المنتجات",image:item.image_url||"",children:[]};
+    if(type==="bundle"){
+      const bundle=state.bundles.find(row=>String(row.id)===ref||String(row.slug||"")===ref);
+      if(!bundle||bundle.is_active===false||bundle.isActive===false)return null;
+      return {key:`bundle-${bundle.id}`,type,source:bundle,href:`/bundle/${encodeURIComponent(bundle.slug||bundle.id)}`,title:item.title_ar||item.title_en||bundle.name_ar||bundle.name_en||"طقم",image:item.image_url||bundle.main_photo_url||bundle.image_url||"",children:[]};
+    }
+    if(type==="facet"){
+      const facet=state.facets.find(row=>String(row.id)===ref);
+      if(!facet||facet.is_active===false||facet.isActive===false)return null;
+      return {key:`facet-${facet.id}`,type,source:facet,href:`/products?facet=${encodeURIComponent(ref)}`,title:item.title_ar||item.title_en||facet.name_ar||facet.nameAr||facet.name_en||facet.nameEn||"",image:item.image_url||facet.image_url||"",children:[]};
+    }
+    const category=state.categories.find(row=>String(row.slug)===ref||String(row.id)===ref);
+    if(!category||category.is_active===false||category.isActive===false)return null;
+    const parent=category.parent_id?state.categories.find(row=>Number(row.id)===Number(category.parent_id)):null;
+    const children=category.parent_id?[]:state.categories.filter(row=>Number(row.parent_id)===Number(category.id)&&row.is_active!==false&&row.isActive!==false).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0));
+    return {key:`category-${category.id}`,type:"category",source:category,href:storefrontCategoryHref(category,parent),title:item.title_ar||item.title_en||category.name_ar||category.name_en||"",image:item.image_url||category.image_url||"",children};
+  }).filter(Boolean);
+}
+
+function productsDesktopMenuHtml(pathname) {
+  const entries=storefrontNavigationEntries();
+  if(!entries.length)return `<a href="/products" class="${pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")||pathname.startsWith("/bundle/")?"active":""}">المنتجات</a>`;
+  const active=pathname==="/products"||pathname==="/shop"||pathname.startsWith("/product/")||pathname.startsWith("/bundle/");
   return `<div class="products-nav-root" data-products-nav>
     <a class="products-nav-trigger ${active?"active":""}" href="/products" aria-haspopup="true" aria-expanded="false"><span>المنتجات</span>${icon("chevron-down",15)}</a>
     <div class="products-mega-menu" role="menu" aria-label="أقسام المنتجات">
       <div class="products-mega-body">
-        <div class="products-category-tabs" aria-label="التصنيفات">
-          <a href="/products" class="products-category-tab products-all-link"><span class="products-category-placeholder">${icon("layout-grid",18)}</span><span><strong>عرض كل المنتجات</strong></span></a>
-          ${tree.map(({category,children})=>`<a href="${esc(storefrontCategoryHref(category))}" class="products-category-tab ${children.length?"has-children":""}" ${children.length?`data-products-category="${category.id}" aria-haspopup="true" aria-expanded="false"`:""}>${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:`<span class="products-category-placeholder">${icon("package",18)}</span>`}<span><strong>${esc(category.name_ar||category.name_en||"")}</strong>${children.length?`<small>${children.length} تصنيفات فرعية</small>`:""}</span>${children.length?icon("chevron-left",16):""}</a>`).join("")}
+        <div class="products-category-tabs" aria-label="روابط المنتجات">
+          ${entries.map(entry=>`<a href="${esc(entry.href)}" class="products-category-tab ${entry.type==="all"?"products-all-link":""} ${entry.children.length?"has-children":""}" ${entry.children.length?`data-products-category="${esc(entry.key)}" aria-haspopup="true" aria-expanded="false"`:""}>${entry.image?`<img src="${esc(entry.image)}" alt="" />`:`<span class="products-category-placeholder">${icon(entry.type==="all"?"layout-grid":entry.type==="bundle"?"package-open":"package",18)}</span>`}<span><strong>${esc(entry.title)}</strong>${entry.children.length?`<small>${entry.children.length} تصنيفات فرعية</small>`:""}</span>${entry.children.length?icon("chevron-left",16):""}</a>`).join("")}
         </div>
         <div class="products-subcategory-panels" aria-live="polite">
-          ${tree.filter(({children})=>children.length).map(({category,children})=>`<section class="products-subcategory-panel" data-products-panel="${category.id}" hidden><div class="products-subcategory-title"><div><small>التصنيفات الفرعية</small><h3>${esc(category.name_ar||category.name_en||"")}</h3></div></div><a class="products-view-category" href="${esc(storefrontCategoryHref(category))}">عرض كل منتجات ${esc(category.name_ar||category.name_en||"")} ${icon("arrow-left",16)}</a><div class="products-subcategory-grid">${children.map(child=>`<a href="${esc(storefrontCategoryHref(child,category))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span><strong>${esc(child.name_ar||child.name_en||"")}</strong><small>${Number(child.matched_product_count||child.product_ids?.length||0)} منتجات</small></span></a>`).join("")}</div></section>`).join("")}
+          ${entries.filter(entry=>entry.children.length).map(entry=>`<section class="products-subcategory-panel" data-products-panel="${esc(entry.key)}" hidden><div class="products-subcategory-title"><div><small>التصنيفات الفرعية</small><h3>${esc(entry.title)}</h3></div></div><a class="products-view-category" href="${esc(entry.href)}">عرض كل منتجات ${esc(entry.title)} ${icon("arrow-left",16)}</a><div class="products-subcategory-grid">${entry.children.map(child=>`<a href="${esc(storefrontCategoryHref(child,entry.source))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span><strong>${esc(child.name_ar||child.name_en||"")}</strong><small>${Number(child.matched_product_count||child.product_ids?.length||0)} منتجات</small></span></a>`).join("")}</div></section>`).join("")}
         </div>
       </div>
     </div>
@@ -474,8 +499,8 @@ function productsDesktopMenuHtml(pathname) {
 }
 
 function productsMobileMenuHtml() {
-  const tree=storefrontCategoryTree();
-  return `<div class="drawer-products" data-drawer-products><button class="drawer-products-toggle" type="button" aria-expanded="false"><span>المنتجات</span>${icon("chevron-down",18)}</button><div class="drawer-products-content" hidden><a class="drawer-all-products" href="/products">عرض كل المنتجات ${icon("arrow-left",16)}</a>${tree.map(({category,children})=>`<div class="drawer-category-item"><div class="drawer-category-row"><a href="${esc(storefrontCategoryHref(category))}">${category.image_url?`<img src="${esc(category.image_url)}" alt="" />`:""}<span>${esc(category.name_ar||category.name_en||"")}</span></a>${children.length?`<button type="button" data-drawer-category-toggle aria-expanded="false" aria-label="فتح التصنيفات الفرعية لـ ${esc(category.name_ar||category.name_en||"")}">${icon("chevron-down",17)}</button>`:""}</div>${children.length?`<div class="drawer-subcategories" hidden>${children.map(child=>`<a href="${esc(storefrontCategoryHref(child,category))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span>${esc(child.name_ar||child.name_en||"")}</span></a>`).join("")}</div>`:""}</div>`).join("")}</div></div>`;
+  const entries=storefrontNavigationEntries();
+  return `<div class="drawer-products" data-drawer-products><button class="drawer-products-toggle" type="button" aria-expanded="false"><span>المنتجات</span>${icon("chevron-down",18)}</button><div class="drawer-products-content" hidden>${entries.map(entry=>`<div class="drawer-category-item"><div class="drawer-category-row"><a href="${esc(entry.href)}">${entry.image?`<img src="${esc(entry.image)}" alt="" />`:""}<span>${esc(entry.title)}</span></a>${entry.children.length?`<button type="button" data-drawer-category-toggle aria-expanded="false" aria-label="فتح التصنيفات الفرعية لـ ${esc(entry.title)}">${icon("chevron-down",17)}</button>`:""}</div>${entry.children.length?`<div class="drawer-subcategories" hidden>${entry.children.map(child=>`<a href="${esc(storefrontCategoryHref(child,entry.source))}">${child.image_url?`<img src="${esc(child.image_url)}" alt="" />`:""}<span>${esc(child.name_ar||child.name_en||"")}</span></a>`).join("")}</div>`:""}</div>`).join("")}</div></div>`;
 }
 
 function bindProductsNavigation() {
@@ -529,10 +554,11 @@ function categoryStripHtml() {
   const items=Array.isArray(saved)?saved.filter(item=>item.is_active!==false):state.categories.filter(category=>!category.parent_id&&category.show_in_category_strip!==false).map(category=>({type:"category",ref:category.slug,title_ar:category.name_ar,title_en:category.name_en,image_url:category.image_url}));
   const visible=items.map(item=>{
     const type=String(item.type||"category"),ref=String(item.ref||"");
-    const source=type==="facet"?state.facets.find(facet=>String(facet.id)===ref):state.categories.find(category=>String(category.slug)===ref||String(category.id)===ref);
+    const source=type==="facet"?state.facets.find(facet=>String(facet.id)===ref):type==="bundle"?state.bundles.find(bundle=>String(bundle.id)===ref||String(bundle.slug||"")===ref):state.categories.find(category=>String(category.slug)===ref||String(category.id)===ref);
     if(type!=="all"&&(!source||source.is_active===false||source.isActive===false))return null;
-    const href=type==="all"?"/products":type==="facet"?`/products?facet=${encodeURIComponent(ref)}`:`/products?category=${encodeURIComponent(source.slug)}`;
-    return {href,title:item.title_ar||source?.name_ar||source?.nameAr||source?.name_en||source?.nameEn||"كل المنتجات",image:item.image_url||source?.image_url||""};
+    const parent=type==="category"&&source?.parent_id?state.categories.find(category=>Number(category.id)===Number(source.parent_id)):null;
+    const href=type==="all"?"/products":type==="facet"?`/products?facet=${encodeURIComponent(ref)}`:type==="bundle"?`/bundle/${encodeURIComponent(source.slug||source.id)}`:storefrontCategoryHref(source,parent);
+    return {href,title:item.title_ar||source?.name_ar||source?.nameAr||source?.name_en||source?.nameEn||"كل المنتجات",image:item.image_url||source?.image_url||source?.main_photo_url||""};
   }).filter(Boolean);
   if(!visible.length)return "";
   const header = state.appearance?.layout?.header || {};
