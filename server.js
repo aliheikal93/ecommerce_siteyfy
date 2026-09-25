@@ -8733,6 +8733,10 @@ function normalizeBundlePayload(payload = {}) {
     cost: Math.max(0, Number(payload.cost || 0)),
     use_own_stock: payload.use_own_stock === true || payload.useOwnStock === true || payload.use_own_stock === "true",
     stock: payload.stock === "" || payload.stock === null || payload.stock === undefined ? null : Math.max(0, Number(payload.stock || 0)),
+    category_id: payload.category_id === "" || payload.category_id === null || payload.category_id === undefined ? null : Number(payload.category_id),
+    category_slug: String(payload.category_slug || payload.category?.slug || "").trim(),
+    subcategory_ids: [...new Set(asArray(payload.subcategory_ids).map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))],
+    facet_ids: [...new Set(asArray(payload.facet_ids).map(value => String(value || "").trim()).filter(Boolean))],
     items: uniqueItems,
     bundle_variants: bundleVariants,
     is_active: payload.is_active !== false && payload.isActive !== false && payload.active !== false
@@ -8754,6 +8758,22 @@ function validateBundlePayload(payload = {}) {
   const normalized = normalizeBundlePayload(payload);
   if (normalized.bundle_variants.length) normalized.bundle_variants.forEach((variant, index) => validateBundleItems(variant.items, `Bundle option ${variant.label_ar || variant.label_en || index + 1}`));
   else validateBundleItems(normalized.items);
+  const categories = entityRows("categories").map((row) => normalizeCategoryPayload(row, row));
+  const selectedSubcategories = normalized.subcategory_ids.map((id) => categories.find((row) => Number(row.id) === Number(id))).filter(Boolean);
+  if (selectedSubcategories.length !== normalized.subcategory_ids.length) fail("One or more selected bundle subcategories do not exist");
+  if (selectedSubcategories.some((row) => !row.parent_id || row.category_type === "smart")) fail("Bundles can only use manual subcategories");
+  const selectedParentIds = new Set(selectedSubcategories.map((row) => Number(row.parent_id)));
+  if (selectedParentIds.size > 1) fail("Selected bundle subcategories must belong to one main category");
+  const requestedCategory = categories.find((row) => Number(row.id) === Number(normalized.category_id))
+    || categories.find((row) => String(row.slug) === String(normalized.category_slug));
+  const parentId = selectedParentIds.size ? [...selectedParentIds][0] : Number(requestedCategory?.parent_id || requestedCategory?.id || 0);
+  const parentCategory = categories.find((row) => Number(row.id) === parentId && !row.parent_id);
+  if (selectedSubcategories.length && !parentCategory) fail("The selected bundle subcategory parent was not found");
+  if (selectedSubcategories.length && requestedCategory && Number(requestedCategory.parent_id || requestedCategory.id) !== parentId) fail("The selected bundle subcategories do not belong to the selected category");
+  if (parentCategory) {
+    normalized.category_id = Number(parentCategory.id);
+    normalized.category_slug = String(parentCategory.slug || normalized.category_slug || "");
+  }
   return normalized;
 }
 

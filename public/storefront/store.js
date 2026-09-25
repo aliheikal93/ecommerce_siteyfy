@@ -944,42 +944,74 @@ function categoryIncludesProduct(category, product) {
   return Number(product.category_id)===Number(category?.id) || String(product.category_slug||product.category?.slug)===String(category?.slug) || (product.categories||[]).some(item=>String(item.slug)===String(category?.slug));
 }
 
+function catalogEntries() {
+  return [
+    ...state.bundles.filter(item=>item.is_active!==false&&item.isActive!==false).map(item=>({...item,_catalog_type:"bundle"})),
+    ...state.products.map(item=>({...item,_catalog_type:"product"}))
+  ];
+}
+
+function catalogEntryPrice(item) {
+  return Number(item._catalog_type==="bundle"?item.price:productPrice(item));
+}
+
+function catalogEntryVariants(item) {
+  return activeVariants(item);
+}
+
+function categoryIncludesCatalogEntry(category,item) {
+  if(item._catalog_type!=="bundle")return categoryIncludesProduct(category,item);
+  if(category?.category_type==="smart")return false;
+  if(category?.parent_id)return (item.subcategory_ids||[]).map(Number).includes(Number(category.id));
+  return Number(item.category_id)===Number(category?.id)||String(item.category_slug||"")===String(category?.slug);
+}
+
+function collectionIncludesCatalogEntry(collection,item) {
+  if(item._catalog_type==="bundle")return (collection.bundle_ids||[]).map(Number).includes(Number(item.id));
+  return collectionItems(collection).some(entry=>Number(entry.product_id||entry.product?.id)===Number(item.id));
+}
+
 function optionMatches(variant, value=state.option) { return !value || String(variant.value||variant.option||"")===value; }
 function colorMatches(variant, value=state.color) { return !value || String(variant.color||variant.color_id||"").toLowerCase()===String(value).toLowerCase(); }
-function matchingCatalogProducts(omit="") {
-  let rows=[...state.products];
-  if(omit!=="category"&&state.category){const category=state.categories.find(item=>!item.parent_id&&String(item.slug)===state.category);rows=rows.filter(product=>categoryIncludesProduct(category,product));}
-  if(omit!=="subcategory"&&state.subcategory){const subcategory=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);rows=rows.filter(product=>categoryIncludesProduct(subcategory,product));}
-  if(omit!=="facet"&&state.facet)rows=rows.filter(product=>(product.facet_ids||[]).map(String).includes(state.facet));
-  if(omit!=="collection"&&state.collection){const collection=state.collections.find(item=>String(item.slug)===state.collection);const ids=new Set(collectionItems(collection).map(item=>Number(item.product_id||item.product?.id)));rows=rows.filter(product=>ids.has(Number(product.id)));}
-  if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.filter(product=>activeVariants(product).some(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option)));
-  if(omit!=="price")rows=rows.filter(product=>{const price=productPrice(product);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
+function matchingCatalogEntries(omit="") {
+  let rows=catalogEntries();
+  if(omit!=="category"&&state.category){const category=state.categories.find(item=>!item.parent_id&&String(item.slug)===state.category);rows=rows.filter(item=>categoryIncludesCatalogEntry(category,item));}
+  if(omit!=="subcategory"&&state.subcategory){const subcategory=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);rows=rows.filter(item=>categoryIncludesCatalogEntry(subcategory,item));}
+  if(omit!=="facet"&&state.facet)rows=rows.filter(item=>(item.facet_ids||[]).map(String).includes(state.facet));
+  if(omit!=="collection"&&state.collection){const collection=state.collections.find(item=>String(item.slug)===state.collection);rows=rows.filter(item=>collectionIncludesCatalogEntry(collection,item));}
+  if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.filter(item=>catalogEntryVariants(item).some(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option)));
+  if(omit!=="price")rows=rows.filter(item=>{const price=catalogEntryPrice(item);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
   return rows;
 }
-function filteredProducts() {
-  const rows=matchingCatalogProducts();
+function filteredCatalogEntries() {
+  const rows=matchingCatalogEntries();
   const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
-  if(state.sort==="price-asc")rows.sort((a,b)=>productPrice(a)-productPrice(b));
-  else if(state.sort==="price-desc")rows.sort((a,b)=>productPrice(b)-productPrice(a));
+  if(state.sort==="price-asc")rows.sort((a,b)=>catalogEntryPrice(a)-catalogEntryPrice(b));
+  else if(state.sort==="price-desc")rows.sort((a,b)=>catalogEntryPrice(b)-catalogEntryPrice(a));
   else if(state.sort==="name")rows.sort((a,b)=>(a.name_ar||"").localeCompare(b.name_ar||"","ar"));
   else if(selectedCategory?.category_type==="smart"){const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));rows.sort((a,b)=>(ranks.get(Number(a.id))??9999)-(ranks.get(Number(b.id))??9999));}
   return rows;
 }
 
+function catalogMaximumPrice() {
+  const allPrices=catalogEntries().flatMap(item=>[catalogEntryPrice(item),...catalogEntryVariants(item).map(variant=>variantPrice(item,variant))]);
+  return Math.ceil(Math.max(...allPrices,100)/10)*10;
+}
+
 function renderProducts() {
-  const allPrices=state.products.flatMap(product=>[productPrice(product),...activeVariants(product).map(variant=>variantPrice(product,variant))]);
-  const maxCatalog=Math.ceil(Math.max(...allPrices,100)/10)*10;
+  const maxCatalog=catalogMaximumPrice();
   if(!Number.isFinite(state.maxPrice))state.maxPrice=maxCatalog;
-  const rows=filteredProducts();
+  const rows=filteredCatalogEntries();
   const perPage=12;
   const pages=Math.max(1,Math.ceil(rows.length/perPage));
   state.page=Math.min(state.page,pages);
   const visible=rows.slice((state.page-1)*perPage,state.page*perPage);
-  const visibleBundles=state.page===1&&!state.category&&!state.subcategory&&!state.facet&&!state.color&&!state.option&&!state.collection?state.bundles:[];
   const selectedCategory=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
   const selectedSubcategory=state.categories.find(category=>category.parent_id&&String(category.slug)===state.subcategory);
-  const pageTitle=selectedSubcategory?.name_ar||selectedSubcategory?.name_en||selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
-  shell(`${breadcrumbs(pageTitle)}<section class="container"><div class="shop-head"><h1>${esc(pageTitle)}</h1>${selectedCategory?.description_ar?`<p>${esc(selectedCategory.description_ar)}</p>`:""}</div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div>${visibleBundles.length?`<div class="bundle-shop-heading"><span>وفر أكثر</span><h2>أطقم مختارة لك</h2></div>`:""}<div class="product-grid shop-grid">${visibleBundles.map(bundleCard).join("")}${visible.map(productCard).join("")}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد منتجات</h2><p>جرّبي اختيار تصنيف أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
+  const selectedFacet=state.facets.find(facet=>String(facet.id)===state.facet);
+  const pageTitle=selectedSubcategory?.name_ar||selectedSubcategory?.name_en||selectedFacet?.name_ar||selectedFacet?.nameAr||selectedFacet?.name_en||selectedFacet?.nameEn||selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
+  const resultCards=visible.map(item=>item._catalog_type==="bundle"?bundleCard(item):productCard(item)).join("");
+  shell(`${breadcrumbs(pageTitle)}<section class="container"><div class="shop-head"><h1>${esc(pageTitle)}</h1>${selectedCategory?.description_ar?`<p>${esc(selectedCategory.description_ar)}</p>`:""}</div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div><div class="product-grid shop-grid">${resultCards}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد نتائج</h2><p>جرّبي اختيار تصنيف أو فئة أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
   document.getElementById("sortProducts").value=state.sort;
   document.getElementById("sortProducts").onchange=event=>{state.sort=event.target.value;state.page=1;renderProducts();};
   document.querySelectorAll("[data-page]").forEach(button=>button.onclick=()=>{state.page=Number(button.dataset.page);renderProducts();scrollTo({top:0,behavior:"smooth"});});
@@ -987,26 +1019,28 @@ function renderProducts() {
 }
 
 function filterHtml(maxCatalog) {
-  const countFor=(omit,predicate)=>matchingCatalogProducts(omit).filter(predicate).length;
-  const categories=state.categories.filter(category=>!category.parent_id&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("category",product=>categoryIncludesProduct(category,product))})).filter(category=>category.count||state.category===category.slug);
+  const countFor=(omit,predicate)=>matchingCatalogEntries(omit).filter(predicate).length;
+  const categories=state.categories.filter(category=>!category.parent_id&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("category",item=>categoryIncludesCatalogEntry(category,item))})).filter(category=>category.count||state.category===category.slug);
   const selectedRoot=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
-  const subcategories=state.categories.filter(category=>category.parent_id&&Number(category.parent_id)===Number(selectedRoot?.id)&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("subcategory",product=>categoryIncludesProduct(category,product))})).filter(category=>category.count||state.subcategory===category.slug);
-  const facets=state.facets.filter(facet=>facet.is_active!==false&&facet.isActive!==false).map(facet=>({...facet,count:countFor("facet",product=>(product.facet_ids||[]).map(String).includes(String(facet.id)))})).filter(facet=>facet.count||state.facet===String(facet.id));
-  const colorMap=new Map();matchingCatalogProducts("color").forEach(product=>{const seen=new Set();activeVariants(product).filter(variant=>optionMatches(variant)).forEach(variant=>{const value=String(variant.color||"").trim();const key=value.toLowerCase();if(!key||seen.has(key))return;seen.add(key);const row=colorMap.get(key)||{value,hex:variant.hex_code||variant.hex||"#ddd",count:0};row.count++;colorMap.set(key,row);});});
-  if(state.color&&!colorMap.has(state.color.toLowerCase())){const variant=state.products.flatMap(activeVariants).find(item=>String(item.color||"").toLowerCase()===state.color.toLowerCase());if(variant)colorMap.set(state.color.toLowerCase(),{value:state.color,hex:variant.hex_code||variant.hex||"#ddd",count:0});}
+  const subcategories=state.categories.filter(category=>category.parent_id&&Number(category.parent_id)===Number(selectedRoot?.id)&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("subcategory",item=>categoryIncludesCatalogEntry(category,item))})).filter(category=>category.count||state.subcategory===category.slug);
+  const facets=state.facets.filter(facet=>facet.is_active!==false&&facet.isActive!==false).map(facet=>({...facet,count:countFor("facet",item=>(item.facet_ids||[]).map(String).includes(String(facet.id)))})).filter(facet=>facet.count||state.facet===String(facet.id));
+  const colorMap=new Map();matchingCatalogEntries("color").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>optionMatches(variant)).forEach(variant=>{const value=String(variant.color||"").trim();const key=value.toLowerCase();if(!key||seen.has(key))return;seen.add(key);const row=colorMap.get(key)||{value,hex:variant.hex_code||variant.hex||"#ddd",count:0};row.count++;colorMap.set(key,row);});});
+  if(state.color&&!colorMap.has(state.color.toLowerCase())){const variant=catalogEntries().flatMap(catalogEntryVariants).find(item=>String(item.color||"").toLowerCase()===state.color.toLowerCase());if(variant)colorMap.set(state.color.toLowerCase(),{value:state.color,hex:variant.hex_code||variant.hex||"#ddd",count:0});}
   const colors=[...colorMap.values()].sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value,"ar"));
   const visibleColors=state.showAllColors?colors:colors.slice(0,12);
-  const optionMap=new Map();matchingCatalogProducts("option").forEach(product=>{const seen=new Set();activeVariants(product).filter(variant=>colorMatches(variant)).forEach(variant=>{const value=String(variant.value||variant.option||"").trim();if(!value||seen.has(value))return;seen.add(value);const row=optionMap.get(value)||{value,group:variant.option||"خيارات المنتج",count:0};row.count++;optionMap.set(value,row);});});
-  if(state.option&&!optionMap.has(state.option))optionMap.set(state.option,{value:state.option,group:"خيارات المنتج",count:0});
-  const options=[...optionMap.values()].sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value,"ar"));
-  const collections=state.collections.filter(item=>item.is_active!==false).map(item=>({...item,count:countFor("collection",product=>collectionItems(item).some(entry=>Number(entry.product_id||entry.product?.id)===Number(product.id)))})).filter(item=>item.count||state.collection===item.slug);
+  const optionMap=new Map();matchingCatalogEntries("option").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>colorMatches(variant)).forEach(variant=>{const value=String(variant.value||variant.option||"").trim(),group=String(variant.option||"خيارات المنتج").replace(/^أختر\s*/, "");const key=`${group}:${value}`;if(!value||seen.has(key))return;seen.add(key);const row=optionMap.get(key)||{value,group,count:0};row.count++;optionMap.set(key,row);});});
+  if(state.option&&![...optionMap.values()].some(row=>row.value===state.option))optionMap.set(`خيارات المنتج:${state.option}`,{value:state.option,group:"خيارات المنتج",count:0});
+  const options=[...optionMap.values()].sort((a,b)=>a.group.localeCompare(b.group,"ar")||b.count-a.count||a.value.localeCompare(b.value,"ar"));
+  const groupedOptions=new Map();options.forEach(option=>{if(!groupedOptions.has(option.group))groupedOptions.set(option.group,[]);groupedOptions.get(option.group).push(option);});
+  const collections=state.collections.filter(item=>item.is_active!==false).map(item=>({...item,count:countFor("collection",entry=>collectionIncludesCatalogEntry(item,entry))})).filter(item=>item.count||state.collection===item.slug);
   const min=Math.min(Number(state.minPrice||0),maxCatalog),max=Math.max(Number(state.maxPrice||maxCatalog),min);
   const list=(rows,key,valueOf,nameOf)=>`<div class="filter-list">${rows.map(row=>{const value=String(valueOf(row));return `<button type="button" class="${state[key]===value?"active":""}" data-filter-key="${key}" data-filter-value="${esc(value)}" aria-pressed="${state[key]===value}"><span>${esc(nameOf(row))}</span><small>${row.count}</small></button>`}).join("")}</div>`;
-  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><div class="filter-sidebar-head"><strong>فلترة المنتجات</strong><button type="button" data-clear-filters>مسح الكل</button></div><section class="filter-panel"><h2 class="filter-title">التصنيفات</h2><div class="filter-list"><button type="button" class="${!state.category?"active":""}" data-filter-key="category" data-filter-value=""><span>كل المنتجات</span></button></div>${list(categories,"category",row=>row.slug,row=>row.name_ar||row.name_en)}</section>${subcategories.length?`<section class="filter-panel"><h2 class="filter-title">التصنيفات الفرعية</h2>${list(subcategories,"subcategory",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}${facets.length?`<section class="filter-panel"><h2 class="filter-title">الفئات</h2>${list(facets,"facet",row=>row.id,row=>row.name_ar||row.nameAr||row.name_en||row.nameEn)}</section>`:""}${colors.length?`<section class="filter-panel"><h2 class="filter-title">الألوان <small>${colors.length}</small></h2><div class="filter-color-grid" role="group" aria-label="الألوان">${visibleColors.map(color=>`<button type="button" class="filter-color-dot ${state.color===color.value?"active":""}" data-filter-key="color" data-filter-value="${esc(color.value)}" title="${esc(color.value)} · ${color.count} منتجات" aria-label="${esc(color.value)}" aria-pressed="${state.color===color.value}"><span style="background:${esc(color.hex)}"></span></button>`).join("")}</div>${colors.length>12?`<button type="button" class="filter-more" id="toggleAllColors">${state.showAllColors?"عرض أقل":`عرض كل الألوان (${colors.length})`}</button>`:""}${state.color?`<small class="filter-selected-value">${esc(state.color)}</small>`:""}</section>`:""}${options.length?`<section class="filter-panel"><h2 class="filter-title">${esc(options[0].group.replace(/^أختر\s*/, ""))}</h2>${list(options,"option",row=>row.value,row=>row.value)}</section>`:""}${collections.length?`<section class="filter-panel"><h2 class="filter-title">المجموعات</h2>${list(collections,"collection",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}<section class="filter-panel"><h2 class="filter-title">نطاق السعر</h2><div class="price-range-dual"><input class="price-range price-range-min" id="minPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${min}" aria-label="الحد الأدنى للسعر"/><input class="price-range price-range-max" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${max}" aria-label="الحد الأقصى للسعر"/></div><div class="price-filter-copy"><span><b id="minPriceCopy">${money(min)}</b> - <b id="maxPriceCopy">${money(max)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
+  const optionPanels=[...groupedOptions.entries()].map(([group,rows])=>`<section class="filter-panel"><h2 class="filter-title">${esc(group)}</h2>${list(rows,"option",row=>row.value,row=>row.value)}</section>`).join("");
+  return `<aside class="filter-sidebar" id="filterSidebar"><div class="mobile-filter-close mobile-only"><button class="close-button" id="closeFilter">${icon("x")}</button></div><div class="filter-sidebar-head"><strong>فلترة المنتجات والأطقم</strong><button type="button" data-clear-filters>مسح الكل</button></div><section class="filter-panel"><h2 class="filter-title">التصنيفات</h2><div class="filter-list"><button type="button" class="${!state.category?"active":""}" data-filter-key="category" data-filter-value=""><span>كل المنتجات والأطقم</span></button></div>${list(categories,"category",row=>row.slug,row=>row.name_ar||row.name_en)}</section>${subcategories.length?`<section class="filter-panel"><h2 class="filter-title">التصنيفات الفرعية</h2>${list(subcategories,"subcategory",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}${facets.length?`<section class="filter-panel"><h2 class="filter-title">الفئات</h2>${list(facets,"facet",row=>row.id,row=>row.name_ar||row.nameAr||row.name_en||row.nameEn)}</section>`:""}${colors.length?`<section class="filter-panel"><h2 class="filter-title">الألوان <small>${colors.length}</small></h2><div class="filter-color-grid" role="group" aria-label="الألوان">${visibleColors.map(color=>`<button type="button" class="filter-color-dot ${state.color===color.value?"active":""}" data-filter-key="color" data-filter-value="${esc(color.value)}" title="${esc(color.value)} · ${color.count} نتائج" aria-label="${esc(color.value)}" aria-pressed="${state.color===color.value}"><span style="background:${esc(color.hex)}"></span></button>`).join("")}</div>${colors.length>12?`<button type="button" class="filter-more" id="toggleAllColors">${state.showAllColors?"عرض أقل":`عرض كل الألوان (${colors.length})`}</button>`:""}${state.color?`<small class="filter-selected-value">${esc(state.color)}</small>`:""}</section>`:""}${optionPanels}${collections.length?`<section class="filter-panel"><h2 class="filter-title">المجموعات</h2>${list(collections,"collection",row=>row.slug,row=>row.name_ar||row.name_en)}</section>`:""}<section class="filter-panel"><h2 class="filter-title">نطاق السعر</h2><div class="price-range-dual"><input class="price-range price-range-min" id="minPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${min}" aria-label="الحد الأدنى للسعر"/><input class="price-range price-range-max" id="maxPrice" type="range" min="0" max="${maxCatalog}" step="5" value="${max}" aria-label="الحد الأقصى للسعر"/></div><div class="price-filter-copy"><span><b id="minPriceCopy">${money(min)}</b> - <b id="maxPriceCopy">${money(max)}</b></span><button class="filter-apply" id="applyPrice">تصفية</button></div></section></aside>`;
 }
 
 function bindFilters() {
-  const updateUrl=()=>{const url=new URL(location.href);[["category",state.category],["subcategory",state.subcategory],["facet",state.facet],["color",state.color],["option",state.option],["collection",state.collection],["min_price",state.minPrice||""],["max_price",Number.isFinite(state.maxPrice)&&state.maxPrice<Math.ceil(Math.max(...state.products.flatMap(product=>[productPrice(product),...activeVariants(product).map(variant=>variantPrice(product,variant))]),100)/10)*10?state.maxPrice:""]].forEach(([key,value])=>value?url.searchParams.set(key,value):url.searchParams.delete(key));url.searchParams.delete("label");history.replaceState(null,"",url.pathname+url.search);};
+  const updateUrl=()=>{const url=new URL(location.href);[["category",state.category],["subcategory",state.subcategory],["facet",state.facet],["color",state.color],["option",state.option],["collection",state.collection],["min_price",state.minPrice||""],["max_price",Number.isFinite(state.maxPrice)&&state.maxPrice<catalogMaximumPrice()?state.maxPrice:""]].forEach(([key,value])=>value?url.searchParams.set(key,value):url.searchParams.delete(key));url.searchParams.delete("label");history.replaceState(null,"",url.pathname+url.search);};
   document.querySelectorAll("[data-filter-key]").forEach(button=>button.onclick=()=>{const key=button.dataset.filterKey,value=button.dataset.filterValue;state[key]=state[key]===value?"":value;if(key==="category"){const root=state.categories.find(item=>!item.parent_id&&String(item.slug)===state.category);const sub=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);if(!root||!sub||Number(sub.parent_id)!==Number(root.id))state.subcategory="";}state.page=1;updateUrl();renderProducts();});
   document.querySelector("[data-clear-filters]")?.addEventListener("click",()=>{Object.assign(state,{category:"",subcategory:"",facet:"",color:"",option:"",collection:"",minPrice:0,maxPrice:Infinity,page:1});updateUrl();renderProducts();});
   document.getElementById("toggleAllColors")?.addEventListener("click",()=>{state.showAllColors=!state.showAllColors;renderProducts();});

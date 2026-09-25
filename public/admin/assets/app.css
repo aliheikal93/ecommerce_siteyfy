@@ -4493,3 +4493,11 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .variant-gallery-item.is-main{box-shadow:0 0 0 2px var(--brand);}
 .variant-gallery-remove{position:absolute;inset-block-start:3px;inset-inline-end:3px;width:20px;height:20px;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#b42318;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);}
 .variant-gallery-remove .icon{width:12px;height:12px;}
+
+/* Bundle catalog classification */
+.bundle-classification-panel{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,2fr);gap:16px;margin:18px 0;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--panel-soft)}
+.bundle-classification-panel>.full{grid-column:1/-1}
+.bundle-classification-panel .field>small{display:block;margin-top:4px;color:var(--muted);line-height:1.6}
+.bundle-classification-panel .choice-chip{display:inline-flex;align-items:center;gap:4px}
+.bundle-classification-panel .choice-chip small{color:inherit;opacity:.72}
+@media(max-width:760px){.bundle-classification-panel{grid-template-columns:1fr;padding:14px}.bundle-classification-panel>.full{grid-column:auto}}
