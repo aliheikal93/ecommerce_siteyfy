@@ -479,6 +479,7 @@ const defaultBrandIdentity = {
   input_radius: 8,
   product_image_ratio: "1 / 1",
   shadow_style: "soft",
+  loading_gif_url: "",
   updated_at: null
 };
 
@@ -871,6 +872,15 @@ const profileImageUpload = multer({
     const extension = path.extname(file.originalname || "").toLowerCase();
     const allowed = String(file.mimetype || "").startsWith("image/") && [".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"].includes(extension);
     cb(allowed ? null : new Error("Only PNG, JPG, WebP, GIF, or AVIF images are allowed"), allowed);
+  }
+});
+const loadingGifUpload = multer({
+  storage: uploadStorage,
+  limits: { files: 1, fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const allowed = String(file.mimetype || "").toLowerCase() === "image/gif" && extension === ".gif";
+    cb(allowed ? null : new Error("Only GIF loading icons are allowed"), allowed);
   }
 });
 const productMediaUpload = multer({
@@ -6053,6 +6063,7 @@ function normalizeBrandIdentity(payload = {}) {
     card_radius: Math.min(40, Math.max(0, Number(current.card_radius || 0))),
     button_radius: Math.min(100, Math.max(0, Number(current.button_radius || 0))),
     input_radius: Math.min(24, Math.max(0, Number(current.input_radius || 0))),
+    loading_gif_url: /^\/uploads\/[a-z0-9._-]+\.gif$/i.test(String(current.loading_gif_url || "").trim()) ? String(current.loading_gif_url).trim() : "",
     updated_at: current.updated_at || null
   };
 }
@@ -10438,6 +10449,15 @@ app.post(["/api/admin/upload/single", "/api/admin/company-info/logo", "/api/admi
   res.json(ok({ url, fileUrl: url, path: url }));
 });
 
+app.post("/api/admin/loading-icon", (req, res, next) => loadingGifUpload.single("file")(req, res, (error) => {
+  if (error) return res.status(422).json({ success:false, error:{ message:error.message } });
+  next();
+}), (req, res) => {
+  if (!req.file) fail("LOADING_GIF_REQUIRED", 422);
+  const url = `/uploads/${req.file.filename}`;
+  res.status(201).json(ok({ url, fileUrl:url, path:url }));
+});
+
 app.post("/api/admin/profile-images", (req, res, next) => profileImageUpload.single("file")(req, res, (error) => {
   if (error) return res.status(422).json({ success:false, error:{ message:error.message } });
   next();
@@ -14387,6 +14407,12 @@ app.get("/api/addresses", (_req, res) => res.json(ok({ addresses: [] })));
 
 app.get("/api/store/home-sections", (_req, res) => res.json(ok(getSetting("homeSections"))));
 app.get("/api/store/appearance", (_req, res) => res.json(ok({ company: getSetting("companyInfo") || {}, brand: normalizeBrandIdentity(), layout: normalizeStorefrontLayout(), shipping: shippingSettings() })));
+app.get("/api/store/loading-icon", (_req, res) => {
+  const url = normalizeBrandIdentity().loading_gif_url;
+  if (!url) return res.status(404).end();
+  res.set("Cache-Control", "no-store");
+  res.redirect(302, url);
+});
 app.get("/api/store/currencies", (_req, res) => res.json(ok(normalizeCurrencies())));
 app.get("/api/store/market", (_req, res) => {
   const settings = normalizeMarketSettings();

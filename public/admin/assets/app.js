@@ -4056,6 +4056,72 @@ async function loadCatalogChoices() {
     `;
   }
 
+  function loadingGifField(value = "") {
+    return `
+      <div class="loading-icon-editor" data-loading-gif-field>
+        <div class="loading-icon-stage">
+          <div class="loading-icon-canvas">
+            <span class="loading-icon-fallback" ${value ? "hidden" : ""}></span>
+            <img src="${escapeHtml(value)}" alt="" class="loading-icon-preview" ${value ? "" : "hidden"} />
+          </div>
+          <span>${ui("Actual website size", "الحجم الفعلي في الموقع")}</span>
+        </div>
+        <div class="loading-icon-controls">
+          <input type="hidden" name="loading_gif_url" value="${escapeHtml(value)}" />
+          <div><strong>${ui("Animated loading icon", "أيقونة التحميل المتحركة")}</strong><p>${ui("Upload a GIF up to 5 MB. A square file around 128 × 128 px works best.", "ارفع ملف GIF حتى 5 ميجابايت. الأفضل أن يكون مربعًا بمقاس قريب من 128 × 128 بكسل.")}</p></div>
+          <label class="btn loading-gif-upload">${i("upload")}${ui("Choose GIF", "اختيار GIF")}<input type="file" accept="image/gif,.gif" data-upload-loading-gif /></label>
+          <button class="btn subtle" type="button" data-remove-loading-gif ${value ? "" : "disabled"}>${i("rotate-ccw")}${ui("Use default spinner", "استخدام المؤشر الافتراضي")}</button>
+          <small class="loading-gif-status">${value ? escapeHtml(value) : ui("The default spinner is active.", "مؤشر التحميل الافتراضي مفعّل.")}</small>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindLoadingGifField() {
+    const field = document.querySelector("[data-loading-gif-field]");
+    const input = field?.querySelector("[data-upload-loading-gif]");
+    const hidden = field?.querySelector('[name="loading_gif_url"]');
+    const preview = field?.querySelector(".loading-icon-preview");
+    const fallback = field?.querySelector(".loading-icon-fallback");
+    const status = field?.querySelector(".loading-gif-status");
+    const remove = field?.querySelector("[data-remove-loading-gif]");
+    if (!field || !input || !hidden || !preview || !fallback || !status || !remove) return;
+    const show = (url, label = url) => {
+      hidden.value = url || "";
+      preview.hidden = !url;
+      fallback.hidden = Boolean(url);
+      if (url) preview.src = url; else preview.removeAttribute("src");
+      status.textContent = label || ui("The default spinner is active.", "مؤشر التحميل الافتراضي مفعّل.");
+      remove.disabled = !url;
+      hidden.dispatchEvent(new Event("input", { bubbles:true }));
+    };
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.type !== "image/gif" || !/\.gif$/i.test(file.name)) { toast(ui("Choose a GIF file only.", "اختر ملف GIF فقط."), "error"); input.value=""; return; }
+      const previous = hidden.value;
+      const localUrl = URL.createObjectURL(file);
+      show(localUrl, ui("Local preview — uploading…", "معاينة مباشرة — جارٍ الرفع…"));
+      const formData = new FormData();
+      formData.append("file", file);
+      input.disabled = true;
+      try {
+        const data = await api("/api/admin/loading-icon", { method:"POST", body:formData });
+        const url = data.url || data.fileUrl || data.path || "";
+        show(url, url);
+        toast(ui("Loading GIF uploaded. Save to publish it.", "تم رفع GIF. اضغط حفظ لتطبيقه على الموقع."));
+      } catch (error) {
+        show(previous, previous || ui("The default spinner is active.", "مؤشر التحميل الافتراضي مفعّل."));
+        toast(error.message, "error");
+      } finally {
+        URL.revokeObjectURL(localUrl);
+        input.disabled = false;
+        input.value = "";
+      }
+    };
+    remove.onclick = () => show("", ui("The default spinner will be used after saving.", "سيتم استخدام مؤشر التحميل الافتراضي بعد الحفظ."));
+  }
+
   function brandStudioValues(form) {
     const data = Object.fromEntries(new FormData(form));
     form.querySelectorAll("[data-color-text]").forEach(input => { data[input.dataset.colorText] = input.value; });
@@ -4071,15 +4137,17 @@ async function loadCatalogChoices() {
       <form id="brandStudioForm" class="brand-studio-grid">
         <div class="brand-editor">
           <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">01</span><div><h2>${ui("Brand assets", "ملفات الهوية")}</h2><p>${ui("Upload the primary logo, footer logo and favicon.", "ارفع الشعار الأساسي وشعار الفوتر والأيقونة.")}</p></div></div><div class="brand-assets-grid">${imageUploadField("logo_url", "logo", company.logo_url)}${imageUploadField("logo_light_url", "logo", company.logo_light_url)}${imageUploadField("favicon_url", "favicon", company.favicon_url)}</div></section>
-          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">02</span><div><h2>${ui("Store identity", "بيانات المتجر")}</h2><p>${ui("The public identity shown across header, footer and metadata.", "البيانات العامة التي تظهر في الهيدر والفوتر والصفحات.")}</p></div></div><div class="form-grid">${field("site_name_en", "siteNameEn", "text", company.site_name_en)}${field("site_name_ar", "siteNameAr", "text", company.site_name_ar)}${field("tagline_en", "descriptionEn", "text", company.tagline_en)}${field("tagline_ar", "descriptionAr", "text", company.tagline_ar)}${field("description_en", "descriptionEn", "textarea", company.description_en)}${field("description_ar", "descriptionAr", "textarea", company.description_ar)}</div></section>
-          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">03</span><div><h2>${ui("Color system", "نظام الألوان")}</h2><p>${ui("Every storefront color is a reusable semantic token.", "كل لون مرتبط بوظيفة ثابتة داخل واجهة المتجر.")}</p></div></div><div class="brand-color-grid">${brandColorField("primary_color", ui("Primary", "الأساسي"), brand.primary_color)}${brandColorField("primary_dark_color", ui("Primary dark", "الأساسي الداكن"), brand.primary_dark_color)}${brandColorField("sale_color", ui("Sale", "التخفيض"), brand.sale_color)}${brandColorField("footer_color", ui("Footer", "الفوتر"), brand.footer_color)}${brandColorField("surface_color", ui("Surface", "السطح"), brand.surface_color)}${brandColorField("header_color", ui("Header", "الهيدر"), brand.header_color)}${brandColorField("text_color", ui("Text", "النص"), brand.text_color)}${brandColorField("muted_color", ui("Muted text", "النص الثانوي"), brand.muted_color)}</div></section>
-          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">04</span><div><h2>${ui("Typography & shape", "الخطوط والشكل")}</h2><p>${ui("Choose the storefront voice and component geometry.", "اختار شخصية الخطوط واستدارة عناصر المتجر.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Arabic font stack", "الخط العربي")}</label><select name="font_ar">${["'jannah Lt', Jannah, sans-serif","Noto Kufi Arabic, sans-serif","Cairo, sans-serif","Tajawal, sans-serif","IBM Plex Sans Arabic, sans-serif"].map(value=>`<option value="${escapeHtml(value)}" ${brand.font_ar===value?"selected":""}>${escapeHtml(value.split(",")[0].replaceAll("'",""))}</option>`).join("")}</select></div><div class="field"><label>${ui("English font stack", "الخط الإنجليزي")}</label><select name="font_en">${["'jannah Lt', Jannah, sans-serif","Inter, sans-serif","Manrope, sans-serif","Space Grotesk, sans-serif","Plus Jakarta Sans, sans-serif"].map(value=>`<option value="${escapeHtml(value)}" ${brand.font_en===value?"selected":""}>${escapeHtml(value.split(",")[0].replaceAll("'",""))}</option>`).join("")}</select></div>${labeledField("heading_weight",ui("Heading weight", "سُمك العناوين"),brand.heading_weight,"number",{min:400,max:900,step:100})}${labeledField("body_weight",ui("Body weight", "سُمك النص"),brand.body_weight,"number",{min:300,max:700,step:100})}${labeledField("card_radius",ui("Card radius", "استدارة الكروت"),brand.card_radius,"number",{min:0,max:40})}${labeledField("button_radius",ui("Button radius", "استدارة الأزرار"),brand.button_radius,"number",{min:0,max:100})}${labeledField("input_radius",ui("Input radius", "استدارة الحقول"),brand.input_radius,"number",{min:0,max:24})}<div class="field"><label>${ui("Product image ratio", "نسبة صورة المنتج")}</label><select name="product_image_ratio"><option value="1 / 1" ${brand.product_image_ratio==="1 / 1"?"selected":""}>1:1</option><option value="4 / 5" ${brand.product_image_ratio==="4 / 5"?"selected":""}>4:5</option><option value="3 / 4" ${brand.product_image_ratio==="3 / 4"?"selected":""}>3:4</option></select></div><div class="field"><label>${ui("Shadow style", "أسلوب الظلال")}</label><select name="shadow_style"><option value="none" ${brand.shadow_style==="none"?"selected":""}>${ui("None", "بدون")}</option><option value="soft" ${brand.shadow_style==="soft"?"selected":""}>${ui("Soft", "ناعم")}</option><option value="defined" ${brand.shadow_style==="defined"?"selected":""}>${ui("Defined", "واضح")}</option></select></div></div></section>
-          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">05</span><div><h2>${ui("Contact & trust", "التواصل والثقة")}</h2><p>${ui("Business details used by the footer and contact page.", "بيانات الشركة المستخدمة في الفوتر وصفحة التواصل.")}</p></div></div><div class="form-grid">${field("email", "email", "email", company.email)}${field("phone", "phone", "text", company.phone)}${field("whatsapp", "whatsapp", "text", company.whatsapp)}${labeledField("working_hours",ui("Working hours", "ساعات العمل"),company.working_hours)}${field("address_en", "addressEn", "textarea", company.address_en)}${field("address_ar", "addressAr", "textarea", company.address_ar)}${labeledField("commercial_registration",ui("Commercial registration", "السجل التجاري"),company.commercial_registration)}${labeledField("business_document",ui("Business document", "وثيقة العمل"),company.business_document)}${labeledField("facebook_url","Facebook",company.facebook_url,"url")}${labeledField("instagram_url","Instagram",company.instagram_url,"url")}${labeledField("tiktok_url","TikTok",company.tiktok_url,"url")}</div></section>
+          <section class="studio-card loading-icon-studio"><div class="studio-card-head"><span class="section-kicker">02</span><div><h2>${ui("Page loading icon", "أيقونة تحميل الصفحات")}</h2><p>${ui("Replace the small website spinner with your own animated GIF and review it at its real display size before saving.", "استبدل مؤشر التحميل الصغير في الموقع بملف GIF متحرك وراجعه بالحجم الفعلي قبل الحفظ.")}</p></div></div>${loadingGifField(brand.loading_gif_url)}</section>
+          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">03</span><div><h2>${ui("Store identity", "بيانات المتجر")}</h2><p>${ui("The public identity shown across header, footer and metadata.", "البيانات العامة التي تظهر في الهيدر والفوتر والصفحات.")}</p></div></div><div class="form-grid">${field("site_name_en", "siteNameEn", "text", company.site_name_en)}${field("site_name_ar", "siteNameAr", "text", company.site_name_ar)}${field("tagline_en", "descriptionEn", "text", company.tagline_en)}${field("tagline_ar", "descriptionAr", "text", company.tagline_ar)}${field("description_en", "descriptionEn", "textarea", company.description_en)}${field("description_ar", "descriptionAr", "textarea", company.description_ar)}</div></section>
+          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">04</span><div><h2>${ui("Color system", "نظام الألوان")}</h2><p>${ui("Every storefront color is a reusable semantic token.", "كل لون مرتبط بوظيفة ثابتة داخل واجهة المتجر.")}</p></div></div><div class="brand-color-grid">${brandColorField("primary_color", ui("Primary", "الأساسي"), brand.primary_color)}${brandColorField("primary_dark_color", ui("Primary dark", "الأساسي الداكن"), brand.primary_dark_color)}${brandColorField("sale_color", ui("Sale", "التخفيض"), brand.sale_color)}${brandColorField("footer_color", ui("Footer", "الفوتر"), brand.footer_color)}${brandColorField("surface_color", ui("Surface", "السطح"), brand.surface_color)}${brandColorField("header_color", ui("Header", "الهيدر"), brand.header_color)}${brandColorField("text_color", ui("Text", "النص"), brand.text_color)}${brandColorField("muted_color", ui("Muted text", "النص الثانوي"), brand.muted_color)}</div></section>
+          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">05</span><div><h2>${ui("Typography & shape", "الخطوط والشكل")}</h2><p>${ui("Choose the storefront voice and component geometry.", "اختار شخصية الخطوط واستدارة عناصر المتجر.")}</p></div></div><div class="form-grid"><div class="field"><label>${ui("Arabic font stack", "الخط العربي")}</label><select name="font_ar">${["'jannah Lt', Jannah, sans-serif","Noto Kufi Arabic, sans-serif","Cairo, sans-serif","Tajawal, sans-serif","IBM Plex Sans Arabic, sans-serif"].map(value=>`<option value="${escapeHtml(value)}" ${brand.font_ar===value?"selected":""}>${escapeHtml(value.split(",")[0].replaceAll("'",""))}</option>`).join("")}</select></div><div class="field"><label>${ui("English font stack", "الخط الإنجليزي")}</label><select name="font_en">${["'jannah Lt', Jannah, sans-serif","Inter, sans-serif","Manrope, sans-serif","Space Grotesk, sans-serif","Plus Jakarta Sans, sans-serif"].map(value=>`<option value="${escapeHtml(value)}" ${brand.font_en===value?"selected":""}>${escapeHtml(value.split(",")[0].replaceAll("'",""))}</option>`).join("")}</select></div>${labeledField("heading_weight",ui("Heading weight", "سُمك العناوين"),brand.heading_weight,"number",{min:400,max:900,step:100})}${labeledField("body_weight",ui("Body weight", "سُمك النص"),brand.body_weight,"number",{min:300,max:700,step:100})}${labeledField("card_radius",ui("Card radius", "استدارة الكروت"),brand.card_radius,"number",{min:0,max:40})}${labeledField("button_radius",ui("Button radius", "استدارة الأزرار"),brand.button_radius,"number",{min:0,max:100})}${labeledField("input_radius",ui("Input radius", "استدارة الحقول"),brand.input_radius,"number",{min:0,max:24})}<div class="field"><label>${ui("Product image ratio", "نسبة صورة المنتج")}</label><select name="product_image_ratio"><option value="1 / 1" ${brand.product_image_ratio==="1 / 1"?"selected":""}>1:1</option><option value="4 / 5" ${brand.product_image_ratio==="4 / 5"?"selected":""}>4:5</option><option value="3 / 4" ${brand.product_image_ratio==="3 / 4"?"selected":""}>3:4</option></select></div><div class="field"><label>${ui("Shadow style", "أسلوب الظلال")}</label><select name="shadow_style"><option value="none" ${brand.shadow_style==="none"?"selected":""}>${ui("None", "بدون")}</option><option value="soft" ${brand.shadow_style==="soft"?"selected":""}>${ui("Soft", "ناعم")}</option><option value="defined" ${brand.shadow_style==="defined"?"selected":""}>${ui("Defined", "واضح")}</option></select></div></div></section>
+          <section class="studio-card"><div class="studio-card-head"><span class="section-kicker">06</span><div><h2>${ui("Contact & trust", "التواصل والثقة")}</h2><p>${ui("Business details used by the footer and contact page.", "بيانات الشركة المستخدمة في الفوتر وصفحة التواصل.")}</p></div></div><div class="form-grid">${field("email", "email", "email", company.email)}${field("phone", "phone", "text", company.phone)}${field("whatsapp", "whatsapp", "text", company.whatsapp)}${labeledField("working_hours",ui("Working hours", "ساعات العمل"),company.working_hours)}${field("address_en", "addressEn", "textarea", company.address_en)}${field("address_ar", "addressAr", "textarea", company.address_ar)}${labeledField("commercial_registration",ui("Commercial registration", "السجل التجاري"),company.commercial_registration)}${labeledField("business_document",ui("Business document", "وثيقة العمل"),company.business_document)}${labeledField("facebook_url","Facebook",company.facebook_url,"url")}${labeledField("instagram_url","Instagram",company.instagram_url,"url")}${labeledField("tiktok_url","TikTok",company.tiktok_url,"url")}</div></section>
         </div>
         <aside class="brand-preview-shell"><div class="brand-preview-head"><div><span>${ui("LIVE PREVIEW", "معاينة حية")}</span><strong>${ui("Storefront specimen", "نموذج واجهة المتجر")}</strong></div><span class="live-dot">${ui("Live", "مباشر")}</span></div><div id="brandLivePreview">${brandPreviewHtml(initial)}</div></aside>
       </form>
     `;
     bindImageUploadFields();
+    bindLoadingGifField();
     const form = document.getElementById("brandStudioForm");
     const refresh = () => { document.getElementById("brandLivePreview").innerHTML = brandPreviewHtml({ ...brandStudioValues(form), preview_currency_symbol:initial.preview_currency_symbol }); };
     form.querySelectorAll("input,select,textarea").forEach(input => input.addEventListener("input", refresh));

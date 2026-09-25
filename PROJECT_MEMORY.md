@@ -241,3 +241,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - The compact desktop products column is pinned by its right edge and keeps a fixed 288px width and content height when a nested category opens.
 - The subcategory panel expands only to the left. Its spacing and separator belong to the expanding panel, so the original category list does not recenter, resize, or shift.
 - Verified with Playwright at 1440px: the category list remained at x=807.046875, width=288px, height=244px, and right edge=1095px before and after opening شراشف. No browser runtime errors were reported.
+
+## Configurable storefront loading GIF — 2026-09-25
+
+- Brand Studio now includes a dedicated page-loading icon card with an actual-size animated preview, GIF upload, saved-file status, and a reset action that restores the built-in spinner.
+- Loader uploads are restricted on both client and server to .gif files with GIF MIME type and a 5 MB maximum. The storefront accepts only normalized local /uploads/*.gif paths.
+- The initial storefront shell requests the configured loading icon before the main storefront data finishes. A valid custom GIF replaces the CSS spinner; a missing or failed file leaves the default spinner visible.
+- The public loader endpoint redirects to the saved GIF without caching the setting response. With no custom icon it returns 404 so the inline fallback remains active.
+- Verified at 1440x1050 and 390x844: instant local preview, successful upload, 128x128 animated asset rendering at 64x64, reset behavior, mobile width without overflow, persisted storefront replacement, and automatic fallback. Invalid PNG upload returns 422. Temporary test settings, history, and files were removed.

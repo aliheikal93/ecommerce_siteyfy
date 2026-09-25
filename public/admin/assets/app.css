@@ -2529,6 +2529,47 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 }
 .studio-card-head .section-kicker,
 .builder-zone-head .section-kicker { flex: 0 0 auto; margin: 0; }
+.loading-icon-editor {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+.loading-icon-stage {
+  min-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 20px;
+}
+.loading-icon-stage > span { color: var(--muted); font-size: 11px; font-weight: 700; }
+.loading-icon-canvas {
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 0 0 1px rgba(15,23,42,.06), 0 4px 16px rgba(15,23,42,.07);
+  display: grid;
+  place-items: center;
+}
+.loading-icon-preview { width: 64px; height: 64px; object-fit: contain; }
+.loading-icon-fallback {
+  width: 46px; height: 46px; border: 3px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: dashboardLoaderSpin .75s linear infinite;
+}
+@keyframes dashboardLoaderSpin { to { transform: rotate(360deg); } }
+.loading-icon-controls { min-width: 0; display: grid; grid-template-columns: 1fr; align-content: center; align-items: center; gap: 10px; }
+.loading-icon-controls > div, .loading-gif-status { min-width: 0; }
+.loading-icon-controls strong { display: block; font-size: 16px; margin-bottom: 5px; }
+.loading-icon-controls p { margin: 0; max-width: 560px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.loading-icon-controls .btn { width: min(100%, 360px); justify-content: center; }
+.loading-gif-upload { position: relative; overflow: hidden; }
+.loading-gif-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.loading-gif-status { color: var(--muted); overflow-wrap: anywhere; }
+
 .brand-assets-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3237,6 +3278,10 @@ h3 { font-size: 15px; margin-bottom: 8px; }
   .setting-toggle-grid,
   .builder-list.two-up,
   .builder-image-grid { grid-template-columns: 1fr; }
+  .loading-icon-editor { grid-template-columns: 1fr; }
+  .loading-icon-stage { min-height: 160px; }
+  .loading-icon-controls { grid-template-columns: 1fr; }
+  .loading-icon-controls .btn { width: 100%; justify-content: center; }
   .brand-assets-grid .image-upload-box { min-height: 150px; grid-template-columns: 100px minmax(0,1fr); }
   .brand-assets-grid .image-upload-preview { width: 100px; height: 100px; }
   .preview-header { grid-template-columns: 60px 1fr; }
