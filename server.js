@@ -8687,8 +8687,9 @@ function normalizedBundleVariant(variant = {}, index = 0) {
     option_name_ar: optionNameAr,
     option_name_en: optionNameEn,
     sku: String(variant.sku || "").trim().toUpperCase(),
+    images: Array.from(new Set(asArray(variant.images || variant.gallery || [variant.image_url || variant.image]).map((value) => String(value || "").trim()).filter(Boolean))),
+    image_url: String(variant.image_url || variant.image || (asArray(variant.images || variant.gallery)[0] || "")).trim(),
     barcode: String(variant.barcode || "").trim(),
-    image_url: String(variant.image_url || variant.image || "").trim(),
     price: Math.max(0, Number(variant.price || 0)),
     compare_at_price: Math.max(0, Number(variant.compare_at_price || variant.price_before || 0)),
     cost: Math.max(0, Number(variant.cost || 0)),
@@ -8700,6 +8701,16 @@ function normalizedBundleVariant(variant = {}, index = 0) {
   };
 }
 
+function assignUniqueBundleIdentifiers(bundle = {}) {
+  const base = String(bundle.slug || bundle.name_en || bundle.name_ar || `bundle-${bundle.id || "new"}`).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "bundle";
+  const used = new Set(activeRows("bundles").filter((row) => Number(row.id) !== Number(bundle.id)).flatMap((row) => [String(row.sku || "").toUpperCase(), ...asArray(row.bundle_variants || row.variants).map((v) => String(v.sku || "").toUpperCase())]).filter(Boolean));
+  const barcodes = new Set(activeRows("bundles").filter((row) => Number(row.id) !== Number(bundle.id)).flatMap((row) => [String(row.barcode || ""), ...asArray(row.bundle_variants || row.variants).map((v) => String(v.barcode || ""))]).filter(Boolean));
+  const makeSku = (seed) => { let value = String(seed || base).toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || "BUNDLE"; let n = 1, candidate = value; while (used.has(candidate)) candidate = `${value}-${n++}`; used.add(candidate); return candidate; };
+  const makeBarcode = () => { let candidate = `29${String(Date.now()).slice(-10)}`.slice(0, 12); let n = 0; while (barcodes.has(candidate)) candidate = `29${String(Date.now()+ ++n).slice(-10)}`.slice(0, 12); const digits = candidate.split("").map(Number); const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 ? 1 : 3), 0); candidate += String((10 - (sum % 10)) % 10); barcodes.add(candidate); return candidate; };
+  const variants = asArray(bundle.bundle_variants || bundle.variants).map((variant, index) => ({ ...variant, sku: String(variant.sku || "").trim().toUpperCase() || makeSku(`${base}-${variant.color_name_en || variant.color || "option"}-${index+1}`), barcode: String(variant.barcode || "").trim() || makeBarcode() }));
+  return { ...bundle, sku: String(bundle.sku || "").trim().toUpperCase() || makeSku(base), barcode: String(bundle.barcode || "").trim() || makeBarcode(), bundle_variants: variants };
+}
+
 function normalizeBundlePayload(payload = {}) {
   const sourceItems = asArray(payload.items || payload.bundle_items || payload.product_ids);
   const items = sourceItems.map(normalizedBundleItem).filter((item) => item.product_id);
@@ -8708,7 +8719,7 @@ function normalizeBundlePayload(payload = {}) {
     .map(normalizedBundleVariant)
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((variant, index) => ({ ...variant, sort_order:index }));
-  return {
+  return assignUniqueBundleIdentifiers({
     ...payload,
     product_type: "bundle",
     name_en: String(payload.name_en || payload.name || "").trim(),
@@ -8725,7 +8736,7 @@ function normalizeBundlePayload(payload = {}) {
     items: uniqueItems,
     bundle_variants: bundleVariants,
     is_active: payload.is_active !== false && payload.isActive !== false && payload.active !== false
-  };
+  });
 }
 
 function validateBundleItems(items = [], context = "Bundle") {
