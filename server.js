@@ -6848,7 +6848,7 @@ function imageUsageIndex() {
     usage.get(clean).push(item);
   };
 
-  for (const entity of ["products", "categories", "brands", "content", "pages"]) {
+  for (const entity of ["products", "categories", "brands", "bundles", "collections", "content", "pages"]) {
     for (const row of entityRows(entity, true)) {
       const urls = collectImageUrls(row);
       urls.forEach((url) => add(url, {
@@ -6860,7 +6860,7 @@ function imageUsageIndex() {
     }
   }
 
-  for (const key of ["companyInfo", "robotsTxt", "aiSetup"]) {
+  for (const key of ["companyInfo", "brandIdentity", "storefrontLayout", "homeBuilder", "homeSections", "dashboardIdentity", "robotsTxt", "aiSetup"]) {
     const urls = collectImageUrls(getSetting(key));
     urls.forEach((url) => add(url, { entity: "settings", id: key, label: key, is_deleted: false }));
   }

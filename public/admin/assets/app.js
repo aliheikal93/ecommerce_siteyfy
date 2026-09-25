@@ -42,6 +42,9 @@
     mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
     "chevron-down": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1"/></svg>',
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z"/></svg>'
@@ -2505,7 +2508,7 @@
         <div class="product-editor-head-actions"><span class="product-draft-state" id="productDraftState">${ui("No unsaved changes", "لا توجد تعديلات غير محفوظة")}</span><button class="btn" type="button" id="cancelProduct">${t("cancel")}</button><button class="btn primary" type="submit" form="editorForm">${i("check")}${t("save")}</button></div>
       </div>
       <div class="product-type-summary is-${inferredType}"><span>${inferredType === "variable" ? i("sliders-horizontal") : i("box")}</span><div><small>${ui("Product type", "نوع المنتج")}</small><strong>${typeTitle}</strong><p>${typeHint}</p></div>${!isEdit ? `<button class="btn" type="button" id="changeProductType">${ui("Change type", "تغيير النوع")}</button>` : ""}</div>
-      <form class="product-editor-page" id="editorForm">
+      <form class="product-editor-page" id="editorForm" data-product-id="${row.id || ""}">
         <input type="hidden" name="product_type" value="${inferredType}" />
         <div class="catalog-form-layout">
           ${formGroups.map(group => `
@@ -2639,14 +2642,14 @@ async function loadCatalogChoices() {
       <div class="field full image-upload-field" data-image-field="${name}">
         <label>${t(labelKey)}${required ? " *" : ""}</label>
         <input type="hidden" name="${name}" value="${escapeHtml(value || "")}" ${required ? "required" : ""} />
-        <div class="image-upload-box">
-          <div class="image-upload-preview">
+        <div class="image-upload-box ${value ? "has-image" : ""}">
+          <button class="image-upload-preview" type="button" data-open-media-picker aria-label="${ui("Choose image", "اختيار صورة")}">
             ${value ? `<img src="${escapeHtml(value)}" alt="" />` : `<span>${i("image")}</span>`}
-          </div>
+          </button>
           <div class="image-upload-copy">
-            <strong>${t("uploadImages")}</strong>
-            <span class="muted small">${value ? escapeHtml(value) : t("galleryNote")}</span>
-            <input type="file" accept="image/*" data-upload-image="${name}" />
+            <strong>${ui("Choose from media library", "اختيار من مكتبة الصور")}</strong>
+            <span class="muted small">${value ? escapeHtml(value) : ui("Reuse an existing image or upload a new one", "استخدم صورة موجودة أو ارفع صورة جديدة")}</span>
+            <div class="image-upload-actions"><button class="btn" type="button" data-open-media-picker>${i("image")}${ui("Open library", "فتح المكتبة")}</button><button class="btn icon-btn danger" type="button" data-clear-media-image title="${ui("Remove image", "إزالة الصورة")}" ${value ? "" : "disabled"}>${i("trash")}</button></div>
           </div>
         </div>
       </div>
@@ -2784,7 +2787,7 @@ async function loadCatalogChoices() {
       <input type="hidden" name="side_photos" value="${escapeHtml(JSON.stringify(media.side))}" data-product-side-images />
       <input type="hidden" name="media_gallery" value="${escapeHtml(JSON.stringify(media.media))}" data-product-media-gallery />
       <input type="hidden" name="generated_images" value="${escapeHtml(JSON.stringify(media.generated))}" data-generated-images-value />
-      <div class="product-media-toolbar"><label class="btn primary">${i("upload")}${ui("Upload images or videos", "رفع صور أو فيديوهات")}<input type="file" accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime" multiple data-product-gallery-upload /></label><span>${ui("Arrange product media with the arrow controls. MP4 and WebM give the widest browser support. Changes remain a draft until Save.", "رتب وسائط المنتج بالأسهم. ملفات MP4 وWebM هي الأفضل للمتصفحات، وتظل التغييرات مسودة حتى الحفظ.")}</span></div>
+      <div class="product-media-toolbar"><div class="toolbar"><button class="btn primary" type="button" data-open-product-media-library>${i("image")}${ui("Add from library", "إضافة من المكتبة")}</button><label class="btn">${i("upload")}${ui("Upload video", "رفع فيديو")}<input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime" multiple data-product-video-upload /></label></div><span>${ui("Choose reusable images from the library. Videos upload directly. Changes remain a draft until Save.", "اختر صورًا قابلة لإعادة الاستخدام من المكتبة. الفيديو يرفع مباشرة، وتظل التغييرات مسودة حتى الحفظ.")}</span></div>
       <div class="product-media-grid" id="productMediaGrid"></div>
     </div>`;
   }
@@ -2842,7 +2845,7 @@ async function loadCatalogChoices() {
           <span>${t("image")}</span>
           <div class="variant-image-box">
             <button class="variant-image-preview" type="button" data-open-variant-image ${variant.image_url ? "" : "disabled"}>${variant.image_url ? `<img src="${escapeHtml(variant.image_url)}" alt="" />` : i("image")}</button>
-            <div class="variant-image-actions"><label class="btn icon-btn" title="${ui("Replace image", "استبدال الصورة")}">${i("upload")}<input type="file" accept="image/*" data-variant-image-upload /></label><button class="btn icon-btn danger" type="button" data-remove-variant-image title="${ui("Remove image", "إزالة الصورة")}" ${variant.image_url ? "" : "disabled"}>${i("trash")}</button></div>
+            <div class="variant-image-actions"><button class="btn icon-btn" type="button" data-pick-variant-image title="${ui("Choose from library", "اختيار من المكتبة")}">${i("image")}</button><button class="btn icon-btn danger" type="button" data-remove-variant-image title="${ui("Remove image", "إزالة الصورة")}" ${variant.image_url ? "" : "disabled"}>${i("trash")}</button></div>
           </div>
         </div>
         <label><span>${t("colors")}</span><select data-variant-field="color" ${type === "option" ? "disabled" : ""}>
@@ -2971,30 +2974,18 @@ async function loadCatalogChoices() {
         sync();
         renderProductGallery();
       });
-      list.querySelectorAll("[data-variant-image-upload]").forEach(input => {
-        input.onchange = async () => {
-          if (!input.files?.[0]) return;
-          const row = input.closest(".variant-row");
+      list.querySelectorAll("[data-pick-variant-image]").forEach(button => {
+        button.onclick = () => {
+          const row = button.closest(".variant-row");
           const hidden = row?.querySelector("[data-variant-field='image_url']");
-          const preview = row?.querySelector(".variant-image-preview");
-          const form = new FormData();
-          form.append("file", input.files[0]);
-          input.disabled = true;
-          try {
-            const data = await api("/api/admin/upload/single", { method: "POST", body: form });
-            const url = data.url || data.fileUrl || data.path;
+          openMediaLibraryPicker({ selected:hidden?.value ? [hidden.value] : [], productId:activeProductId(), draftUrls:currentDraftImageUrls(), onSelect:urls => {
+            const url = urls[0] || "";
+            const preview = row?.querySelector(".variant-image-preview");
             if (hidden) hidden.value = url;
-            if (preview) { preview.innerHTML = `<img src="${escapeHtml(url)}" alt="" />`; preview.disabled = false; }
-            const remove = row?.querySelector("[data-remove-variant-image]");
-            if (remove) remove.disabled = false;
-            sync();
-            renderProductGallery();
-            toast(t("uploadImages"));
-          } catch (error) {
-            toast(error.message, "error");
-          } finally {
-            input.disabled = false;
-          }
+            if (preview) { preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" />` : i("image"); preview.disabled = !url; }
+            const remove = row?.querySelector("[data-remove-variant-image]"); if (remove) remove.disabled = !url;
+            sync(); renderProductGallery();
+          }}).catch(error => toast(error.message, "error"));
         };
       });
     };
@@ -3044,33 +3035,100 @@ async function loadCatalogChoices() {
     });
   }
 
+  function activeProductId() {
+    return document.getElementById("editorForm")?.dataset.productId || "";
+  }
+
+  function currentDraftImageUrls() {
+    const urls = new Set();
+    const add = value => {
+      if (!value) return;
+      if (typeof value === "string") {
+        const text = value.trim();
+        if (text.startsWith("/uploads/")) urls.add(text.split(/[?#]/)[0]);
+        else if (text.startsWith("[")) { try { add(JSON.parse(text)); } catch {} }
+        return;
+      }
+      if (Array.isArray(value)) return value.forEach(add);
+      if (typeof value === "object") Object.values(value).forEach(add);
+    };
+    document.querySelectorAll('input[type="hidden"], textarea').forEach(input => add(input.value));
+    return [...urls];
+  }
+
+  function mediaUsageLabel(item) {
+    const names = { products:ui("Product", "منتج"), categories:ui("Category", "تصنيف"), brands:ui("Brand", "علامة تجارية"), bundles:ui("Bundle", "طقم"), collections:ui("Collection", "مجموعة"), settings:ui("Site settings", "إعدادات الموقع"), content:ui("Content", "محتوى"), pages:ui("Page", "صفحة") };
+    return `${names[item.entity] || item.entity} #${item.id}`;
+  }
+
+  function showMediaDeleteWarning(image, onDeleted) {
+    const activeUsage = (image.usage || []).filter(item => !item.is_deleted);
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop media-delete-backdrop"><div class="modal media-delete-dialog" role="alertdialog" aria-modal="true"><div class="modal-head"><div><span class="section-kicker">MEDIA SAFETY</span><h2>${activeUsage.length ? ui("This image cannot be deleted", "لا يمكن حذف الصورة") : ui("Delete this image?", "حذف هذه الصورة؟")}</h2><p>${activeUsage.length ? ui("It is still linked to active content. Remove those links first.", "الصورة ما زالت مرتبطة بمحتوى نشط. أزل الارتباطات أولًا.") : ui("The file will be removed from the media library.", "سيتم حذف الملف من مكتبة الصور.")}</p></div><button class="btn icon-btn" type="button" data-close-media-warning>${i("x")}</button></div><div class="modal-body"><div class="media-delete-preview"><img src="${escapeHtml(image.url)}" alt=""/><div><strong>${escapeHtml(image.filename || image.url.split("/").pop())}</strong><small>${escapeHtml(image.url)}</small></div></div>${activeUsage.length ? `<div class="media-usage-warning"><strong>${ui("Used in", "مستخدمة في")}</strong>${activeUsage.map(item => `<div><span>${mediaUsageLabel(item)}</span><small>${escapeHtml(item.label || "")}</small></div>`).join("")}</div>` : ""}</div><div class="modal-foot"><button class="btn" type="button" data-close-media-warning>${t("cancel")}</button>${activeUsage.length ? "" : `<button class="btn danger" type="button" data-confirm-media-delete>${i("trash")}${t("delete")}</button>`}</div></div></div>`);
+    const backdrop = document.querySelector(".media-delete-backdrop:last-child");
+    const close = () => backdrop?.remove();
+    backdrop.querySelectorAll("[data-close-media-warning]").forEach(button => button.onclick = close);
+    backdrop.querySelector("[data-confirm-media-delete]")?.addEventListener("click", async event => {
+      event.currentTarget.disabled = true;
+      try { await api(`/api/admin/image-gallery/${image.id}`, { method:"DELETE" }); close(); toast(t("deleted")); await onDeleted?.(); }
+      catch (error) { toast(error.message, "error"); event.currentTarget.disabled = false; }
+    });
+  }
+
+  async function openMediaLibraryPicker({ multiple = false, productId = activeProductId(), selected = [], draftUrls = productId ? currentDraftImageUrls() : [], title = "", onSelect } = {}) {
+    document.querySelector(".media-library-backdrop")?.remove();
+    const payload = await api("/api/admin/image-gallery");
+    let images = payload.images || [];
+    const chosen = new Set((selected || []).filter(Boolean));
+    const draftSet = new Set((draftUrls || []).filter(Boolean));
+    let tab = productId || draftSet.size ? "product" : "all";
+    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop media-library-backdrop"><div class="modal media-library-modal" role="dialog" aria-modal="true"><div class="modal-head media-library-head"><div><span class="section-kicker">MEDIA LIBRARY</span><h2>${escapeHtml(title || ui("Choose images", "اختيار الصور"))}</h2><p>${ui("Reuse any uploaded image across products, options, and sections.", "استخدم أي صورة مرفوعة في المنتجات والخيارات والأقسام أكثر من مرة.")}</p></div><button class="btn icon-btn" type="button" data-close-media-library>${i("x")}</button></div><div class="media-library-tools"><div class="media-library-tabs"><button type="button" data-media-tab="all">${ui("All images", "كل الصور")}</button>${productId || draftSet.size ? `<button type="button" data-media-tab="product">${productId ? `${ui("Product", "المنتج")} #${escapeHtml(productId)}` : ui("Current product", "المنتج الحالي")}</button>` : ""}</div><label class="media-library-search">${i("search")}<input type="search" placeholder="${ui("Search by file name", "ابحث باسم الملف")}" data-media-search /></label><label class="btn primary media-library-upload">${i("upload")}${ui("Upload new", "رفع جديد")}<input type="file" accept="image/*" multiple hidden data-media-upload /></label></div><div class="media-library-body"><div class="media-library-summary"><span data-media-result-count></span><span>${ui("Images selected", "صور مختارة")}: <strong data-media-selected-count>${chosen.size}</strong></span></div><div class="media-library-grid" data-media-grid></div><div class="media-library-empty" data-media-empty hidden>${i("image")}<strong>${ui("No matching images", "لا توجد صور مطابقة")}</strong><p>${ui("Upload a new image or switch to All images.", "ارفع صورة جديدة أو انتقل إلى كل الصور.")}</p></div></div><div class="modal-foot media-library-foot"><button class="btn" type="button" data-close-media-library>${t("cancel")}</button><button class="btn primary" type="button" data-confirm-media-selection>${i("check")}${multiple ? ui("Add selected images", "إضافة الصور المختارة") : ui("Use selected image", "استخدام الصورة المختارة")}</button></div></div></div>`);
+    const backdrop = document.querySelector(".media-library-backdrop:last-child");
+    const grid = backdrop.querySelector("[data-media-grid]");
+    const search = backdrop.querySelector("[data-media-search]");
+    const close = () => backdrop.remove();
+    const belongsToProduct = image => draftSet.has(image.url) || (image.usage || []).some(item => item.entity === "products" && String(item.id) === String(productId));
+    const visibleImages = () => images.filter(image => tab === "all" || belongsToProduct(image)).filter(image => !search.value.trim() || `${image.filename} ${image.url}`.toLowerCase().includes(search.value.trim().toLowerCase()));
+    const commit = () => { const values = [...chosen]; if (!values.length) return toast(ui("Choose an image first", "اختر صورة أولًا"), "error"); onSelect?.(multiple ? values : values.slice(-1)); close(); };
+    const draw = () => {
+      backdrop.querySelectorAll("[data-media-tab]").forEach(button => button.classList.toggle("active", button.dataset.mediaTab === tab));
+      const visible = visibleImages();
+      backdrop.querySelector("[data-media-result-count]").textContent = `${visible.length} ${ui("images", "صورة")}`;
+      backdrop.querySelector("[data-media-selected-count]").textContent = chosen.size;
+      backdrop.querySelector("[data-media-empty]").hidden = Boolean(visible.length);
+      grid.innerHTML = visible.map(image => { const isChosen = chosen.has(image.url); const activeLinks = (image.usage || []).filter(item => !item.is_deleted).length; return `<article class="media-library-card ${isChosen ? "selected" : ""}" data-media-url="${escapeHtml(image.url)}"><button class="media-library-select" type="button"><span class="media-library-check">${isChosen ? i("check") : ""}</span><img src="${escapeHtml(image.url)}" alt="" loading="lazy"/><span class="media-library-link-count">${i("link")}${activeLinks}</span></button><div class="media-library-card-meta"><div><strong title="${escapeHtml(image.filename)}">${escapeHtml(image.filename)}</strong><small>${formatBytes(image.size)}</small></div><button class="btn icon-btn danger" type="button" data-delete-library-image title="${t("delete")}">${i("trash")}</button></div></article>`; }).join("");
+      grid.querySelectorAll("[data-media-url]").forEach(card => {
+        const image = images.find(item => item.url === card.dataset.mediaUrl);
+        card.querySelector(".media-library-select").onclick = () => { if (!multiple) chosen.clear(); chosen.has(image.url) ? chosen.delete(image.url) : chosen.add(image.url); draw(); };
+        card.querySelector(".media-library-select").ondblclick = () => { if (!multiple) { chosen.clear(); chosen.add(image.url); commit(); } };
+        card.querySelector("[data-delete-library-image]").onclick = event => { event.stopPropagation(); showMediaDeleteWarning(draftSet.has(image.url) ? { ...image, usage:[...(image.usage || []), { entity:"products", id:productId || "draft", label:ui("Current unsaved product draft", "مسودة المنتج الحالية غير المحفوظة"), is_deleted:false }] } : image, async () => { const refreshed = await api("/api/admin/image-gallery"); images = refreshed.images || []; chosen.delete(image.url); draw(); }); };
+      });
+    };
+    backdrop.querySelectorAll("[data-close-media-library]").forEach(button => button.onclick = close);
+    backdrop.querySelectorAll("[data-media-tab]").forEach(button => button.onclick = () => { tab = button.dataset.mediaTab; draw(); });
+    search.oninput = draw;
+    backdrop.querySelector("[data-confirm-media-selection]").onclick = commit;
+    backdrop.querySelector("[data-media-upload]").onchange = async event => {
+      const input = event.currentTarget;
+      const files = [...(input.files || [])]; if (!files.length) return;
+      const form = new FormData(); files.forEach(file => form.append("files", file));
+      backdrop.classList.add("is-uploading");
+      try { const result = await api("/api/admin/image-gallery/upload", { method:"POST", body:form }); (result.images || []).forEach(item => { chosen.add(item.url); draftSet.add(item.url); }); const refreshed = await api("/api/admin/image-gallery"); images = refreshed.images || []; tab = "all"; draw(); toast(ui(`${files.length} image(s) uploaded`, `تم رفع ${files.length} صورة`)); }
+      catch (error) { toast(error.message, "error"); }
+      finally { backdrop.classList.remove("is-uploading"); input.value = ""; }
+    };
+    backdrop.onclick = event => { if (event.target === backdrop) close(); };
+    draw();
+  }
+
   function bindImageUploadFields() {
-    document.querySelectorAll("[data-upload-image]").forEach(input => {
-      input.onchange = async () => {
-        if (!input.files?.[0]) return;
-        const fieldName = input.dataset.uploadImage;
-        const wrap = input.closest("[data-image-field]");
-        const hidden = wrap?.querySelector(`input[name="${fieldName}"]`);
-        const preview = wrap?.querySelector(".image-upload-preview");
-        const copy = wrap?.querySelector(".image-upload-copy .small");
-        const form = new FormData();
-        form.append("file", input.files[0]);
-        input.disabled = true;
-        try {
-          const data = await api("/api/admin/upload/single", { method: "POST", body: form });
-          const url = data.url || data.fileUrl || data.path;
-          if (hidden) hidden.value = url;
-          if (preview) preview.innerHTML = `<img src="${escapeHtml(url)}" alt="" />`;
-          if (copy) copy.textContent = url;
-          hidden?.dispatchEvent(new Event("input", { bubbles: true }));
-          document.dispatchEvent(new CustomEvent("slyrah:image-uploaded", { detail: { fieldName, url } }));
-          toast(t("uploadImages"));
-        } catch (error) {
-          toast(error.message, "error");
-        } finally {
-          input.disabled = false;
-        }
-      };
+    document.querySelectorAll("[data-image-field]").forEach(wrap => {
+      const hidden = wrap.querySelector('input[type="hidden"]');
+      const preview = wrap.querySelector(".image-upload-preview");
+      const copy = wrap.querySelector(".image-upload-copy .small");
+      const clear = wrap.querySelector("[data-clear-media-image]");
+      const apply = url => { hidden.value = url || ""; preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" />` : `<span>${i("image")}</span>`; copy.textContent = url || ui("Reuse an existing image or upload a new one", "استخدم صورة موجودة أو ارفع صورة جديدة"); clear.disabled = !url; wrap.querySelector(".image-upload-box")?.classList.toggle("has-image", Boolean(url)); hidden.dispatchEvent(new Event("input", { bubbles:true })); };
+      wrap.querySelectorAll("[data-open-media-picker]").forEach(button => button.onclick = () => openMediaLibraryPicker({ selected:hidden.value ? [hidden.value] : [], onSelect:urls => apply(urls[0] || "") }).catch(error => toast(error.message, "error")));
+      clear.onclick = () => apply("");
     });
   }
 
@@ -3190,40 +3248,30 @@ async function loadCatalogChoices() {
   }
 
   async function bindProductGallery() {
-    const input = document.querySelector("[data-product-gallery-upload]");
-    if (!input) return;
-    input.onchange = async () => {
-      if (!input.files?.length) return;
-      const form = new FormData();
-      [...input.files].forEach(file => form.append("files", file));
-      input.disabled = true;
-      try {
-        const data = await api("/api/admin/product-media/upload", { method:"POST", body:form });
-        const uploadedMedia = (data.media || data.images || []).map((item, index) => ({ ...item, type:item.type === "video" ? "video" : "image", url:item.url || item.fileUrl || item.path, sort_order:index })).filter(item => item.url);
-        const urls = uploadedMedia.filter(item => item.type === "image").map(item => item.url);
-        const main = document.querySelector("[data-product-main-image]");
-        const side = document.querySelector("[data-product-side-images]");
-        const gallery = document.querySelector("[data-product-media-gallery]");
-        const currentSide = parseJsonArray(side.value);
-        const currentMedia = parseJsonArray(gallery.value);
-        uploadedMedia.forEach(item => {
-          if (item.type === "image" && !main.value) main.value = item.url;
-          else if (!currentMedia.some(existing => (existing?.url || existing) === item.url) && main.value !== item.url) currentMedia.push({ ...item, sort_order:currentMedia.length });
-          if (item.type === "image" && !currentSide.includes(item.url) && main.value !== item.url) currentSide.push(item.url);
-        });
-        side.value = JSON.stringify(currentSide);
-        gallery.value = JSON.stringify(currentMedia);
-        main.dispatchEvent(new Event("input", { bubbles:true }));
-        renderProductGallery();
-        toast(ui(`${uploadedMedia.length} media item(s) added to the draft`, `تمت إضافة ${uploadedMedia.length} عنصر وسائط للمسودة`));
-      } catch (error) { toast(error.message, "error"); } finally { input.disabled = false; input.value = ""; }
+    const editor = document.querySelector("[data-product-media-editor]");
+    if (!editor) return;
+    const addImages = urls => {
+      const main = document.querySelector("[data-product-main-image]");
+      const side = document.querySelector("[data-product-side-images]");
+      const gallery = document.querySelector("[data-product-media-gallery]");
+      const currentSide = parseJsonArray(side.value);
+      const currentMedia = parseJsonArray(gallery.value);
+      urls.forEach(url => {
+        if (!main.value) main.value = url;
+        else if (!currentMedia.some(existing => (existing?.url || existing) === url) && main.value !== url) currentMedia.push({ type:"image", url, sort_order:currentMedia.length });
+        if (!currentSide.includes(url) && main.value !== url) currentSide.push(url);
+      });
+      side.value = JSON.stringify(currentSide); gallery.value = JSON.stringify(currentMedia); main.dispatchEvent(new Event("input", { bubbles:true })); renderProductGallery();
+    };
+    editor.querySelector("[data-open-product-media-library]")?.addEventListener("click", () => openMediaLibraryPicker({ multiple:true, productId:activeProductId(), selected:productMediaEntries().filter(item => item.type !== "video").map(item => item.url), draftUrls:currentDraftImageUrls(), title:ui("Product gallery", "معرض صور المنتج"), onSelect:addImages }).catch(error => toast(error.message, "error")));
+    const videoInput = editor.querySelector("[data-product-video-upload]");
+    if (videoInput) videoInput.onchange = async () => {
+      if (!videoInput.files?.length) return;
+      const form = new FormData(); [...videoInput.files].forEach(file => form.append("files", file)); videoInput.disabled = true;
+      try { const data = await api("/api/admin/product-media/upload", { method:"POST", body:form }); const media = parseJsonArray(document.querySelector("[data-product-media-gallery]").value); (data.media || []).filter(item => item.type === "video").forEach(item => { if (!media.some(existing => (existing?.url || existing) === item.url)) media.push({ ...item, sort_order:media.length }); }); const hidden=document.querySelector("[data-product-media-gallery]"); hidden.value=JSON.stringify(media); hidden.dispatchEvent(new Event("input",{bubbles:true})); renderProductGallery(); toast(ui("Video uploaded", "تم رفع الفيديو")); } catch(error){ toast(error.message,"error"); } finally { videoInput.disabled=false; videoInput.value=""; }
     };
     renderProductGallery();
-    try {
-      const payload = await api("/api/admin/image-gallery");
-      state.productGalleryUsage = Object.fromEntries((payload.images || []).map(image => [image.url, image]));
-      renderProductGallery();
-    } catch {}
+    try { const payload = await api("/api/admin/image-gallery"); state.productGalleryUsage = Object.fromEntries((payload.images || []).map(image => [image.url, image])); renderProductGallery(); } catch {}
   }
 
   function bindProductDirtyState() {
@@ -4318,7 +4366,7 @@ async function loadCatalogChoices() {
   function headerShortcutCard(item = {}, categories = [], facets = []) {
     const selected=`${item.type || "category"}:${item.ref || ""}`;
     const targets=[["all:",ui("All products", "كل المنتجات")],...categories.filter(row=>row.is_active!==false).map(row=>[`category:${row.slug}`,`${ui("Category", "تصنيف")} · ${row.name_ar||row.name_en}`]),...facets.filter(row=>row.is_active!==false&&row.isActive!==false).map(row=>[`facet:${row.id}`,`${ui("Facet", "فئة")} · ${row.name_ar||row.nameAr||row.name_en||row.nameEn}`])];
-    return `<article class="header-shortcut-row" data-shortcut-row><div class="header-shortcut-image">${item.image_url?`<img src="${escapeHtml(item.image_url)}" alt=""/>`:i("image")}</div><div class="header-shortcut-fields"><label>${ui("Destination", "الوجهة")}<select name="target">${targets.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===selected?"selected":""}>${escapeHtml(label)}</option>`).join("")}</select></label><label>${ui("Arabic title", "العنوان بالعربية")}<input name="title_ar" value="${escapeHtml(item.title_ar||"")}" /></label><label>${ui("English title", "العنوان بالإنجليزية")}<input name="title_en" value="${escapeHtml(item.title_en||"")}" /></label><input type="hidden" name="image_url" value="${escapeHtml(item.image_url||"")}"/><label class="header-shortcut-upload">${ui("Change image", "تغيير الصورة")}<input type="file" accept="image/*" data-shortcut-image hidden /></label></div><div class="header-shortcut-actions"><button type="button" class="btn icon-btn" data-shortcut-up title="${ui("Move up", "تحريك لأعلى")}">${i("arrow-up")}</button><button type="button" class="btn icon-btn" data-shortcut-down title="${ui("Move down", "تحريك لأسفل")}">${i("arrow-down")}</button><button type="button" class="btn icon-btn danger" data-shortcut-remove title="${t("delete")}">${i("trash")}</button></div></article>`;
+    return `<article class="header-shortcut-row" data-shortcut-row><div class="header-shortcut-image">${item.image_url?`<img src="${escapeHtml(item.image_url)}" alt=""/>`:i("image")}</div><div class="header-shortcut-fields"><label>${ui("Destination", "الوجهة")}<select name="target">${targets.map(([value,label])=>`<option value="${escapeHtml(value)}" ${value===selected?"selected":""}>${escapeHtml(label)}</option>`).join("")}</select></label><label>${ui("Arabic title", "العنوان بالعربية")}<input name="title_ar" value="${escapeHtml(item.title_ar||"")}" /></label><label>${ui("English title", "العنوان بالإنجليزية")}<input name="title_en" value="${escapeHtml(item.title_en||"")}" /></label><input type="hidden" name="image_url" value="${escapeHtml(item.image_url||"")}"/><button class="header-shortcut-upload" type="button" data-pick-shortcut-image>${i("image")}${ui("Choose image", "اختيار الصورة")}</button></div><div class="header-shortcut-actions"><button type="button" class="btn icon-btn" data-shortcut-up title="${ui("Move up", "تحريك لأعلى")}">${i("arrow-up")}</button><button type="button" class="btn icon-btn" data-shortcut-down title="${ui("Move down", "تحريك لأسفل")}">${i("arrow-down")}</button><button type="button" class="btn icon-btn danger" data-shortcut-remove title="${t("delete")}">${i("trash")}</button></div></article>`;
   }
 
   async function renderStorefrontLayout(page) {
@@ -4333,7 +4381,7 @@ async function loadCatalogChoices() {
     const form = document.getElementById("storefrontLayoutForm");
     const values = () => { const all=Object.fromEntries(new FormData(form)); return {...all,announcement_active:all.announcement_active==="true",pause_on_hover:all.pause_on_hover==="true",rotation_interval_seconds:Number(all.rotation_interval_seconds||5),category_strip_auto_scroll:all.category_strip_auto_scroll==="true",category_strip_scroll_speed:Number(all.category_strip_scroll_speed||18),messages:[...form.querySelectorAll("[data-announcement-row]")].map(row=>{const item=namedValues(row);return {...item,id:row.dataset.id,is_active:item.is_active==="true"};}),shortcuts:[...form.querySelectorAll("[data-shortcut-row]")].map(row=>{const item=namedValues(row);const [type,...parts]=String(item.target||"").split(":");return {type,ref:parts.join(":"),title_ar:item.title_ar||"",title_en:item.title_en||"",image_url:item.image_url||"",is_active:true};}),...Object.fromEntries(Object.entries(all).filter(([key])=>key.startsWith("show_")||key==="sticky").map(([key,value])=>[key,value==="true"]))}; };
     const refresh = () => { document.getElementById("layoutLivePreview").innerHTML=layoutPreview(values()); };
-    const bind = () => { form.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);refresh();});form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",()=>{const output=input.closest(".home-motion-speed")?.querySelector("output");if(output)output.textContent=input.value;refresh();}));form.querySelectorAll("[data-remove-announcement]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-announcement-row]").remove();refresh();});form.querySelectorAll("[data-shortcut-remove]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-shortcut-row]").remove();refresh();});for(const [direction,step] of [["up",-1],["down",1]])form.querySelectorAll(`[data-shortcut-${direction}]`).forEach(btn=>btn.onclick=()=>{const row=btn.closest("[data-shortcut-row]"),peer=step<0?row.previousElementSibling:row.nextElementSibling;if(!peer)return;step<0?peer.before(row):peer.after(row);refresh();});form.querySelectorAll("[data-shortcut-image]").forEach(input=>input.onchange=async()=>{if(!input.files?.[0])return;const row=input.closest("[data-shortcut-row]"),body=new FormData();body.append("file",input.files[0]);input.disabled=true;try{const result=await api("/api/admin/upload/single",{method:"POST",body});row.querySelector('[name="image_url"]').value=result.url||"";row.querySelector(".header-shortcut-image").innerHTML=`<img src="${escapeHtml(result.url||"")}" alt=""/>`;refresh();}catch(error){toast(error.message,"error")}finally{input.disabled=false;}}); };
+    const bind = () => { form.querySelectorAll("[data-form-switch]").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);refresh();});form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",()=>{const output=input.closest(".home-motion-speed")?.querySelector("output");if(output)output.textContent=input.value;refresh();}));form.querySelectorAll("[data-remove-announcement]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-announcement-row]").remove();refresh();});form.querySelectorAll("[data-shortcut-remove]").forEach(btn=>btn.onclick=()=>{btn.closest("[data-shortcut-row]").remove();refresh();});for(const [direction,step] of [["up",-1],["down",1]])form.querySelectorAll(`[data-shortcut-${direction}]`).forEach(btn=>btn.onclick=()=>{const row=btn.closest("[data-shortcut-row]"),peer=step<0?row.previousElementSibling:row.nextElementSibling;if(!peer)return;step<0?peer.before(row):peer.after(row);refresh();});form.querySelectorAll("[data-pick-shortcut-image]").forEach(button=>button.onclick=()=>{const row=button.closest("[data-shortcut-row]"),hidden=row.querySelector('[name="image_url"]');openMediaLibraryPicker({selected:hidden.value?[hidden.value]:[],onSelect:urls=>{const url=urls[0]||"";hidden.value=url;row.querySelector(".header-shortcut-image").innerHTML=url?`<img src="${escapeHtml(url)}" alt=""/>`:i("image");refresh();}}).catch(error=>toast(error.message,"error"));}); };
     document.getElementById("addAnnouncement").onclick=()=>{document.getElementById("announcementList").insertAdjacentHTML("beforeend",announcementCard({},document.querySelectorAll("[data-announcement-row]").length));bind();refresh();};
     document.getElementById("addHeaderShortcut").onclick=()=>{document.getElementById("headerShortcutList").insertAdjacentHTML("beforeend",headerShortcutCard({type:"all",ref:""},categories,facets));bind();refresh();};
     bind();refresh();
@@ -5534,8 +5582,7 @@ async function loadCatalogChoices() {
       form.querySelectorAll("input,select").forEach(input=>input.addEventListener("input",()=>{if(input.dataset.colorPicker){form.querySelector(`[data-color-text='${input.dataset.colorPicker}']`).value=input.value.toUpperCase();draft[editingMode][input.dataset.colorPicker]=input.value.toUpperCase();}else if(input.dataset.colorText&&/^#[0-9a-f]{6}$/i.test(input.value)){draft[editingMode][input.dataset.colorText]=input.value.toUpperCase();form.querySelector(`[data-color-picker='${input.dataset.colorText}']`).value=input.value;}else if(input.name==="icon_crop")draft[editingMode].icon_crop=input.checked;refreshPreview();}));
       document.querySelectorAll("[data-identity-mode]").forEach(button=>button.onclick=()=>{syncShared();colorFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});assetFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});draft[editingMode].icon_crop=form.elements.icon_crop.checked;editingMode=button.dataset.identityMode;draw();});
       document.getElementById("previewThemeSwap").onclick=()=>{syncShared();editingMode=editingMode==="light"?"dark":"light";draw();};
-      document.querySelectorAll("[data-upload-identity]").forEach(button=>button.onclick=()=>button.closest("[data-identity-asset]").querySelector("input[type=file]").click());
-      document.querySelectorAll("[data-identity-asset] input[type=file]").forEach(input=>input.onchange=async()=>{if(!input.files?.[0])return;const card=input.closest("[data-identity-asset]");const key=card.dataset.identityAsset;const body=new FormData();body.append("file",input.files[0]);card.classList.add("is-uploading");try{const result=await api("/api/admin/dashboard-identity/assets",{method:"POST",body});draft[editingMode][key]=result.url;form.elements[key].value=result.url;card.querySelector(".identity-asset-preview").innerHTML=identityAssetPreview(key,draft[editingMode]);refreshPreview();toast(ui("Asset uploaded","تم رفع الملف"));}catch(error){toast(error.message,"error");}finally{card.classList.remove("is-uploading");}});
+      document.querySelectorAll("[data-upload-identity]").forEach(button=>button.onclick=()=>{const card=button.closest("[data-identity-asset]"),key=card.dataset.identityAsset;openMediaLibraryPicker({selected:draft[editingMode][key]?[draft[editingMode][key]]:[],title:ui("Choose brand asset","اختيار ملف الهوية"),onSelect:urls=>{const url=urls[0]||"";draft[editingMode][key]=url;form.elements[key].value=url;card.querySelector(".identity-asset-preview").innerHTML=identityAssetPreview(key,draft[editingMode]);refreshPreview();}}).catch(error=>toast(error.message,"error"));});
       document.getElementById("saveDashboardIdentity").onclick=async()=>{syncShared();colorFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});assetFields.forEach(([key])=>{draft[editingMode][key]=form.elements[key].value;});draft[editingMode].icon_crop=form.elements.icon_crop.checked;const result=await api("/api/admin/dashboard-identity",{method:"PUT",body:JSON.stringify(draft)});state.dashboardIdentity=result;if(!result.allow_theme_switch&&state.theme!==result.default_theme){state.theme=result.default_theme;localStorage.setItem(STORAGE_THEME,state.theme);}applyDashboardIdentity();toast(t("saved"));render();};
     };
     draw();
@@ -5743,14 +5790,9 @@ async function loadCatalogChoices() {
       renderGallery(page);
     };
     document.querySelectorAll("[data-gallery-delete]").forEach(btn => {
-      btn.onclick = async () => {
-        try {
-          await api(`/api/admin/image-gallery/${btn.dataset.galleryDelete}`, { method: "DELETE" });
-          toast(t("deleted"));
-          renderGallery(page);
-        } catch (error) {
-          toast(error.message, "error");
-        }
+      btn.onclick = () => {
+        const image = images.find(item => String(item.id) === String(btn.dataset.galleryDelete));
+        if (image) showMediaDeleteWarning(image, () => renderGallery(page));
       };
     });
     document.querySelectorAll("[data-gallery-copy]").forEach(btn => {
