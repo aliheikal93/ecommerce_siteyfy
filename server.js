@@ -7081,6 +7081,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
   const trackedStock = inventoryMode === "tracked" ? Math.max(0, Number(variant.stock || 0)) : null;
   const isInStock = inventoryMode === "unlimited" || (inventoryMode === "tracked" && trackedStock > 0);
   const stableFallbackId = `variant-${crypto.createHash("sha256").update(JSON.stringify([color, option, value, variant.sku || "", variant.barcode || "", index])).digest("hex").slice(0, 12)}`;
+  const imageUrl = String(variant.image_url || variant.image || "").trim();
+  const images = [...new Set([imageUrl, ...asArray(variant.images || variant.gallery || variant.side_photos).map((item) => String(item?.url || item || "").trim())].filter(Boolean))];
   return {
     id: variant.id || stableFallbackId,
     type,
@@ -7091,7 +7093,8 @@ function normalizedProductVariant(variant = {}, index = 0) {
     value,
     sku: String(variant.sku || "").trim().toUpperCase(),
     barcode: String(variant.barcode || "").trim(),
-    image_url: String(variant.image_url || variant.image || "").trim(),
+    image_url: images[0] || "",
+    images,
     price: variant.price === "" || variant.price === null || variant.price === undefined ? null : Number(variant.price || 0),
     compare_at_price: variant.compare_at_price === "" || variant.compare_at_price === null || variant.compare_at_price === undefined ? null : Number(variant.compare_at_price || 0),
     cost: variant.cost === "" || variant.cost === null || variant.cost === undefined ? 0 : Number(variant.cost || 0),
@@ -7128,6 +7131,10 @@ function normalizeProductPayload(payload = {}) {
   const hasExplicitProductType = ["basic", "variable"].includes(requestedProductType);
   const productType = hasExplicitProductType ? requestedProductType : (variants.length ? "variable" : "basic");
   const normalizedVariants = hasExplicitProductType && productType === "basic" ? [] : variants;
+  const sharedWeight = payload.weight === "" || payload.weight === null || payload.weight === undefined
+    ? normalizedVariants.find((variant) => variant.weight !== null && variant.weight !== undefined)?.weight
+    : payload.weight;
+  const canonicalVariants = normalizedVariants.map((variant) => ({ ...variant, weight: null }));
   const legacySidePhotos = asArray(payload.side_photos || payload.gallery || payload.images).filter(Boolean);
   const explicitMedia = payload.media_gallery !== undefined ? asArray(payload.media_gallery) : legacySidePhotos;
   const mediaGallery = explicitMedia
@@ -7144,7 +7151,7 @@ function normalizeProductPayload(payload = {}) {
       : "tracked";
   const inventoryMode = hasExplicitProductType && productType === "variable" ? "unlimited" : baseInventoryMode;
   const variableReset = hasExplicitProductType && productType === "variable";
-  const normalizedMainImage = variableReset ? "" : (payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim());
+  const normalizedMainImage = payload.main_photo_url !== undefined ? String(payload.main_photo_url || "").trim() : String(payload.image_url || "").trim();
   return {
     ...payload,
     product_type: productType,
@@ -7156,26 +7163,26 @@ function normalizeProductPayload(payload = {}) {
     cost: variableReset ? 0 : Number(payload.cost || 0),
     inventory_mode: inventoryMode,
     stock: variableReset || inventoryMode === "unlimited" ? null : inventoryMode === "out_of_stock" ? 0 : Math.max(0, Number(payload.stock || 0)),
-    is_in_stock: variableReset ? normalizedVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0),
-    stock_status: variableReset ? (normalizedVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) ? "in_stock" : "out_of_stock") : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0) ? "in_stock" : "out_of_stock",
+    is_in_stock: variableReset ? canonicalVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0),
+    stock_status: variableReset ? (canonicalVariants.some((variant) => variant.is_active !== false && variant.is_in_stock !== false) ? "in_stock" : "out_of_stock") : inventoryMode === "unlimited" || (inventoryMode === "tracked" && Math.max(0, Number(payload.stock || 0)) > 0) ? "in_stock" : "out_of_stock",
     goods_type_id: String(payload.goods_type_id || "").trim(),
     shipping_profile_id: String(payload.shipping_profile_id || "").trim(),
     requires_shipping: payload.requires_shipping !== false && payload.requires_shipping !== "false",
-    weight: variableReset ? null : nullableNumber(payload.weight),
+    weight: nullableNumber(sharedWeight),
     length: nullableNumber(payload.length),
     width: nullableNumber(payload.width),
     height: nullableNumber(payload.height),
     origin_country_code: String(payload.origin_country_code || "").trim().toUpperCase(),
     hs_code: String(payload.hs_code || "").trim(),
     shipping_data_source: ["manual", "imported", "estimated", "profile"].includes(payload.shipping_data_source) ? payload.shipping_data_source : "profile",
-    variants: normalizedVariants,
+    variants: canonicalVariants,
     category_id: payload.category_id === "" || payload.category_id === null || payload.category_id === undefined ? null : Number(payload.category_id),
     category_slug: String(payload.category_slug || payload.category?.slug || "").trim(),
     subcategory_ids: [...new Set(asArray(payload.subcategory_ids).map(value => Number(value)).filter(value => Number.isInteger(value) && value > 0))],
     primary_subcategory_id: payload.primary_subcategory_id === "" || payload.primary_subcategory_id === null || payload.primary_subcategory_id === undefined ? null : Number(payload.primary_subcategory_id),
     label_ids: [...new Set(asArray(payload.label_ids).map(value => String(value || "").trim()).filter(Boolean))],
     facet_ids: [...new Set(asArray(payload.facet_ids).map(value => String(value || "").trim()).filter(Boolean))],
-    active_variants: normalizedVariants.filter((variant) => variant.is_active !== false),
+    active_variants: canonicalVariants.filter((variant) => variant.is_active !== false),
     generated_images: variableReset ? [] : asArray(payload.generated_images),
     media_gallery: variableReset ? [] : mediaGallery,
     side_photos: variableReset ? [] : mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
@@ -7213,6 +7220,7 @@ function validateProductPayload(product = {}, { requireExplicitType = false } = 
       if (variant.price === null || !Number.isFinite(Number(variant.price))) fail(`Variant ${index + 1} must have its own price`);
     });
   }
+  assignUniqueProductIdentifiers(normalized, product.id || normalized.id || null);
   return normalized;
 }
 
@@ -7230,6 +7238,67 @@ function generatedCatalogSku(product, index = 0) {
     .toUpperCase()
     .slice(0, 18) || "PRODUCT";
   return `${stem}-${String(product.id || index + 1).padStart(4, "0")}`;
+}
+
+function catalogIdentifiersInUse(excludeProductId = null) {
+  const skus = new Set(), barcodes = new Set();
+  entityRows("products", true).forEach((product) => {
+    if (excludeProductId !== null && String(product.id) === String(excludeProductId)) return;
+    const add = (row = {}) => {
+      const sku = String(row.sku || "").trim().toUpperCase();
+      const barcode = String(row.barcode || "").trim();
+      if (sku) skus.add(sku);
+      if (barcode) barcodes.add(barcode);
+    };
+    add(product);
+    asArray(product.variants).forEach(add);
+  });
+  return { skus, barcodes };
+}
+
+function generatedUniqueSku(product = {}, suffix = "", used = new Set()) {
+  const stem = String(product.slug || product.name_en || product.category_slug || "PRODUCT")
+    .normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase().slice(0, 16) || "PRODUCT";
+  let candidate;
+  do candidate = [stem, suffix, crypto.randomBytes(3).toString("hex").toUpperCase()].filter(Boolean).join("-"); while (used.has(candidate));
+  return candidate;
+}
+
+function ean13CheckDigit(firstTwelve) {
+  const digits = String(firstTwelve).padStart(12, "0").slice(-12).split("").map(Number);
+  const sum = digits.reduce((total, digit, index) => total + digit * (index % 2 ? 3 : 1), 0);
+  return String((10 - (sum % 10)) % 10);
+}
+
+function generatedUniqueBarcode(seed = "", used = new Set()) {
+  for (let counter = 0; counter < 1000; counter += 1) {
+    const digest = crypto.createHash("sha256").update(`${seed}:${Date.now()}:${counter}:${crypto.randomBytes(4).toString("hex")}`).digest("hex");
+    const twelve = BigInt(`0x${digest.slice(0, 15)}`).toString().padEnd(12, "0").slice(0, 12);
+    const candidate = `${twelve}${ean13CheckDigit(twelve)}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  fail("Could not generate a unique barcode");
+}
+
+function assignUniqueProductIdentifiers(product = {}, excludeProductId = null) {
+  const { skus, barcodes } = catalogIdentifiersInUse(excludeProductId);
+  const reserve = (row, label, suffix) => {
+    let sku = String(row.sku || "").trim().toUpperCase();
+    let barcode = String(row.barcode || "").trim();
+    if (sku && skus.has(sku)) fail(`${label} SKU must be unique`);
+    if (barcode && barcodes.has(barcode)) fail(`${label} barcode must be unique`);
+    if (!sku) sku = generatedUniqueSku(product, suffix, skus);
+    skus.add(sku);
+    if (!barcode) barcode = generatedUniqueBarcode(`${product.slug || product.name_en || "product"}:${suffix}`, barcodes);
+    barcodes.add(barcode);
+    row.sku = sku;
+    row.barcode = barcode;
+  };
+  if (product.product_type === "variable") {
+    product.sku = "";
+    product.barcode = "";
+    product.variants.forEach((variant, index) => reserve(variant, `Variant ${index + 1}`, `V${String(index + 1).padStart(2, "0")}`));
+  } else reserve(product, "Product", "");
 }
 
 function inferredShippingProfile(product = {}) {
@@ -7893,12 +7962,12 @@ function productForStore(product = {}) {
   const primarySubcategory = subcategories.find((row) => Number(row.id) === Number(normalized.primary_subcategory_id)) || subcategories[0] || null;
   const variablePrices = activeRawVariants.map((variant) => effectiveVariantPrice(normalized, variant)).filter((value) => Number.isFinite(value));
   const trackedStocks = activeRawVariants.filter((variant) => variant.stock !== null && variant.stock !== undefined).map((variant) => Math.max(0, Number(variant.stock || 0)));
-  const variableImage = activeRawVariants.find((variant) => variant.image_url)?.image_url || "";
+  const variableImage = normalized.main_photo_url || normalized.image_url || activeRawVariants.find((variant) => variant.image_url)?.image_url || "";
   return {
     ...publicProduct,
     product_type: normalized.product_type,
-    main_photo_url: normalized.product_type === "variable" ? variableImage : (normalized.main_photo_url || normalized.image_url || ""),
-    image_url: normalized.product_type === "variable" ? variableImage : (normalized.image_url || normalized.main_photo_url || ""),
+    main_photo_url: variableImage || normalized.main_photo_url || normalized.image_url || "",
+    image_url: variableImage || normalized.image_url || normalized.main_photo_url || "",
     price: normalized.product_type === "variable" && variablePrices.length ? Math.min(...variablePrices) : Number(normalized.price || 0),
     sale_price: normalized.product_type === "variable" && variablePrices.length ? Math.min(...variablePrices) : Number(normalized.sale_price || 0),
     inventory_mode: normalized.product_type === "variable" ? (activeRawVariants.some((variant) => variant.stock === null && variant.is_in_stock !== false) ? "unlimited" : "tracked") : normalized.inventory_mode,
@@ -7922,7 +7991,7 @@ function productForAdminList(product = {}) {
   const costs = activeVariants.map((variant) => Number(variant.cost || 0)).filter(Number.isFinite);
   const trackedStocks = activeVariants.filter((variant) => variant.stock !== null && variant.stock !== undefined).map((variant) => Math.max(0, Number(variant.stock || 0)));
   const hasUnlimitedStock = activeVariants.some((variant) => variant.stock === null && variant.is_in_stock !== false);
-  const image = activeVariants.find((variant) => variant.image_url)?.image_url || "";
+  const image = normalized.main_photo_url || normalized.image_url || activeVariants.find((variant) => variant.image_url)?.image_url || "";
   return {
     ...normalized,
     main_photo_url: image,
@@ -8969,7 +9038,7 @@ function productForNextStore(product = {}) {
     labelAr: variant.color,
     hexCode: variant.hex_code || variant.hex || "#111111",
     image: variant.image_url || product.main_photo_url || product.image_url || "",
-    images: [variant.image_url].filter(Boolean),
+    images: [...new Set([variant.image_url, ...asArray(variant.images)].filter(Boolean))],
     price: Number(variant.price || 0) || (basePrice + Number(variant.price_adjustment || 0)),
     compareAtPrice: Number(variant.compare_at_price || product.price_before || 0) || undefined,
     stock: variant.stock === null || variant.stock === undefined ? 999999 : Number(variant.stock || 0),
@@ -8985,7 +9054,8 @@ function productForNextStore(product = {}) {
     compareAtPrice: Number(variant.compare_at_price || product.price_before || 0) || undefined,
     stock: variant.stock === null || variant.stock === undefined ? 999999 : Number(variant.stock || 0),
     variantId: variant.id,
-    image: variant.image_url || undefined
+    image: variant.image_url || undefined,
+    images: [...new Set([variant.image_url, ...asArray(variant.images)].filter(Boolean))]
   }));
   const rawLabels = Array.isArray(product.labels) ? product.labels : String(product.labels || "").split(",").map((item) => item.trim()).filter(Boolean);
   const facetRows = entityRows("facets");
@@ -9386,11 +9456,12 @@ function productDetailHtml(product) {
       id: variant.id || `variant-${index}`,
       label: [variant.color, variant.option, variant.value].filter(Boolean).join(" / "),
       image_url: optimizedImage(variant.image_url || image, 1200),
+      images: [...new Set([variant.image_url, ...asArray(variant.images)].filter(Boolean))].map((src) => optimizedImage(src, 1200)),
       price: Number(variant.price || 0) || (baseSalePrice + Number(variant.price_adjustment || 0)),
       compare_at_price: Number(variant.compare_at_price || 0) || baseComparePrice
     }))
   };
-  const gallery = Array.from(new Set([image, ...(product.side_photos || []), ...(product.gallery || []), ...(product.images || []), ...variants.map((variant) => variant.image_url)].filter(Boolean).map((src) => optimizedImage(src, 640))));
+  const gallery = Array.from(new Set([image, ...(product.side_photos || []), ...(product.gallery || []), ...(product.images || [])].filter(Boolean).map((src) => optimizedImage(src, 640))));
   const price = baseSalePrice.toLocaleString("ar-EG");
   const comparePrice = baseComparePrice ? baseComparePrice.toLocaleString("ar-EG") : "";
   const brand = product.brand?.name_ar || product.brand_ar || product.brand?.name_en || product.brand_en || "";
@@ -9496,7 +9567,8 @@ function productDetailHtml(product) {
             const variantPrice = Number(variant.price || 0) || (baseSalePrice + Number(variant.price_adjustment || 0));
             const variantCompare = Number(variant.compare_at_price || 0) || baseComparePrice;
             const label = [variant.color, variant.option, variant.value].filter(Boolean).join(" / ");
-            return `<button class="variant-option" type="button" data-variant-index="${index}" data-image="${escapeHtml(optimizedImage(variant.image_url || image, 1200))}" data-price="${variantPrice}" data-compare="${variantCompare}">${escapeHtml(label)}</button>`;
+            const images = [...new Set([variant.image_url, ...(variant.images || [])].filter(Boolean))].map((src) => optimizedImage(src, 1200));
+            return `<button class="variant-option" type="button" data-variant-index="${index}" data-image="${escapeHtml(images[0] || image)}" data-images="${escapeHtml(JSON.stringify(images))}" data-price="${variantPrice}" data-compare="${variantCompare}">${escapeHtml(label)}</button>`;
           }).join("")}
         </div></div>` : ""}
         <div class="quantity"><button id="qtyMinus" type="button" aria-label="Decrease">-</button><span id="productQuantity">1</span><button id="qtyPlus" type="button" aria-label="Increase">+</button></div>
@@ -9517,7 +9589,7 @@ function productDetailHtml(product) {
   ${storefrontLanguageScript()}
   <script>
     const productData = ${JSON.stringify(cartProduct)};
-    const galleryImages = ${JSON.stringify(gallery)};
+    let galleryImages = ${JSON.stringify(gallery)};
     let selectedVariant = productData.variants[0] || null;
     let quantity = 1;
     let galleryIndex = 0;
@@ -9574,6 +9646,17 @@ function productDetailHtml(product) {
         button.classList.add("active");
         selectedVariant = productData.variants[Number(button.dataset.variantIndex)] || null;
         const image = button.dataset.image;
+        const selectedImages = JSON.parse(button.dataset.images || "[]");
+        if (selectedImages.length) {
+          galleryImages = selectedImages;
+          galleryIndex = 0;
+          const thumbs = document.getElementById("galleryThumbs");
+          if (thumbs) {
+            thumbs.innerHTML = galleryImages.map((src,index) => "<button class=\"thumb" + (index === 0 ? " active" : "") + "\" type=\"button\" data-gallery-index=\"" + index + "\"><img src=\"" + src + "\" width=\"120\" height=\"120\" alt=\"\" loading=\"lazy\" decoding=\"async\" /></button>").join("");
+            document.querySelectorAll("[data-gallery-index]").forEach(node => node.addEventListener("click", () => renderGallery(Number(node.dataset.galleryIndex))));
+          }
+          renderGallery(0);
+        }
         const price = Number(button.dataset.price || 0).toLocaleString("ar-EG");
         const compare = Number(button.dataset.compare || 0);
         const mainImage = document.getElementById("mainProductImage");

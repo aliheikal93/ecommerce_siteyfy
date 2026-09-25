@@ -1489,6 +1489,8 @@ h3 { font-size: 15px; margin-bottom: 8px; }
   border-radius: 8px;
   padding: 12px;
   background: var(--panel-soft);
+  position: relative;
+  padding-top: 52px;
 }
 .variant-row label {
   display: grid;
@@ -4480,3 +4482,14 @@ h3 { font-size: 15px; margin-bottom: 8px; }
 .product-media-toolbar>.toolbar{flex:0 0 auto}.product-media-toolbar input[type=file]{display:none}
 .variant-image-actions .btn{cursor:pointer}
 @media(max-width:760px){.media-library-backdrop{padding:0}.media-library-modal{width:100%;height:100%;max-height:none;border-radius:0}.media-library-tools{grid-template-columns:1fr auto;padding:12px 14px}.media-library-tabs{grid-column:1/-1;overflow:auto}.media-library-search{min-width:0}.media-library-upload{padding-inline:12px}.media-library-upload svg{margin:0}.media-library-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.media-library-body{padding:14px}.media-library-head{padding:16px}.media-library-head p{font-size:12px}.media-library-foot{padding:12px 14px}.image-upload-box{gap:11px}.image-upload-preview{flex:0 0 92px}.image-upload-actions .btn:first-child{font-size:12px;padding-inline:10px}}
+
+.variant-delete{position:absolute;inset-block-start:12px;inset-inline-end:12px;z-index:2;}
+.variant-gallery-strip{grid-column:1/-1;display:flex;gap:9px;overflow-x:auto;padding:10px;border:1px dashed var(--line-strong);border-radius:8px;background:#fff;min-height:94px;}
+.variant-gallery-strip:empty::after{content:"لا توجد صور لهذا الخيار";margin:auto;color:var(--muted);font-size:11px;}
+.variant-gallery-item{position:relative;flex:0 0 74px;height:74px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);overflow:hidden;}
+.variant-gallery-item>button:first-child{width:100%;height:100%;padding:0;border:0;background:transparent;cursor:pointer;}
+.variant-gallery-item img{width:100%;height:100%;object-fit:cover;display:block;}
+.variant-gallery-item span{position:absolute;inset-inline-start:4px;inset-block-end:4px;padding:2px 5px;border-radius:4px;background:var(--brand);color:#fff;font-size:8px;font-weight:900;}
+.variant-gallery-item.is-main{box-shadow:0 0 0 2px var(--brand);}
+.variant-gallery-remove{position:absolute;inset-block-start:3px;inset-inline-end:3px;width:20px;height:20px;padding:0;display:grid;place-items:center;border:0;border-radius:50%;background:rgba(255,255,255,.94);color:#b42318;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.15);}
+.variant-gallery-remove .icon{width:12px;height:12px;}

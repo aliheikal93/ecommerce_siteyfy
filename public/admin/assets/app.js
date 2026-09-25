@@ -2561,10 +2561,11 @@ async function loadCatalogChoices() {
       if (productType === "variable") return [
         { kicker:"01", title:ui("Product identity", "هوية المنتج"), description:ui("Shared names, URL, visibility, and catalog placement only.", "الاسم والرابط وحالة الظهور وربط الكتالوج فقط.") , fields:pick(["name_en", "name_ar", "slug", "is_active"]) },
         { kicker:"02", title:t("catalog"), description:ui("Categories, facets, and card labels remain shared by all variants.", "التصنيفات والفئات وليبل الكارت مشتركة بين كل المتغيرات."), fields:commonCatalog },
-        { kicker:"03", title:t("productVariants"), description:ui("Add at least two variants. Every row owns its image, price, cost, stock, code, and weight.", "أضف متغيرين على الأقل. كل سطر له صورته وسعره وتكلفته ومخزونه وكوده ووزنه."), single:true, fields:[], extra:variantsField(row) },
-        { kicker:"04", title:ui("Shared shipping details", "بيانات الشحن المشتركة"), description:ui("Package dimensions can stay shared; each variant keeps its own weight.", "أبعاد الطرد ممكن تفضل مشتركة، ووزن كل متغير موجود داخله."), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "length", "width", "height", "origin_country_code", "hs_code"]) },
-        { kicker:"05", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
-        { kicker:"06", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
+        { kicker:"03", title:ui("Product card image", "صورة كارت المنتج"), description:ui("This image represents the variable product before a customer chooses an option.", "هذه الصورة تمثل المنتج المتغير على الكارت قبل اختيار أحد الخيارات."), accent:true, single:true, fields:pick(["main_photo_url"]) },
+        { kicker:"04", title:t("productVariants"), description:ui("Each option has a main image, gallery, price, cost, stock, SKU, and barcode.", "كل خيار له صورة رئيسية ومعرض وسعر وتكلفة ومخزون وSKU وباركود."), single:true, fields:[], extra:variantsField(row) },
+        { kicker:"05", title:ui("Shared shipping details", "بيانات الشحن المشتركة"), description:ui("Weight and package dimensions apply to every option.", "الوزن وأبعاد الطرد تطبق على كل الخيارات."), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
+        { kicker:"06", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
+        { kicker:"07", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
       ];
       return [
         { id:"productMediaSection", kicker:"01", title:ui("Product gallery", "معرض صور المنتج"), description:ui("One unified gallery for this fixed product.", "معرض صور موحد للمنتج الثابت."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
@@ -2813,191 +2814,61 @@ async function loadCatalogChoices() {
     `;
   }
 
+  function variantImages(variant = {}) {
+    return [...new Set([variant.image_url, ...parseJsonArray(variant.images || variant.gallery || variant.side_photos)].map(item => String(item?.url || item || "").trim()).filter(Boolean))];
+  }
+
+  function variantMediaStrip(images = []) {
+    return images.map((url,index) => `<div class="variant-gallery-item ${index===0?"is-main":""}" data-variant-gallery-url="${escapeHtml(url)}"><button type="button" data-set-variant-main title="${index===0?ui("Main image","الصورة الرئيسية"):ui("Set as main","تعيين كرئيسية")}"><img src="${escapeHtml(url)}" alt="" />${index===0?`<span>${ui("Main","رئيسية")}</span>`:""}</button><button class="variant-gallery-remove" type="button" data-remove-variant-gallery-image title="${ui("Remove image","إزالة الصورة")}">${i("x")}</button></div>`).join("");
+  }
+
   function variantRow(variant = {}) {
-    const colors = state.rows.colors || [];
-    const options = state.rows.options || [];
-    const type = variant.type || (variant.color && variant.option ? "color_option" : variant.color ? "color" : "option");
-    const active = variant.is_active !== false && variant.isActive !== false && variant.active !== false;
-    const inStock = variant.is_in_stock !== false && variant.in_stock !== false && variant.stock_status !== "out_of_stock";
-    const inventoryMode = ["unlimited", "tracked", "out_of_stock"].includes(variant.inventory_mode)
-      ? variant.inventory_mode
-      : !inStock ? "out_of_stock" : variant.stock === "" || variant.stock === null || variant.stock === undefined ? "unlimited" : "tracked";
-    const colorMatches = item => [item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.color,item.hex].filter(Boolean).some(value => String(value).toLowerCase() === String(variant.color || "").toLowerCase());
-    const selectedOptionValue = String(variant.value || variant.option || "");
-    const optionMatches = item => [item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.id].filter(Boolean).some(value => String(value).toLowerCase() === selectedOptionValue.toLowerCase());
-    const matchedOption = options.find(optionMatches);
-    const selectedOptionGroup = matchedOption
-      ? (matchedOption.groupEn || matchedOption.group_en || matchedOption.groupAr || matchedOption.group_ar || variant.option || "")
-      : (variant.option || "");
-    return `
-      <div class="variant-row">
-        <input type="hidden" data-variant-field="type" value="${escapeHtml(type)}" />
-        <input type="hidden" data-variant-field="is_active" value="${active ? "true" : "false"}" />
-        <input type="hidden" data-variant-field="is_in_stock" value="${inStock ? "true" : "false"}" />
-        <input type="hidden" data-variant-field="inventory_mode" value="${inventoryMode}" />
-        <input type="hidden" data-variant-field="image_url" value="${escapeHtml(variant.image_url || "")}" />
-        <input type="hidden" data-variant-field="option" value="${escapeHtml(selectedOptionGroup)}" />
-        <div class="variant-kind">
-          <span>${t("variantType")}</span>
-          <strong>${type === "color" ? t("colors") : type === "option" ? t("options") : `${t("colors")} + ${t("options")}`}</strong>
-        </div>
-        <div class="variant-image-upload">
-          <span>${t("image")}</span>
-          <div class="variant-image-box">
-            <button class="variant-image-preview" type="button" data-open-variant-image ${variant.image_url ? "" : "disabled"}>${variant.image_url ? `<img src="${escapeHtml(variant.image_url)}" alt="" />` : i("image")}</button>
-            <div class="variant-image-actions"><button class="btn icon-btn" type="button" data-pick-variant-image title="${ui("Choose from library", "اختيار من المكتبة")}">${i("image")}</button><button class="btn icon-btn danger" type="button" data-remove-variant-image title="${ui("Remove image", "إزالة الصورة")}" ${variant.image_url ? "" : "disabled"}>${i("trash")}</button></div>
-          </div>
-        </div>
-        <label><span>${t("colors")}</span><select data-variant-field="color" ${type === "option" ? "disabled" : ""}>
-          <option value="">-</option>
-          ${variant.color && !colors.some(colorMatches) ? `<option value="${escapeHtml(variant.color)}" selected>${escapeHtml(variant.color)} · ${ui("Current value", "القيمة الحالية")}</option>` : ""}
-          ${colors.map(row => {
-            const label = row.name_en || row.nameEn || row.name_ar || row.nameAr || row.color;
-            const hex = row.color || row.hex || "#d7dae0";
-            return `<option value="${escapeHtml(label)}" ${colorMatches(row) ? "selected" : ""}>● ${escapeHtml(label)} · ${escapeHtml(hex)}</option>`;
-          }).join("")}
-        </select></label>
-        <label><span>${ui("Option choice", "اختيار الخيار")}</span><select data-variant-option-choice ${type === "color" ? "disabled" : ""}>
-          <option value="">-</option>
-          ${selectedOptionValue && !options.some(optionMatches) ? `<option value="${escapeHtml(selectedOptionValue)}" selected>${escapeHtml(selectedOptionValue)} · ${ui("Current value", "القيمة الحالية")}</option>` : ""}
-          ${options.map(row => {
-            const label = row.name_en || row.nameEn || row.name_ar || row.nameAr;
-            const group = row.groupEn || row.group_en || row.groupAr || row.group_ar || variant.option || "";
-            return `<option value="${escapeHtml(label)}" data-option-group="${escapeHtml(group)}" ${optionMatches(row) ? "selected" : ""}>${escapeHtml(label)}</option>`;
-          }).join("")}
-        </select></label>
-        <label><span>${ui("Selected value", "القيمة المختارة")}</span><input data-variant-field="value" value="${escapeHtml(variant.value || variant.option || "")}" ${type === "color" ? "disabled" : ""} /></label>
-        <label><span>${t("sku")}</span><input data-variant-field="sku" value="${escapeHtml(variant.sku || "")}" /></label>
-        <label><span>${t("barcode")}</span><input data-variant-field="barcode" value="${escapeHtml(variant.barcode || "")}" /></label>
-        <label><span>${t("price")}</span><input data-variant-field="price" type="number" step="0.01" value="${variant.price ?? ""}" /></label>
-        <label><span>${t("compareAtPrice")}</span><input data-variant-field="compare_at_price" type="number" step="0.01" value="${variant.compare_at_price ?? ""}" /></label>
-        <label><span>${t("cost")}</span><input data-variant-field="cost" type="number" step="0.01" value="${variant.cost ?? ""}" /></label>
-        <label><span>${t("priceAdjustment")}</span><input data-variant-field="price_adjustment" type="number" step="0.01" value="${Number(variant.price_adjustment || 0)}" /></label>
-        <label><span>${t("weightKg")}</span><input data-variant-field="weight" type="number" min="0" step="0.01" value="${variant.weight ?? ""}" /></label>
-        <label><span>${ui("Inventory", "المخزون")}</span><select data-variant-inventory-mode><option value="unlimited" ${inventoryMode === "unlimited" ? "selected" : ""}>${ui("Unlimited", "غير محدود")}</option><option value="tracked" ${inventoryMode === "tracked" ? "selected" : ""}>${ui("Track quantity", "تتبع كمية")}</option><option value="out_of_stock" ${inventoryMode === "out_of_stock" ? "selected" : ""}>${ui("Out of stock", "نافد")}</option></select></label>
-        <label data-variant-stock-wrap ${inventoryMode === "tracked" ? "" : "hidden"}><span>${t("stock")}</span><input data-variant-field="stock" type="number" min="0" value="${inventoryMode === "tracked" ? Math.max(0, Number(variant.stock ?? 0)) : ""}" /></label>
-        <div class="variant-switch">
-          ${switchButton({ field: "variant_is_active", value: active, id: "", label: true })}
-        </div>
-        <div class="variant-switch variant-stock-switch">
-          <span>${ui("Available for sale", "متاح للبيع")}</span>
-          ${switchButton({ field: "variant_in_stock", value: inStock, id: "", label: false })}
-        </div>
-        <button class="btn icon-btn danger" type="button" data-remove-variant>${i("trash")}</button>
-      </div>
-    `;
+    const colors=state.rows.colors||[], options=state.rows.options||[];
+    const type=variant.type||(variant.color&&variant.option?"color_option":variant.color?"color":"option");
+    const active=variant.is_active!==false&&variant.isActive!==false&&variant.active!==false;
+    const inStock=variant.is_in_stock!==false&&variant.in_stock!==false&&variant.stock_status!=="out_of_stock";
+    const inventoryMode=["unlimited","tracked","out_of_stock"].includes(variant.inventory_mode)?variant.inventory_mode:!inStock?"out_of_stock":variant.stock===""||variant.stock===null||variant.stock===undefined?"unlimited":"tracked";
+    const colorMatches=item=>[item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.color,item.hex].filter(Boolean).some(value=>String(value).toLowerCase()===String(variant.color||"").toLowerCase());
+    const selectedOptionValue=String(variant.value||variant.option||"");
+    const optionMatches=item=>[item.name_en,item.nameEn,item.name_ar,item.nameAr,item.slug,item.id].filter(Boolean).some(value=>String(value).toLowerCase()===selectedOptionValue.toLowerCase());
+    const matchedOption=options.find(optionMatches);
+    const selectedOptionGroup=matchedOption?(matchedOption.groupEn||matchedOption.group_en||matchedOption.groupAr||matchedOption.group_ar||variant.option||""):(variant.option||"");
+    const images=variantImages(variant);
+    const optionRows=options.map(row=>{const label=row.name_en||row.nameEn||row.name_ar||row.nameAr;const group=row.groupEn||row.group_en||row.groupAr||row.group_ar||variant.option||"";return `<option value="${escapeHtml(label)}" data-option-group="${escapeHtml(group)}" ${optionMatches(row)?"selected":""}>${escapeHtml(label)}</option>`;}).join("");
+    const colorRows=colors.map(row=>{const label=row.name_en||row.nameEn||row.name_ar||row.nameAr||row.color,hex=row.color||row.hex||"#d7dae0";return `<option value="${escapeHtml(label)}" ${colorMatches(row)?"selected":""}>● ${escapeHtml(label)} · ${escapeHtml(hex)}</option>`;}).join("");
+    return `<div class="variant-row">
+      <button class="btn icon-btn danger variant-delete" type="button" data-remove-variant title="${t("delete")}">${i("trash")}</button>
+      <input type="hidden" data-variant-field="type" value="${escapeHtml(type)}" /><input type="hidden" data-variant-field="is_active" value="${active}" /><input type="hidden" data-variant-field="is_in_stock" value="${inStock}" /><input type="hidden" data-variant-field="inventory_mode" value="${inventoryMode}" /><input type="hidden" data-variant-field="image_url" value="${escapeHtml(images[0]||"")}" /><input type="hidden" data-variant-images value="${escapeHtml(JSON.stringify(images))}" /><input type="hidden" data-variant-field="option" value="${escapeHtml(selectedOptionGroup)}" /><input type="hidden" data-variant-field="value" value="${escapeHtml(selectedOptionValue)}" />
+      <div class="variant-kind"><span>${t("variantType")}</span><strong>${type==="color"?t("colors"):type==="option"?t("options"):`${t("colors")} + ${t("options")}`}</strong></div>
+      <div class="variant-image-upload"><span>${ui("Option gallery","صور الخيار")}</span><button class="btn" type="button" data-pick-variant-images>${i("images")}${ui("Choose images","اختيار الصور")}</button></div>
+      <label><span>${t("colors")}</span><select data-variant-field="color" ${type==="option"?"disabled":""}><option value="">-</option>${variant.color&&!colors.some(colorMatches)?`<option value="${escapeHtml(variant.color)}" selected>${escapeHtml(variant.color)}</option>`:""}${colorRows}</select></label>
+      <label><span>${ui("Option choice","اختيار الخيار")}</span><select data-variant-option-choice ${type==="color"?"disabled":""}><option value="">-</option>${selectedOptionValue&&!options.some(optionMatches)?`<option value="${escapeHtml(selectedOptionValue)}" selected>${escapeHtml(selectedOptionValue)}</option>`:""}${optionRows}</select></label>
+      <label><span>${t("sku")}</span><input data-variant-field="sku" value="${escapeHtml(variant.sku||"")}" placeholder="${ui("Generated if empty","يتولد تلقائيًا عند تركه فارغًا")}" /></label>
+      <label><span>${t("barcode")}</span><input data-variant-field="barcode" value="${escapeHtml(variant.barcode||"")}" placeholder="${ui("Generated if empty","يتولد تلقائيًا عند تركه فارغًا")}" /></label>
+      <label><span>${t("price")}</span><input data-variant-field="price" type="number" step="0.01" value="${variant.price??""}" /></label><label><span>${t("compareAtPrice")}</span><input data-variant-field="compare_at_price" type="number" step="0.01" value="${variant.compare_at_price??""}" /></label><label><span>${t("cost")}</span><input data-variant-field="cost" type="number" step="0.01" value="${variant.cost??""}" /></label><label><span>${t("priceAdjustment")}</span><input data-variant-field="price_adjustment" type="number" step="0.01" value="${Number(variant.price_adjustment||0)}" /></label>
+      <label><span>${ui("Inventory","المخزون")}</span><select data-variant-inventory-mode><option value="unlimited" ${inventoryMode==="unlimited"?"selected":""}>${ui("Unlimited","غير محدود")}</option><option value="tracked" ${inventoryMode==="tracked"?"selected":""}>${ui("Track quantity","تتبع كمية")}</option><option value="out_of_stock" ${inventoryMode==="out_of_stock"?"selected":""}>${ui("Out of stock","نافد")}</option></select></label><label data-variant-stock-wrap ${inventoryMode==="tracked"?"":"hidden"}><span>${t("stock")}</span><input data-variant-field="stock" type="number" min="0" value="${inventoryMode==="tracked"?Math.max(0,Number(variant.stock??0)):""}" /></label>
+      <div class="variant-switch">${switchButton({field:"variant_is_active",value:active,id:"",label:true})}</div><div class="variant-switch variant-stock-switch"><span>${ui("Available for sale","متاح للبيع")}</span>${switchButton({field:"variant_in_stock",value:inStock,id:"",label:false})}</div>
+      <div class="variant-gallery-strip" data-variant-gallery-strip>${variantMediaStrip(images)}</div>
+    </div>`;
   }
 
   function bindVariantBuilder() {
-    const list = document.getElementById("variantList");
-    if (!list) return;
-    const sync = () => {
-      const rows = [...list.querySelectorAll(".variant-row")].map(row => {
-        const item = {};
-        row.querySelectorAll("[data-variant-field]").forEach(input => {
-          const key = input.dataset.variantField;
-          if (key === "is_active" || key === "is_in_stock") item[key] = input.value !== "false";
-          else if (input.type === "number" && input.value === "") item[key] = "";
-          else item[key] = input.type === "number" ? Number(input.value || 0) : input.value;
-        });
-        return item;
-      }).filter(item => item.color || item.option || item.value || item.sku || item.barcode || item.image_url || item.price || item.compare_at_price || item.cost || item.price_adjustment || item.weight || item.stock);
-      const hidden = document.querySelector("[data-variants-value]");
-      if (hidden) { hidden.value = JSON.stringify(rows); hidden.dispatchEvent(new Event("input", { bubbles:true })); }
+    const list=document.getElementById("variantList");if(!list)return;
+    const sync=()=>{const rows=[...list.querySelectorAll(".variant-row")].map(row=>{const item={};row.querySelectorAll("[data-variant-field]").forEach(input=>{const key=input.dataset.variantField;if(key==="is_active"||key==="is_in_stock")item[key]=input.value!=="false";else if(input.type==="number"&&input.value==="")item[key]="";else item[key]=input.type==="number"?Number(input.value||0):input.value;});item.images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);item.image_url=item.images[0]||"";return item;}).filter(item=>item.color||item.option||item.value||item.sku||item.barcode||item.image_url||item.price||item.compare_at_price||item.cost||item.price_adjustment||item.stock);const hidden=document.querySelector("[data-variants-value]");if(hidden){hidden.value=JSON.stringify(rows);hidden.dispatchEvent(new Event("input",{bubbles:true}));}};
+    const setImages=(row,urls=[])=>{const images=[...new Set(urls.filter(Boolean))];row.querySelector("[data-variant-images]").value=JSON.stringify(images);row.querySelector("[data-variant-field='image_url']").value=images[0]||"";row.querySelector("[data-variant-gallery-strip]").innerHTML=variantMediaStrip(images);rebind();sync();renderProductGallery();};
+    const rebind=()=>{
+      list.querySelectorAll("[data-variant-field]").forEach(input=>input.oninput=sync);
+      list.querySelectorAll("[data-variant-option-choice]").forEach(select=>select.onchange=()=>{const row=select.closest(".variant-row"),selected=select.selectedOptions[0],option=row?.querySelector("[data-variant-field='option']"),value=row?.querySelector("[data-variant-field='value']");if(option)option.value=selected?.dataset.optionGroup||"";if(value)value.value=select.value;sync();});
+      list.querySelectorAll("[data-form-switch='variant_is_active']").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);const hidden=btn.closest(".variant-row")?.querySelector("[data-variant-field='is_active']");if(hidden)hidden.value=btn.dataset.switchValue;sync();});
+      list.querySelectorAll("[data-form-switch='variant_in_stock']").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);const row=btn.closest(".variant-row"),hidden=row?.querySelector("[data-variant-field='is_in_stock']"),mode=row?.querySelector("[data-variant-field='inventory_mode']"),modeSelect=row?.querySelector("[data-variant-inventory-mode]"),stockWrap=row?.querySelector("[data-variant-stock-wrap]");if(hidden)hidden.value=btn.dataset.switchValue;if(btn.dataset.switchValue==="false"){if(mode)mode.value="out_of_stock";if(modeSelect)modeSelect.value="out_of_stock";}else if(mode?.value==="out_of_stock"){mode.value="unlimited";if(modeSelect)modeSelect.value="unlimited";}if(stockWrap)stockWrap.hidden=mode?.value!=="tracked";sync();});
+      list.querySelectorAll("[data-remove-variant]").forEach(btn=>btn.onclick=()=>{btn.closest(".variant-row")?.remove();sync();});
+      list.querySelectorAll("[data-variant-inventory-mode]").forEach(select=>select.onchange=()=>{const row=select.closest(".variant-row"),mode=select.value,modeInput=row?.querySelector("[data-variant-field='inventory_mode']"),inStockInput=row?.querySelector("[data-variant-field='is_in_stock']"),stockWrap=row?.querySelector("[data-variant-stock-wrap]"),stockInput=row?.querySelector("[data-variant-field='stock']");if(modeInput)modeInput.value=mode;if(inStockInput)inStockInput.value=mode==="out_of_stock"?"false":"true";if(stockWrap)stockWrap.hidden=mode!=="tracked";if(stockInput)stockInput.value=mode==="tracked"?Math.max(0,Number(stockInput.value||0)):"";sync();});
+      list.querySelectorAll("[data-pick-variant-images]").forEach(button=>button.onclick=()=>{const row=button.closest(".variant-row"),images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);openMediaLibraryPicker({multiple:true,selected:images,productId:activeProductId(),draftUrls:currentDraftImageUrls(),title:ui("Option gallery","معرض صور الخيار"),onSelect:urls=>setImages(row,urls)}).catch(error=>toast(error.message,"error"));});
+      list.querySelectorAll("[data-set-variant-main]").forEach(button=>button.onclick=()=>{const row=button.closest(".variant-row"),url=button.closest("[data-variant-gallery-url]").dataset.variantGalleryUrl,images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);setImages(row,[url,...images.filter(item=>item!==url)]);});
+      list.querySelectorAll("[data-remove-variant-gallery-image]").forEach(button=>button.onclick=()=>{const row=button.closest(".variant-row"),url=button.closest("[data-variant-gallery-url]").dataset.variantGalleryUrl,images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);setImages(row,images.filter(item=>item!==url));});
     };
-    const rebind = () => {
-      list.querySelectorAll("[data-variant-field]").forEach(input => input.oninput = sync);
-      list.querySelectorAll("[data-variant-option-choice]").forEach(select => select.onchange = () => {
-        const row = select.closest(".variant-row");
-        const selected = select.selectedOptions[0];
-        const option = row?.querySelector("[data-variant-field='option']");
-        const value = row?.querySelector("[data-variant-field='value']");
-        if (option) option.value = selected?.dataset.optionGroup || option.value || "";
-        if (value) value.value = select.value;
-        sync();
-      });
-      list.querySelectorAll("[data-form-switch='variant_is_active']").forEach(btn => {
-        btn.onclick = () => {
-          updateFormSwitch(btn);
-          const hidden = btn.closest(".variant-row")?.querySelector("[data-variant-field='is_active']");
-          if (hidden) hidden.value = btn.dataset.switchValue;
-          sync();
-        };
-      });
-      list.querySelectorAll("[data-form-switch='variant_in_stock']").forEach(btn => {
-        btn.onclick = () => {
-          updateFormSwitch(btn);
-          const row = btn.closest(".variant-row");
-          const hidden = row?.querySelector("[data-variant-field='is_in_stock']");
-          if (hidden) hidden.value = btn.dataset.switchValue;
-          const mode = row?.querySelector("[data-variant-field='inventory_mode']");
-          const modeSelect = row?.querySelector("[data-variant-inventory-mode]");
-          if (btn.dataset.switchValue === "false") { if (mode) mode.value = "out_of_stock"; if (modeSelect) modeSelect.value = "out_of_stock"; }
-          else if (mode?.value === "out_of_stock") { mode.value = "unlimited"; if (modeSelect) modeSelect.value = "unlimited"; }
-          const stockWrap = row?.querySelector("[data-variant-stock-wrap]");
-          if (stockWrap) stockWrap.hidden = mode?.value !== "tracked";
-          sync();
-        };
-      });
-      list.querySelectorAll("[data-remove-variant]").forEach(btn => {
-        btn.onclick = () => {
-          btn.closest(".variant-row")?.remove();
-          sync();
-        };
-      });
-      list.querySelectorAll("[data-variant-inventory-mode]").forEach(select => {
-        select.onchange = () => {
-          const row = select.closest(".variant-row");
-          const mode = select.value;
-          const modeInput = row?.querySelector("[data-variant-field='inventory_mode']");
-          const inStockInput = row?.querySelector("[data-variant-field='is_in_stock']");
-          const stockWrap = row?.querySelector("[data-variant-stock-wrap]");
-          const stockInput = row?.querySelector("[data-variant-field='stock']");
-          if (modeInput) modeInput.value = mode;
-          if (inStockInput) inStockInput.value = mode === "out_of_stock" ? "false" : "true";
-          if (stockWrap) stockWrap.hidden = mode !== "tracked";
-          if (stockInput) stockInput.value = mode === "tracked" ? Math.max(0, Number(stockInput.value || 0)) : "";
-          sync();
-        };
-      });
-      list.querySelectorAll("[data-open-variant-image]").forEach(btn => btn.onclick = () => {
-        const url = btn.closest(".variant-row")?.querySelector("[data-variant-field='image_url']")?.value;
-        if (url) openProductMediaViewer(url, [{ label:ui("Product variant", "متغير المنتج"), detail:ui("This image is linked to this exact option row.", "هذه الصورة مرتبطة بسطر الخيار المحدد.") }]);
-      });
-      list.querySelectorAll("[data-remove-variant-image]").forEach(btn => btn.onclick = () => {
-        const row = btn.closest(".variant-row");
-        const hidden = row?.querySelector("[data-variant-field='image_url']");
-        const preview = row?.querySelector(".variant-image-preview");
-        if (hidden) hidden.value = "";
-        if (preview) { preview.innerHTML = i("image"); preview.disabled = true; }
-        btn.disabled = true;
-        sync();
-        renderProductGallery();
-      });
-      list.querySelectorAll("[data-pick-variant-image]").forEach(button => {
-        button.onclick = () => {
-          const row = button.closest(".variant-row");
-          const hidden = row?.querySelector("[data-variant-field='image_url']");
-          openMediaLibraryPicker({ selected:hidden?.value ? [hidden.value] : [], productId:activeProductId(), draftUrls:currentDraftImageUrls(), onSelect:urls => {
-            const url = urls[0] || "";
-            const preview = row?.querySelector(".variant-image-preview");
-            if (hidden) hidden.value = url;
-            if (preview) { preview.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="" />` : i("image"); preview.disabled = !url; }
-            const remove = row?.querySelector("[data-remove-variant-image]"); if (remove) remove.disabled = !url;
-            sync(); renderProductGallery();
-          }}).catch(error => toast(error.message, "error"));
-        };
-      });
-    };
-    document.querySelectorAll("[data-add-variant-type]").forEach(btn => {
-      btn.onclick = () => {
-        list.insertAdjacentHTML("beforeend", variantRow({ type: btn.dataset.addVariantType, is_active: true, is_in_stock: true }));
-        rebind();
-        sync();
-      };
-    });
-    rebind();
-    sync();
+    document.querySelectorAll("[data-add-variant-type]").forEach(btn=>btn.onclick=()=>{list.insertAdjacentHTML("beforeend",variantRow({type:btn.dataset.addVariantType,is_active:true,is_in_stock:true}));rebind();sync();});
+    rebind();sync();
   }
 
   function generatedImageCard(url) {
@@ -3182,7 +3053,7 @@ async function loadCatalogChoices() {
     media.forEach((item, index) => add(item?.url || item, "gallery", `${item?.type === "video" ? ui("Gallery video", "فيديو معرض") : ui("Gallery image", "صورة معرض")} ${index + 1}`, item?.type || "image", Number(item?.sort_order ?? index)));
     side.forEach((url, index) => add(url, "gallery", `${ui("Gallery image", "صورة معرض")} ${index + 1}`, "image", index));
     generated.forEach((url, index) => add(url, "generated", `${ui("AI generated archive", "أرشيف الصور المولدة")} ${index + 1}`));
-    variantRows.forEach((variant, index) => { const url = variant.querySelector("[data-variant-field='image_url']")?.value; const color = variant.querySelector("[data-variant-field='color']")?.value; const option = variant.querySelector("[data-variant-field='option']")?.value; const value = variant.querySelector("[data-variant-field='value']")?.value; add(url, "variant", [ui("Variant", "متغير"), color, option, value].filter(Boolean).join(" · ") || `#${index + 1}`); });
+    variantRows.forEach((variant, index) => { const urls=parseJsonArray(variant.querySelector("[data-variant-images]")?.value);const color = variant.querySelector("[data-variant-field='color']")?.value; const option = variant.querySelector("[data-variant-field='option']")?.value; const value = variant.querySelector("[data-variant-field='value']")?.value; urls.forEach((url,imageIndex)=>add(url, "variant", [[ui("Variant", "متغير"), color, option, value].filter(Boolean).join(" · ") || `#${index + 1}`, imageIndex===0?ui("Main", "رئيسية"):ui(`Image ${imageIndex+1}`, `صورة ${imageIndex+1}`)].join(" · "))); });
     return [...map.values()].sort((a,b) => a.sources.some(item=>item.source === "main") ? -1 : b.sources.some(item=>item.source === "main") ? 1 : a.order-b.order);
   }
 
@@ -3233,7 +3104,7 @@ async function loadCatalogChoices() {
     if (side) side.value = JSON.stringify(parseJsonArray(side.value).filter(item => item !== url));
     if (media) media.value = JSON.stringify(parseJsonArray(media.value).filter(item => (item?.url || item) !== url).map((item, index) => ({ ...(typeof item === "string" ? { type:"image", url:item } : item), sort_order:index })));
     if (generated) generated.value = JSON.stringify(parseJsonArray(generated.value).filter(item => item !== url));
-    document.querySelectorAll(".variant-row").forEach(row => { const hidden = row.querySelector("[data-variant-field='image_url']"); if (hidden?.value === url) { hidden.value = ""; const preview = row.querySelector(".variant-image-preview"); if (preview) { preview.innerHTML = i("image"); preview.disabled = true; } row.querySelector("[data-remove-variant-image]").disabled = true; } });
+    document.querySelectorAll(".variant-row").forEach(row => { const field=row.querySelector("[data-variant-images]");const images=parseJsonArray(field?.value).filter(item=>item!==url);if(field)field.value=JSON.stringify(images);const main=row.querySelector("[data-variant-field='image_url']");if(main)main.value=images[0]||"";const strip=row.querySelector("[data-variant-gallery-strip]");if(strip)strip.innerHTML=variantMediaStrip(images); });
     main?.dispatchEvent(new Event("input", { bubbles:true }));
     document.querySelector("[data-variants-value]")?.dispatchEvent(new Event("input", { bubbles:true }));
     renderProductGallery();
@@ -3425,8 +3296,7 @@ async function loadCatalogChoices() {
         if (!Array.isArray(payload.variants) || payload.variants.length < 2) { toast(ui("Add at least two variants", "أضف متغيرين على الأقل"), "error"); return; }
         const incomplete = payload.variants.findIndex(variant => variant.price === "" || variant.price === null || variant.price === undefined || !(variant.color || variant.option || variant.value));
         if (incomplete >= 0) { toast(ui(`Complete variant ${incomplete + 1}: choose a color or option and enter its price.`, `أكمل المتغير رقم ${incomplete + 1}: اختر لونًا أو خيارًا وأدخل السعر.`), "error"); return; }
-        payload.main_photo_url = "";
-        payload.image_url = "";
+        payload.image_url = payload.main_photo_url || "";
         payload.media_gallery = [];
         payload.side_photos = [];
       } else {
