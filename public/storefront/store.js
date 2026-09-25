@@ -314,26 +314,31 @@ function productCategoryName(product) {
   return product.category_name_ar || product.category?.name_ar || product.category?.nameAr || "رداء الحشمة";
 }
 
-function productCard(product, home = false) {
+function productCard(product, home = false, pinnedVariant = null) {
   const colors = uniqueColors(product);
-  const compare = comparePrice(product);
-  const sale = compare > productPrice(product);
-  const soldOut = !productInStock(product);
+  const price = pinnedVariant ? variantPrice(product,pinnedVariant) : productPrice(product);
+  const candidateCompare = Number(pinnedVariant?.compare_at_price ?? comparePrice(product));
+  const compare = candidateCompare > price ? candidateCompare : 0;
+  const sale = compare > price;
+  const soldOut = pinnedVariant ? !variantInStock(pinnedVariant) : !productInStock(product);
+  const params=new URLSearchParams();if(pinnedVariant?.id!=null)params.set("variant",pinnedVariant.id);const query=params.toString();
+  const link=`/product/${product.id}${query?`?${query}`:""}`;
+  const image=pinnedVariant?.image_url||product.main_photo_url||product.image_url;
   const badges=(product.labels||[]).filter(label=>label.is_active!==false&&label.isActive!==false).map(label=>({text:label.nameAr||label.name_ar||label.nameEn||label.name_en||String(label),color:/^#[0-9a-f]{3,8}$/i.test(String(label.backgroundColor||""))?label.backgroundColor:"#513b82"})).filter(label=>!sale||!/^(تخفيض|sale)$/i.test(label.text)).slice(0,2);
-  return `<article class="product-card" data-product-card="${product.id}" data-card-href="/product/${product.id}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}">
+  return `<article class="product-card" data-product-card="${product.id}" data-card-href="${esc(link)}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}">
     <div class="product-media ${soldOut ? "is-out-of-stock" : ""}">
       ${sale ? `<span class="sale-badge">تخفيض</span>` : ""}
       ${badges.length?`<div class="product-card-badges ${sale?"under-sale":""}">${badges.map(label=>`<span style="--badge-bg:${esc(label.color)}">${esc(label.text)}</span>`).join("")}</div>`:""}
       ${soldOut ? `<span class="stock-badge">Out of Stock</span>` : ""}
       <button class="wish-button" type="button" aria-label="إضافة للمفضلة">${icon("heart",17)}</button>
-      <a href="/product/${product.id}" aria-label="${esc(product.name_ar)}"><img src="${esc(product.main_photo_url || product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a>
+      <a href="${esc(link)}" aria-label="${esc(product.name_ar)}"><img src="${esc(image)}" alt="${esc(product.name_ar)}" loading="lazy" /></a>
     </div>
     <div class="product-info">
       <div class="swatch-row">${colors.slice(0,5).map(color=>`<span class="mini-swatch" style="background:${esc(color.hex)}" title="${esc(color.name)}"></span>`).join("")}${colors.length>5?`<small>+${colors.length-5}</small>`:""}</div>
-      <div class="product-meta">${esc(productCategoryName(product))}</div>
-      <a class="product-title" href="/product/${product.id}">${esc(product.name_ar || product.name_en)}</a>
-      <div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>
-      ${productCardActions(product)}
+      <div class="product-meta">${esc(productCategoryName(product))}${pinnedVariant?` · ${esc(variantLabel(pinnedVariant))}`:""}</div>
+      <a class="product-title" href="${esc(link)}">${esc(product.name_ar || product.name_en)}</a>
+      <div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div>
+      ${productCardActions(product,pinnedVariant,link)}
     </div>
   </article>`;
 }
@@ -404,9 +409,13 @@ function bundleVisual(bundle, compact = false) {
   return `<div class="bundle-composite ${compact?"compact":""}">${(bundle.items||[]).slice(0,3).map((item,index)=>`${index?`<span class="bundle-plus">+</span>`:""}<img src="${esc(item.image_url||"")}" alt="${esc(item.name_ar||item.name_en)}" />`).join("")}</div>`;
 }
 
-function bundleCard(bundle) {
-  const compare=Number(bundle.compare_at_price||bundle.regular_total||0);
-  return `<article class="product-card bundle-card"><div class="product-media"><span class="bundle-badge">طقم</span><a href="/bundle/${bundle.id}" aria-label="${esc(bundle.name_ar)}">${bundleVisual(bundle,true)}</a></div><div class="product-info"><div class="product-meta">${Number(bundle.item_count||bundle.items?.length||0)} منتجات معًا</div><a class="product-title" href="/bundle/${bundle.id}">${esc(bundle.name_ar||bundle.name_en)}</a><div class="price">${compare>Number(bundle.price)?`<del>${money(compare)}</del>`:""}<strong>${money(bundle.price)}</strong></div><a class="card-add bundle-card-link" href="/bundle/${bundle.id}">عرض الطقم</a></div></article>`;
+function bundleCard(bundle, pinnedVariant = null) {
+  const variants=activeVariants(bundle),selectedVariant=pinnedVariant||variants.find(option=>option.available_stock===null||option.available_stock===undefined||Number(option.available_stock)>0)||variants[0]||null;
+  const active=selectedVariant||bundle,price=Number(active.price??bundle.price??0),compare=Number(active.compare_at_price||active.regular_total||bundle.compare_at_price||bundle.regular_total||0);
+  const soldOut=active.available_stock!==null&&active.available_stock!==undefined&&Number(active.available_stock)<=0;
+  const link=`/bundle/${bundle.id}${selectedVariant?.id?`?variant=${encodeURIComponent(selectedVariant.id)}`:""}`;
+  const visualBundle={...bundle,main_photo_url:active.image_url||bundle.main_photo_url,items:active.items||bundle.items};
+  return `<article class="product-card bundle-card"><div class="product-media ${soldOut?"is-out-of-stock":""}"><span class="bundle-badge">طقم</span>${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<a href="${esc(link)}" aria-label="${esc(bundle.name_ar)}">${bundleVisual(visualBundle,true)}</a></div><div class="product-info"><div class="product-meta">${Number(active.item_count||active.items?.length||bundle.item_count||bundle.items?.length||0)} منتجات معًا${selectedVariant?` · ${esc(selectedVariant.label_ar||selectedVariant.label_en||selectedVariant.color||"")}`:""}</div><a class="product-title" href="${esc(link)}">${esc(bundle.name_ar||bundle.name_en)}</a><div class="price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div><a class="card-add bundle-card-link" href="${esc(link)}">${soldOut?"نفد هذا الاختيار":"عرض الطقم"}</a></div></article>`;
 }
 
 function announcementHtml() {
@@ -959,6 +968,21 @@ function catalogEntryVariants(item) {
   return activeVariants(item);
 }
 
+function catalogVariantInStock(item,variant) {
+  if(item._catalog_type==="bundle")return variant?.available_stock===null||variant?.available_stock===undefined||Number(variant.available_stock)>0;
+  return variantInStock(variant);
+}
+
+function catalogEntryInStock(item,variant=null) {
+  if(variant)return catalogVariantInStock(item,variant);
+  if(item._catalog_type==="bundle"){
+    const variants=catalogEntryVariants(item);
+    if(variants.length)return variants.some(option=>catalogVariantInStock(item,option));
+    return item.available_stock===null||item.available_stock===undefined||Number(item.available_stock)>0;
+  }
+  return productInStock(item);
+}
+
 function categoryIncludesCatalogEntry(category,item) {
   if(item._catalog_type!=="bundle")return categoryIncludesProduct(category,item);
   if(category?.category_type==="smart")return false;
@@ -979,8 +1003,9 @@ function matchingCatalogEntries(omit="") {
   if(omit!=="subcategory"&&state.subcategory){const subcategory=state.categories.find(item=>item.parent_id&&String(item.slug)===state.subcategory);rows=rows.filter(item=>categoryIncludesCatalogEntry(subcategory,item));}
   if(omit!=="facet"&&state.facet)rows=rows.filter(item=>(item.facet_ids||[]).map(String).includes(state.facet));
   if(omit!=="collection"&&state.collection){const collection=state.collections.find(item=>String(item.slug)===state.collection);rows=rows.filter(item=>collectionIncludesCatalogEntry(collection,item));}
-  if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.filter(item=>catalogEntryVariants(item).some(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option)));
-  if(omit!=="price")rows=rows.filter(item=>{const price=catalogEntryPrice(item);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
+  if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.map(item=>{const matches=catalogEntryVariants(item).filter(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option));const matched=matches.find(variant=>catalogVariantInStock(item,variant))||matches[0];return matched?{...item,_matched_variant:matched}:null;}).filter(Boolean);
+  if(omit!=="price")rows=rows.filter(item=>{const price=item._matched_variant?Number(item._matched_variant.price??catalogEntryPrice(item)):catalogEntryPrice(item);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
+  if(!state.color&&!state.option)rows=rows.filter(item=>catalogEntryInStock(item));
   return rows;
 }
 function filteredCatalogEntries() {
@@ -1010,7 +1035,7 @@ function renderProducts() {
   const selectedSubcategory=state.categories.find(category=>category.parent_id&&String(category.slug)===state.subcategory);
   const selectedFacet=state.facets.find(facet=>String(facet.id)===state.facet);
   const pageTitle=selectedSubcategory?.name_ar||selectedSubcategory?.name_en||selectedFacet?.name_ar||selectedFacet?.nameAr||selectedFacet?.name_en||selectedFacet?.nameEn||selectedCategory?.name_ar||selectedCategory?.name_en||"المتجر";
-  const resultCards=visible.map(item=>item._catalog_type==="bundle"?bundleCard(item):productCard(item)).join("");
+  const resultCards=visible.map(item=>item._catalog_type==="bundle"?bundleCard(item,item._matched_variant):productCard(item,false,item._matched_variant)).join("");
   shell(`${breadcrumbs(pageTitle)}<section class="container"><div class="shop-head"><h1>${esc(pageTitle)}</h1>${selectedCategory?.description_ar?`<p>${esc(selectedCategory.description_ar)}</p>`:""}</div><div class="shop-layout"><div><div class="shop-toolbar"><div class="view-tools"><button class="view-button active">${icon("grid-3x3",19)}</button><button class="view-button">${icon("list",19)}</button><button class="mobile-filter-button mobile-only" id="mobileFilter">${icon("sliders-horizontal",17)}فلترة</button></div><div class="sort-tools"><label>الترتيب الافتراضي</label><select class="store-select" id="sortProducts"><option value="default">الترتيب الافتراضي</option><option value="price-asc">السعر: من الأقل للأعلى</option><option value="price-desc">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></div></div><div class="product-grid shop-grid">${resultCards}</div>${visible.length?`<div class="pagination">${Array.from({length:pages},(_,index)=>`<button class="page-button ${index+1===state.page?"active":""}" data-page="${index+1}">${index+1}</button>`).join("")}</div>`:`<div class="no-results"><div><h2>لا توجد نتائج</h2><p>جرّبي اختيار تصنيف أو فئة أو سعر مختلف.</p></div></div>`}</div>${filterHtml(maxCatalog)}</div></section>`);
   document.getElementById("sortProducts").value=state.sort;
   document.getElementById("sortProducts").onchange=event=>{state.sort=event.target.value;state.page=1;renderProducts();};
@@ -1019,16 +1044,16 @@ function renderProducts() {
 }
 
 function filterHtml(maxCatalog) {
-  const countFor=(omit,predicate)=>matchingCatalogEntries(omit).filter(predicate).length;
+  const countFor=(omit,predicate)=>matchingCatalogEntries(omit).filter(item=>catalogEntryInStock(item,item._matched_variant)).filter(predicate).length;
   const categories=state.categories.filter(category=>!category.parent_id&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("category",item=>categoryIncludesCatalogEntry(category,item))})).filter(category=>category.count||state.category===category.slug);
   const selectedRoot=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
   const subcategories=state.categories.filter(category=>category.parent_id&&Number(category.parent_id)===Number(selectedRoot?.id)&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("subcategory",item=>categoryIncludesCatalogEntry(category,item))})).filter(category=>category.count||state.subcategory===category.slug);
   const facets=state.facets.filter(facet=>facet.is_active!==false&&facet.isActive!==false).map(facet=>({...facet,count:countFor("facet",item=>(item.facet_ids||[]).map(String).includes(String(facet.id)))})).filter(facet=>facet.count||state.facet===String(facet.id));
-  const colorMap=new Map();matchingCatalogEntries("color").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>optionMatches(variant)).forEach(variant=>{const value=String(variant.color||"").trim();const key=value.toLowerCase();if(!key||seen.has(key))return;seen.add(key);const row=colorMap.get(key)||{value,hex:variant.hex_code||variant.hex||"#ddd",count:0};row.count++;colorMap.set(key,row);});});
+  const colorMap=new Map();matchingCatalogEntries("color").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>catalogVariantInStock(item,variant)&&optionMatches(variant)).forEach(variant=>{const value=String(variant.color||"").trim();const key=value.toLowerCase();if(!key||seen.has(key))return;seen.add(key);const row=colorMap.get(key)||{value,hex:variant.hex_code||variant.hex||"#ddd",count:0};row.count++;colorMap.set(key,row);});});
   if(state.color&&!colorMap.has(state.color.toLowerCase())){const variant=catalogEntries().flatMap(catalogEntryVariants).find(item=>String(item.color||"").toLowerCase()===state.color.toLowerCase());if(variant)colorMap.set(state.color.toLowerCase(),{value:state.color,hex:variant.hex_code||variant.hex||"#ddd",count:0});}
   const colors=[...colorMap.values()].sort((a,b)=>b.count-a.count||a.value.localeCompare(b.value,"ar"));
   const visibleColors=state.showAllColors?colors:colors.slice(0,12);
-  const optionMap=new Map();matchingCatalogEntries("option").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>colorMatches(variant)).forEach(variant=>{const value=String(variant.value||variant.option||"").trim(),group=String(variant.option||"خيارات المنتج").replace(/^أختر\s*/, "");const key=`${group}:${value}`;if(!value||seen.has(key))return;seen.add(key);const row=optionMap.get(key)||{value,group,count:0};row.count++;optionMap.set(key,row);});});
+  const optionMap=new Map();matchingCatalogEntries("option").forEach(item=>{const seen=new Set();catalogEntryVariants(item).filter(variant=>catalogVariantInStock(item,variant)&&colorMatches(variant)).forEach(variant=>{const value=String(variant.value||variant.option||"").trim(),group=String(variant.option||"خيارات المنتج").replace(/^أختر\s*/, "");const key=`${group}:${value}`;if(!value||seen.has(key))return;seen.add(key);const row=optionMap.get(key)||{value,group,count:0};row.count++;optionMap.set(key,row);});});
   if(state.option&&![...optionMap.values()].some(row=>row.value===state.option))optionMap.set(`خيارات المنتج:${state.option}`,{value:state.option,group:"خيارات المنتج",count:0});
   const options=[...optionMap.values()].sort((a,b)=>a.group.localeCompare(b.group,"ar")||b.count-a.count||a.value.localeCompare(b.value,"ar"));
   const groupedOptions=new Map();options.forEach(option=>{if(!groupedOptions.has(option.group))groupedOptions.set(option.group,[]);groupedOptions.get(option.group).push(option);});
@@ -1447,7 +1472,8 @@ function renderBundle(bundle) {
   let quantity=1,mediaIndex=0;
   const isSoldOutOption=option=>option.available_stock!==null&&option.available_stock!==undefined&&Number(option.available_stock)<=0;
   const options=(bundle.variants||bundle.bundle_variants||[]).filter(option=>option.is_active!==false).map((option,index)=>({...option,_display_order:index})).sort((left,right)=>Number(isSoldOutOption(left))-Number(isSoldOutOption(right))||left._display_order-right._display_order);
-  let selected=options.find(option=>String(option.id)===String(bundle.default_variant_id)&&!isSoldOutOption(option))||options.find(option=>!isSoldOutOption(option))||options[0]||null;
+  const requestedVariant=new URLSearchParams(location.search).get("variant");
+  let selected=options.find(option=>requestedVariant&&String(option.id)===String(requestedVariant))||options.find(option=>String(option.id)===String(bundle.default_variant_id)&&!isSoldOutOption(option))||options.find(option=>!isSoldOutOption(option))||options[0]||null;
   const current=()=>selected||bundle;
   const draw=()=>{
     const active=current(),items=active.items||bundle.items||[],compare=Number(active.compare_at_price||active.regular_total||bundle.compare_at_price||bundle.regular_total||0),price=Number(active.price??bundle.price??0),saving=Math.max(0,Number(active.savings??active.regular_total-price));
