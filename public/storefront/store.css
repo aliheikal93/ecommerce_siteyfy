@@ -550,6 +550,12 @@ img { max-width: 100%; display: block; }
 .primary-button:hover { background: var(--primary-dark); }
 .secondary-button { background: #fff; color: var(--primary); }
 .buy-now { width: 100%; margin-top: 10px; }
+.product-buy-actions { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px; }
+.product-buy-actions .buy-now { margin:0; }
+.product-buy-actions .card-checkout { width:100%;min-width:0;border-color:#1b65b8;color:#1b65b8; }
+.product-buy-actions .card-checkout:not(:disabled):hover { background:#f1f7ff; }
+.product-buy-actions .card-checkout:disabled { border-color:#d8d3da;color:#918a94;background:#efedef; }
+@media(max-width:520px){.product-buy-actions{gap:7px}.product-buy-actions .secondary-button{padding-inline:8px;font-size:12px}}
 .product-trust { margin-top: 22px; padding: 15px; background: var(--soft); border-radius: 6px; display: grid; gap: 8px; color: #615a63; font-size: 13px; }
 .product-trust span { display: flex; align-items: center; gap: 8px; }
 .detail-description { margin-top: 55px; border-top: 1px solid var(--line); padding-top: 30px; }
