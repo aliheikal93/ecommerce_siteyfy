@@ -14,6 +14,7 @@ import sharp from "sharp";
 import zlib from "node:zlib";
 import { launch } from "chrome-launcher";
 import { fileURLToPath } from "node:url";
+import { workbook } from "./features/xlsx.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -5532,6 +5533,10 @@ function financeOrderAnalysis(order, context) {
 
 function financeOverview(filters = {}) {
   const settings = { ...(getSetting("financeSettings") || defaults.financeSettings) };
+  const today = new Date().toISOString().slice(0, 10);
+  const periodFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.date_from || "")) ? String(filters.date_from) : `${today.slice(0, 7)}-01`;
+  const periodTo = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.date_to || "")) ? String(filters.date_to) : today;
+  const operating = financeOperatingSummary(periodFrom, periodTo);
   const context = {
     shipments: entityRows("shipping_shipments"),
     providerLinks: entityRows("shipping_provider_links"),
@@ -5589,6 +5594,8 @@ function financeOverview(filters = {}) {
       cogs: sum("cogs"),
       payment_fees: sum("payment_fee"),
       contribution_profit: sum("contribution_profit"),
+      operating_cost: operating.operating_cost,
+      net_profit: moneyValue(sum("contribution_profit") - operating.operating_cost),
       negative_profit_orders: recognized.filter((row) => row.contribution_profit < 0).length,
       actual_shipping_orders: recognized.filter((row) => row.shipping_confidence === "actual").length,
       actual_cogs_orders: recognized.filter((row) => row.cogs_confidence === "actual_fifo").length,
@@ -5602,6 +5609,7 @@ function financeOverview(filters = {}) {
       currency: settings.currency || "SAR"
     },
     promotions: promotionRows,
+    operating_expenses: operating.occurrences,
     payments: paymentRows,
     shipping_providers: shippingRows,
     provider_comparisons: providerComparisons.sort((a, b) => Number(b.needs_review) - Number(a.needs_review) || Math.abs(Number(b.cost_variance || 0)) - Math.abs(Number(a.cost_variance || 0))),
@@ -8546,6 +8554,44 @@ function actualUnitsSold(productId) {
     .reduce((sum, order) => sum + unitsOfProductInOrder(order, productId), 0);
 }
 
+// Operating expenses are deliberately separate from order COGS, freight and payment fees.
+// This prevents an expense entered by an operator from silently counting those costs twice.
+function financeExpenseOccurrences(expense, from, to) {
+  if (expense.is_active === false) return [];
+  const start = String(expense.start_date || expense.date || "").slice(0, 10);
+  const end = String(expense.end_date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return [];
+  const until = end && end < to ? end : to;
+  const frequency = ["once", "daily", "weekly", "monthly", "yearly"].includes(expense.frequency) ? expense.frequency : "once";
+  const anchor = new Date(`${start}T00:00:00Z`);
+  const rows = [];
+  for (let index = 0; index < 5000; index++) {
+    const day = new Date(anchor);
+    if (frequency === "daily") day.setUTCDate(anchor.getUTCDate() + index);
+    else if (frequency === "weekly") day.setUTCDate(anchor.getUTCDate() + index * 7);
+    else if (frequency === "monthly") {
+      day.setUTCDate(1);
+      day.setUTCMonth(anchor.getUTCMonth() + index);
+      day.setUTCDate(Math.min(anchor.getUTCDate(), new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate()));
+    } else if (frequency === "yearly") {
+      day.setUTCDate(1);
+      day.setUTCFullYear(anchor.getUTCFullYear() + index);
+      day.setUTCMonth(anchor.getUTCMonth());
+      day.setUTCDate(Math.min(anchor.getUTCDate(), new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate()));
+    }
+    const date = day.toISOString().slice(0, 10);
+    if (date > until) break;
+    if (date >= from) rows.push({ expense_id:expense.id, date, name:expense.name, category:expense.category || "other", amount:moneyValue(expense.amount), frequency });
+    if (frequency === "once") break;
+  }
+  return rows;
+}
+
+function financeOperatingSummary(from, to) {
+  const occurrences = entityRows("finance_expenses").flatMap((expense) => financeExpenseOccurrences(expense, from, to)).sort((a, b) => a.date.localeCompare(b.date));
+  return { occurrences, operating_cost:moneyValue(occurrences.reduce((sum, row) => sum + row.amount, 0)) };
+}
+
 function catalogSalesAdjustment(type, id) {
   return entityRows("catalog_sales_adjustments").find((row) => row.catalog_type === type && Number(row.catalog_id) === Number(id)) || null;
 }
@@ -10378,7 +10424,7 @@ function adminPermissionForRequest(req) {
     return mutation ? "integrations.manage" : "integrations.view";
   }
   if (/^\/(discounts|promotion|bundles)/.test(path)) return mutation ? "promotions.manage" : "promotions.view";
-  if (/^\/(products|categories|brands|colors|options|labels|facets|collections|reviews|recommendations|catalog-sales|upload)/.test(path)) return mutation ? "catalog.manage" : "catalog.view";
+  if (/^\/(products|categories|brands|colors|options|labels|facets|collections|reviews|recommendations|catalog-sales|catalog-bulk|upload)/.test(path)) return mutation ? "catalog.manage" : "catalog.view";
   if (/^\/ai/.test(path)) return mutation ? "ai.manage" : "ai.view";
   if (/^\/(content|pages|gallery|home|storefront|brand)/.test(path)) return mutation ? "content.manage" : "content.view";
   if (/^\/(settings|market|currencies|countries|goods-types|shipping-profiles|locations|robots|lighthouse|company-info)/.test(path)) return mutation ? "settings.manage" : "settings.view";
@@ -12977,6 +13023,117 @@ app.get("/api/admin/shipping/intelligence", (req, res) => {
     operations: { total_shipments: shipmentRows.length, delayed_shipments: delayed.length, delayed_after_days: overdueDays, delayed: delayed.slice(0, 100) }
   }));
 });
+function catalogBulkPlan(body = {}) {
+  const target = String(body.target || "");
+  const allowedFields = { products:["price","sale_price","compare_at_price","cost","weight"], variants:["price","compare_at_price","cost"], bundles:["price","compare_at_price","cost"], bundle_variants:["price","compare_at_price","cost"] };
+  const field = String(body.field || ""), operation = String(body.operation || "");
+  if (!allowedFields[target]?.includes(field) || !["set","add","subtract","increase_percent","decrease_percent"].includes(operation)) fail("INVALID_BULK_OPERATION", 422);
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10000000) fail("INVALID_BULK_AMOUNT", 422);
+  const entity = target.startsWith("bundle") ? "bundles" : "products";
+  const ids = new Set(asArray(body.ids).map(Number).filter(Number.isInteger));
+  const matchAll = body.scope === "all";
+  if (!matchAll && !ids.size) fail("SELECT_PRODUCTS_FIRST", 422);
+  const rows = activeRows(entity).filter(row => (matchAll || ids.has(Number(row.id))) && (!body.category_id || Number(row.category_id) === Number(body.category_id)) && (!body.search || `${row.name_ar || ""} ${row.name_en || ""} ${row.sku || ""}`.toLowerCase().includes(String(body.search).toLowerCase())));
+  if (rows.length > 1000) fail("BULK_LIMIT_1000", 422);
+  const calculate = current => { const base = Number(current || 0); const next = operation === "set" ? amount : operation === "add" ? base + amount : operation === "subtract" ? base - amount : operation === "increase_percent" ? base * (1 + amount / 100) : base * (1 - amount / 100); return moneyValue(Math.max(0, next)); };
+  const changes = [];
+  for (const row of rows) {
+    const choices = target === "variants" ? asArray(row.variants) : target === "bundle_variants" ? asArray(row.bundle_variants || row.variants) : null;
+    if (choices) {
+      choices.forEach(choice => { if (choice.is_active === false) return; const before=choice[field]; const after=calculate(before); if (Number(before || 0) !== after) changes.push({ entity,id:row.id,choice_id:choice.id,field,before,after }); });
+    } else {
+      if (target === "products" && (row.product_type === "variable" || asArray(row.variants).length) && field !== "weight") continue;
+      const before=row[field], after=calculate(before);
+      if (Number(before || 0) !== after) changes.push({ entity,id:row.id,choice_id:null,field,before,after });
+    }
+  }
+  return { target,field,operation,amount,rows,changes };
+}
+
+app.post("/api/admin/catalog-bulk/preview", (req,res) => {
+  const plan=catalogBulkPlan(req.body);
+  res.json(ok({ matched_products:plan.rows.length, changed_values:plan.changes.length, examples:plan.changes.slice(0,12) }));
+});
+app.post("/api/admin/catalog-bulk/apply", (req,res) => {
+  const plan=catalogBulkPlan(req.body);
+  if (!plan.changes.length) return res.json(ok({ changed_values:0, matched_products:plan.rows.length }));
+  const auditId=crypto.randomUUID(), now=new Date().toISOString();
+  db.transaction(() => {
+    const byRow=new Map();
+    for(const change of plan.changes) { const key=`${change.entity}:${change.id}`; if(!byRow.has(key)) byRow.set(key,[]); byRow.get(key).push(change); }
+    for(const row of plan.rows) {
+      const changes=byRow.get(`${plan.target.startsWith("bundle")?"bundles":"products"}:${row.id}`);
+      if (!changes?.length) continue;
+      const updated={...row};
+      if (plan.target === "variants" || plan.target === "bundle_variants") {
+        const key=plan.target === "variants" ? "variants" : "bundle_variants";
+        updated[key]=asArray(row[key] || (key === "bundle_variants" ? row.variants : [])).map(choice => { const change=changes.find(item => String(item.choice_id)===String(choice.id)); return change ? {...choice,[plan.field]:change.after} : choice; });
+      } else updated[plan.field]=changes[0].after;
+      if (plan.target.startsWith("bundle")) updateBundleRecord(row.id,updated);
+      else updateProductRecord(row.id,updated);
+    }
+    createRecord("catalog_bulk_runs",{ audit_id:auditId, actor_id:req.user.staff_id||req.user.id||null, target:plan.target,field:plan.field,operation:plan.operation,amount:plan.amount,matched_products:plan.rows.length,changed_values:plan.changes.length,changes:plan.changes,created_at:now });
+  })();
+  invalidateStoreCategoryCache();
+  res.json(ok({ audit_id:auditId,matched_products:plan.rows.length,changed_values:plan.changes.length }));
+});
+
+function validatedFinanceExpense(body = {}, existing = {}) {
+  const name=String(body.name ?? existing.name ?? "").trim().slice(0,160), amount=Number(body.amount ?? existing.amount);
+  const frequency=String(body.frequency ?? existing.frequency ?? "once");
+  const start_date=String(body.start_date ?? existing.start_date ?? "").slice(0,10),end_date=String(body.end_date ?? existing.end_date ?? "").slice(0,10);
+  if (!name || !Number.isFinite(amount) || amount < 0 || amount > 10000000 || !["once","daily","weekly","monthly","yearly"].includes(frequency) || !/^\d{4}-\d{2}-\d{2}$/.test(start_date) || (end_date && (!/^\d{4}-\d{2}-\d{2}$/.test(end_date) || end_date < start_date))) fail("INVALID_FINANCE_EXPENSE",422);
+  return { name,category:String(body.category ?? existing.category ?? "other").trim().slice(0,80) || "other",amount:moneyValue(amount),frequency,start_date,end_date:end_date||null,is_active:body.is_active===undefined?existing.is_active!==false:body.is_active!==false,notes:String(body.notes ?? existing.notes ?? "").trim().slice(0,1000) };
+}
+app.get("/api/admin/finance/expenses",(_req,res)=>res.json(ok({ expenses:entityRows("finance_expenses").sort((a,b)=>Number(b.id)-Number(a.id)) })));
+app.post("/api/admin/finance/expenses",(req,res)=>res.json(ok({ expense:createRecord("finance_expenses",validatedFinanceExpense(req.body)) })));
+app.put("/api/admin/finance/expenses/:id",(req,res)=>{const old=getRecord("finance_expenses",req.params.id);if(!old)fail("EXPENSE_NOT_FOUND",404);res.json(ok({ expense:updateRecord("finance_expenses",old.id,validatedFinanceExpense(req.body,old)) }));});
+app.delete("/api/admin/finance/expenses/:id",(req,res)=>{const old=getRecord("finance_expenses",req.params.id);if(!old)fail("EXPENSE_NOT_FOUND",404);res.json(ok({ expense:updateRecord("finance_expenses",old.id,{is_active:false}) }));});
+
+function financeReportSettings() {
+  const saved=getSetting("financeReportSettings")||{};
+  return {enabled:saved.enabled===true,frequency:["daily","weekly","monthly"].includes(saved.frequency)?saved.frequency:"weekly",hour:Math.min(23,Math.max(0,Number(saved.hour??9))),weekday:Math.min(6,Math.max(0,Number(saved.weekday??0))),monthday:Math.min(28,Math.max(1,Number(saved.monthday??1))),dashboard:saved.dashboard!==false,email:saved.email===true,recipients:notificationRecipients(saved.recipients||[]),timezone:["Asia/Riyadh","Africa/Cairo","UTC"].includes(saved.timezone)?saved.timezone:"Asia/Riyadh"};
+}
+async function runFinanceReport(force = false) {
+  const settings=financeReportSettings();
+  if (!settings.enabled && !force) return {skipped:true,reason:"disabled"};
+  const now=new Date();
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:settings.timezone,year:"numeric",month:"2-digit",day:"2-digit",weekday:"short",hour:"2-digit",hourCycle:"h23"}).formatToParts(now);
+  const part=type=>parts.find(item=>item.type===type)?.value||"";
+  const dateKey=`${part("year")}-${part("month")}-${part("day")}`,hour=Number(part("hour")),weekday=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(part("weekday"));
+  if (!force && (hour<settings.hour || settings.frequency==="weekly"&&weekday!==settings.weekday || settings.frequency==="monthly"&&Number(part("day"))!==settings.monthday)) return {skipped:true,reason:"not_due"};
+  const scheduleKey=`${settings.frequency}:${dateKey}`;
+  if (!force && entityRows("finance_report_runs").some(run=>run.schedule_key===scheduleKey)) return {skipped:true,reason:"already_sent"};
+  const end=dateKey,start=new Date(`${end}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate()-(settings.frequency==="daily"?1:settings.frequency==="weekly"?7:30));
+  const from=start.toISOString().slice(0,10),result=financeOverview({date_from:from,date_to:end}),s=result.summary;
+  const report={period_from:from,period_to:end,recognized_orders:s.recognized_orders,sales:moneyValue(s.product_revenue+s.shipping_revenue),cogs:s.cogs,shipping_cost:s.shipping_cost,payment_fees:s.payment_fees,operating_cost:s.operating_cost,contribution_profit:s.contribution_profit,net_profit:s.net_profit,currency:s.currency};
+  const run=createRecord("finance_report_runs",{schedule_key:force?`manual:${crypto.randomUUID()}`:scheduleKey,status:"processing",report,started_at:new Date().toISOString()});
+  const titleAr=`تقرير المالية ${from} — ${end}`,titleEn=`Finance report ${from} — ${end}`;
+  const messageAr=`المبيعات ${report.sales} ${report.currency} · التكاليف التشغيلية ${report.operating_cost} · صافي الربح ${report.net_profit}`;
+  const notification=settings.dashboard?createRecord("notifications",{module:"finance",severity:"info",title_ar:titleAr,title_en:titleEn,message_ar:messageAr,message_en:`Sales ${report.sales} ${report.currency}; operating expenses ${report.operating_cost}; net profit ${report.net_profit}`,action_url:"/admin#finance",status:"unread",dedupe_key:`finance-report:${scheduleKey}`,first_seen_at:new Date().toISOString(),last_seen_at:new Date().toISOString(),occurrence_count:1}):null;
+  let delivery=null;
+  if (settings.email) {
+    const notificationSettings=normalizeNotificationSettings();
+    const recipients=settings.recipients.length?settings.recipients:notificationSettings.email.default_recipients;
+    delivery=await deliverNotificationEmail(notification||{id:null,severity:"info",title_ar:titleAr,title_en:titleEn,message_ar:messageAr,message_en:`Sales ${report.sales}; costs ${report.operating_cost}; profit ${report.net_profit}`,action_url:"/admin#finance"},{recipients},{...notificationSettings,channels:{...notificationSettings.channels,email:true},quiet_hours:{...notificationSettings.quiet_hours,enabled:false}},recipients);
+  }
+  return updateRecord("finance_report_runs",run.id,{status:delivery?.status==="failed"?"email_failed":"completed",notification_id:notification?.id||null,email_status:delivery?.status||"disabled",completed_at:new Date().toISOString()});
+}
+app.get("/api/admin/finance/report-settings",(_req,res)=>res.json(ok({settings:financeReportSettings(),runs:entityRows("finance_report_runs").slice(-20).reverse()})));
+app.put("/api/admin/finance/report-settings",(req,res)=>{const current=financeReportSettings(),body=req.body||{};const settings={...current,...body,recipients:notificationRecipients(body.recipients??current.recipients)};if(!["daily","weekly","monthly"].includes(settings.frequency))fail("INVALID_REPORT_FREQUENCY",422);settings.hour=Math.min(23,Math.max(0,Number(settings.hour||0)));settings.weekday=Math.min(6,Math.max(0,Number(settings.weekday||0)));settings.monthday=Math.min(28,Math.max(1,Number(settings.monthday||1)));settings.timezone=["Asia/Riyadh","Africa/Cairo","UTC"].includes(settings.timezone)?settings.timezone:current.timezone;settings.enabled=settings.enabled===true;settings.dashboard=settings.dashboard!==false;settings.email=settings.email===true;if(settings.enabled&&!settings.dashboard&&!settings.email)fail("SELECT_REPORT_CHANNEL",422);setSetting("financeReportSettings",settings);res.json(ok({settings}));});
+app.post("/api/admin/finance/report-run",async(_req,res)=>res.json(ok({run:await runFinanceReport(true)})));
+
+app.get("/api/admin/finance/export.xlsx",(req,res)=>{
+  const result=financeOverview(req.query||{}), s=result.summary;
+  const sheets=[
+    {name:"Summary",rows:[["Metric","Amount"],["Product revenue",s.product_revenue],["Shipping revenue",s.shipping_revenue],["Cost of goods",s.cogs],["Shipping cost",s.shipping_cost],["Payment fees",s.payment_fees],["Operating expenses",s.operating_cost],["Contribution profit",s.contribution_profit],["Net profit",s.net_profit]]},
+    {name:"Sales",rows:[["Order","Date","Status","Product revenue","Shipping revenue","COGS","Shipping cost","Payment fees","Contribution profit"],...result.orders.filter(row=>row.recognized).map(row=>[row.order_number,row.date,row.status,row.product_revenue,row.shipping_revenue,row.cogs,row.shipping_cost,row.payment_fee,row.contribution_profit])]},
+    {name:"Expenses",rows:[["Expense","Category","Date","Frequency","Amount"],...result.operating_expenses.map(row=>[row.name,row.category,row.date,row.frequency,row.amount])]}];
+  res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");res.setHeader("Content-Disposition",`attachment; filename="finance-${String(req.query.date_from||"all")}-${String(req.query.date_to||"all")}.xlsx"`);res.send(workbook(sheets));
+});
+
 app.get("/api/admin/finance/overview", (req, res) => {
   if (!req.user || !["admin", "staff"].includes(req.user.role)) fail("Unauthorized", 401);
   const result = financeOverview(req.query || {});
@@ -15038,6 +15195,9 @@ app.listen(port, () => {
   };
   setTimeout(runScheduledNotificationScan, 45_000);
   setInterval(runScheduledNotificationScan, 60_000);
+  const scheduledFinanceReport=()=>runFinanceReport().catch(error=>console.error(`Scheduled finance report failed: ${error.message}`));
+  setTimeout(scheduledFinanceReport, 55_000);
+  setInterval(scheduledFinanceReport, 60_000);
   setInterval(() => {
     try { refreshCheckoutRecoveryStatuses(); pruneCheckoutRecoveryHistory(); expirePendingInventoryReservations(); }
     catch (error) { console.error(`Checkout recovery maintenance failed: ${error.message}`); }
