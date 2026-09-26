@@ -8546,11 +8546,55 @@ function actualUnitsSold(productId) {
     .reduce((sum, order) => sum + unitsOfProductInOrder(order, productId), 0);
 }
 
+function catalogSalesAdjustment(type, id) {
+  return entityRows("catalog_sales_adjustments").find((row) => row.catalog_type === type && Number(row.catalog_id) === Number(id)) || null;
+}
+
+function manualCatalogUnits(type, id) {
+  return Math.max(0, Math.floor(Number(catalogSalesAdjustment(type, id)?.units || 0)));
+}
+
+function addManualCatalogUnits(type, id, amount, actor = "admin") {
+  if (!["product", "bundle"].includes(type)) fail("Invalid catalog type", 422);
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1000000) fail("Enter a positive whole number up to 1,000,000", 422);
+  const exists = type === "product" ? productRecord(id) : getRecord("bundles", id);
+  if (!exists) fail("Catalog item not found", 404);
+  const current = catalogSalesAdjustment(type, id);
+  const next = manualCatalogUnits(type, id) + amount;
+  if (!Number.isSafeInteger(next)) fail("Sales total is too large", 422);
+  const saved = current
+    ? updateRecord("catalog_sales_adjustments", current.id, { units:next, updated_by:actor })
+    : createRecord("catalog_sales_adjustments", { catalog_type:type, catalog_id:Number(id), units:next, updated_by:actor });
+  createRecord("catalog_sales_adjustment_events", { catalog_type:type, catalog_id:Number(id), delta:amount, total:next, actor });
+  return saved;
+}
+
+function bundleSalesUnitsMap() {
+  const totals = new Map();
+  entityRows("orders").filter((order) => !boolValue(order.is_test, false) && orderIsPaidOrDelivered(order)).forEach(order => {
+    asArray(order.items).forEach(item => {
+      const id = Number(item.bundle_id || item.bundleId || 0);
+      if (id) totals.set(id, (totals.get(id) || 0) + Math.max(0, Math.floor(Number(item.quantity || 0))));
+    });
+  });
+  return totals;
+}
+
+function bundleSalesSocialProof(bundleId, actualSold = null) {
+  const actual = actualSold === null ? bundleSalesUnitsMap().get(Number(bundleId)) || 0 : actualSold;
+  const manual = manualCatalogUnits("bundle", bundleId);
+  const displayed = actual + manual;
+  const unit = displayed === 2 ? "مرتين" : displayed % 100 >= 3 && displayed % 100 <= 10 ? "مرات" : "مرة";
+  return { actual_units_sold:actual, manual_units:manual, displayed_units_sold:displayed,
+    visible:displayed > 0, label:{ ar:`تم شراء هذا الطقم ${displayed === 2 ? "" : displayed} ${unit}`.trim(), en:`${displayed} purchased` } };
+}
+
 function productSalesSocialProof(productId, settings = productSocialProofSettings(productId)) {
   const actual = actualUnitsSold(productId);
   const imported = Math.max(0, Number(settings.imported_historical_sales || 0));
   const verifiedLegacy = verifiedLegacyUnitsSold(productId);
-  const displayed = actual + imported + verifiedLegacy;
+  const manual = manualCatalogUnits("product", productId);
+  const displayed = actual + imported + verifiedLegacy + manual;
   const mode = settings.sales_display_mode;
   const threshold = Math.max(1, Number(settings.sales_threshold || 10));
   let visible = settings.show_sales === true && mode !== "hidden";
@@ -8559,13 +8603,14 @@ function productSalesSocialProof(productId, settings = productSocialProofSetting
     visible = visible && displayed >= threshold;
     if (visible) label = { ar: `تم شراء هذا المنتج أكثر من ${threshold} مرة`, en: `${threshold}+ purchased` };
   } else if (mode === "exact" && visible) {
-    const arabicUnit = displayed === 1 ? "مرة واحدة" : displayed === 2 ? "مرتين" : `${displayed} مرات`;
+    const arabicUnit = displayed === 1 ? "مرة واحدة" : displayed === 2 ? "مرتين" : `${displayed} ${displayed % 100 >= 3 && displayed % 100 <= 10 ? "مرات" : "مرة"}`;
     label = { ar: `تم شراء هذا المنتج ${arabicUnit}`, en: `${displayed} purchased` };
   }
   return {
     actual_units_sold: actual,
     imported_historical_sales: imported,
     verified_legacy_units_sold: verifiedLegacy,
+    manual_units: manual,
     displayed_units_sold: displayed,
     display_mode: mode,
     threshold,
@@ -8820,7 +8865,7 @@ function enrichedBundleVariant(variant = {}) {
   };
 }
 
-function bundleForStore(bundle = {}) {
+function bundleForStore(bundle = {}, actualBundleSales = null) {
   const normalized = normalizeBundlePayload(bundle);
   const bundleVariants = normalized.bundle_variants.filter((variant) => variant.is_active !== false).map(enrichedBundleVariant).filter((variant) => variant.items.length >= 2);
   const legacyItems = enrichedBundleItems(normalized.items);
@@ -8846,12 +8891,14 @@ function bundleForStore(bundle = {}) {
     regular_total: regularTotal,
     savings: Number(Math.max(0, regularTotal - Number(price || 0)).toFixed(2)),
     available_stock: availableStock,
-    stock_source: defaultVariant ? defaultVariant.stock_source : (normalized.use_own_stock ? "bundle" : "products")
+    stock_source: defaultVariant ? defaultVariant.stock_source : (normalized.use_own_stock ? "bundle" : "products"),
+    sales_proof: bundleSalesSocialProof(bundle.id, actualBundleSales)
   };
 }
 
 function storeBundleRows() {
-  return activeRows("bundles").map(bundleForStore).filter((bundle) => bundle.items.length >= 2 || bundle.variants.length);
+  const soldUnits = bundleSalesUnitsMap();
+  return activeRows("bundles").map(bundle => bundleForStore(bundle, soldUnits.get(Number(bundle.id)) || 0)).filter((bundle) => bundle.items.length >= 2 || bundle.variants.length);
 }
 
 function findBundle(identifier) {
@@ -10331,7 +10378,7 @@ function adminPermissionForRequest(req) {
     return mutation ? "integrations.manage" : "integrations.view";
   }
   if (/^\/(discounts|promotion|bundles)/.test(path)) return mutation ? "promotions.manage" : "promotions.view";
-  if (/^\/(products|categories|brands|colors|options|labels|facets|collections|reviews|recommendations|upload)/.test(path)) return mutation ? "catalog.manage" : "catalog.view";
+  if (/^\/(products|categories|brands|colors|options|labels|facets|collections|reviews|recommendations|catalog-sales|upload)/.test(path)) return mutation ? "catalog.manage" : "catalog.view";
   if (/^\/ai/.test(path)) return mutation ? "ai.manage" : "ai.view";
   if (/^\/(content|pages|gallery|home|storefront|brand)/.test(path)) return mutation ? "content.manage" : "content.view";
   if (/^\/(settings|market|currencies|countries|goods-types|shipping-profiles|locations|robots|lighthouse|company-info)/.test(path)) return mutation ? "settings.manage" : "settings.view";
@@ -12314,6 +12361,20 @@ app.put("/api/admin/products/:id/social-proof", (req, res) => {
     sales: productSalesSocialProof(product.id, settings),
     aggregate: ratingAggregate(publishedProductReviews(product.id))
   }));
+});
+
+app.get("/api/admin/catalog-sales/:type/:id", (req, res) => {
+  const { type, id } = req.params;
+  if (!["product", "bundle"].includes(type)) fail("Invalid catalog type", 422);
+  const row = type === "product" ? productRecord(id) : getRecord("bundles", id);
+  if (!row) fail("Catalog item not found", 404);
+  res.json(ok(type === "product" ? productSalesSocialProof(row.id) : bundleSalesSocialProof(row.id)));
+});
+
+app.post("/api/admin/catalog-sales/:type/:id/adjust", (req, res) => {
+  const { type, id } = req.params;
+  addManualCatalogUnits(type, id, Number(req.body?.amount), req.user?.email || "admin");
+  res.json(ok(type === "product" ? productSalesSocialProof(id) : bundleSalesSocialProof(id)));
 });
 
 app.get("/api/admin/analytics/sales", (_req, res) => res.json(ok({ totalSales: 0, totalOrders: 0, revenue: 0, chart: [] })));
