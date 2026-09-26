@@ -14809,6 +14809,38 @@ app.get(/^\/_next\/image%3Furl=.*logo-premiumbrand\.png.*$/, (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "logo-premiumbrand.png"));
 });
 
+const mediaPreviewWidths = new Set([160, 320, 960]);
+const mediaPreviewJobs = new Map();
+
+app.get("/api/media/preview", async (req, res, next) => {
+  try {
+    const source = String(req.query.src || "");
+    const width = Number(req.query.w);
+    if (!mediaPreviewWidths.has(width) || !/^\/uploads\/[^?#\0]+$/u.test(source)) return res.sendStatus(400);
+    const uploadRoot = path.resolve(__dirname, "public", "uploads");
+    const relative = source.slice("/uploads/".length);
+    const original = path.resolve(uploadRoot, relative);
+    if (relative.includes("\\") || !original.startsWith(`${uploadRoot}${path.sep}`) || !/\.(?:png|jpe?g|webp|avif|gif)$/i.test(original)) return res.sendStatus(400);
+    const stats = await fs.promises.stat(original).catch(() => null);
+    if (!stats?.isFile()) return res.sendStatus(404);
+    const key = crypto.createHash("sha1").update(`${source}|${width}|${stats.size}|${stats.mtimeMs}`).digest("hex");
+    const preview = path.join(__dirname, "public", "image-cache", `media-${key}.webp`);
+    if (!fs.existsSync(preview)) {
+      let job = mediaPreviewJobs.get(preview);
+      if (!job) {
+        job = sharp(original).rotate().resize({ width, withoutEnlargement:true }).webp({ quality:width === 960 ? 78 : 66 }).toFile(preview);
+        mediaPreviewJobs.set(preview, job);
+        job.finally(() => mediaPreviewJobs.delete(preview)).catch(() => {});
+      }
+      await job;
+    }
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.type("image/webp").sendFile(preview);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/favicon.ico", (_req, res) => {
   const company = getSetting("companyInfo") || {};
   const faviconPath = localPublicImagePath(company.favicon_url || "");
