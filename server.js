@@ -6846,6 +6846,22 @@ function collectImageUrls(value, urls = new Set()) {
   return urls;
 }
 
+function entityMediaUrls(entity, row) {
+  const fields = {
+    products:["main_photo_url","mainPhotoUrl","image_url","side_photos","sidePhotos","gallery","images","media_gallery","generated_images"],
+    bundles:["main_photo_url","image_url","images","gallery","side_photos"],
+    categories:["image_url","image"], brands:["logo_url","image_url"],
+    collections:["image_url","cover_image_url","images"],
+    content:["image_url","desktop_image_url","mobile_image_url","images"],
+    pages:["image_url","cover_image_url","images"]
+  }[entity] || [];
+  const urls=new Set();
+  for(const field of fields) collectImageUrls(row[field],urls);
+  if(entity==="products") for(const variant of asArray(row.variants)) for(const field of ["image_url","images","gallery","side_photos"]) collectImageUrls(variant[field],urls);
+  if(entity==="bundles") for(const option of asArray(row.bundle_variants||row.variants)) for(const field of ["image_url","images","gallery"]) collectImageUrls(option[field],urls);
+  return urls;
+}
+
 function imageUsageIndex() {
   const usage = new Map();
   const add = (url, item) => {
@@ -6858,7 +6874,7 @@ function imageUsageIndex() {
 
   for (const entity of ["products", "categories", "brands", "bundles", "collections", "content", "pages"]) {
     for (const row of entityRows(entity, true)) {
-      const urls = collectImageUrls(row);
+      const urls = entityMediaUrls(entity,row);
       urls.forEach((url) => add(url, {
         entity,
         id: row.id,
@@ -8557,11 +8573,15 @@ function actualUnitsSold(productId) {
 // Operating expenses are deliberately separate from order COGS, freight and payment fees.
 // This prevents an expense entered by an operator from silently counting those costs twice.
 function financeExpenseOccurrences(expense, from, to) {
+  const versions = asArray(expense.versions);
+  if (versions.length) return versions.flatMap((version) => financeExpenseOccurrences({ ...expense, ...version, versions:[], is_active:true }, from, to));
   if (expense.is_active === false) return [];
   const start = String(expense.start_date || expense.date || "").slice(0, 10);
   const end = String(expense.end_date || "").slice(0, 10);
+  const activeFrom = String(expense.active_from || "").slice(0, 10);
+  const activeTo = String(expense.active_to || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return [];
-  const until = end && end < to ? end : to;
+  const until = [to,end,activeTo].filter(Boolean).sort()[0];
   const frequency = ["once", "daily", "weekly", "monthly", "yearly"].includes(expense.frequency) ? expense.frequency : "once";
   const anchor = new Date(`${start}T00:00:00Z`);
   const rows = [];
@@ -8581,14 +8601,20 @@ function financeExpenseOccurrences(expense, from, to) {
     }
     const date = day.toISOString().slice(0, 10);
     if (date > until) break;
-    if (date >= from) rows.push({ expense_id:expense.id, date, name:expense.name, category:expense.category || "other", amount:moneyValue(expense.amount), frequency });
+    if (date >= from && (!activeFrom || date >= activeFrom)) rows.push({ expense_id:expense.id, date, name:expense.name, category:expense.category || "other", amount:moneyValue(expense.amount), frequency });
     if (frequency === "once") break;
   }
   return rows;
 }
 
+function financeExpenseLedgerRows(from, to) {
+  const overrides = new Map(entityRows("finance_expense_occurrences").map((row) => [`${row.expense_id}:${row.date}`, row]));
+  return entityRows("finance_expenses").flatMap((expense) => financeExpenseOccurrences(expense, from, to))
+    .map((row) => { const override=overrides.get(`${row.expense_id}:${row.date}`); return { ...row, amount:override?.amount ?? row.amount, status:override?.status || (row.date < new Date().toISOString().slice(0,10) ? "due" : "scheduled"), paid_at:override?.paid_at || null }; })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 function financeOperatingSummary(from, to) {
-  const occurrences = entityRows("finance_expenses").flatMap((expense) => financeExpenseOccurrences(expense, from, to)).sort((a, b) => a.date.localeCompare(b.date));
+  const occurrences=financeExpenseLedgerRows(from,to).filter((row) => row.status !== "skipped");
   return { occurrences, operating_cost:moneyValue(occurrences.reduce((sum, row) => sum + row.amount, 0)) };
 }
 
@@ -13086,10 +13112,60 @@ function validatedFinanceExpense(body = {}, existing = {}) {
   if (!name || !Number.isFinite(amount) || amount < 0 || amount > 10000000 || !["once","daily","weekly","monthly","yearly"].includes(frequency) || !/^\d{4}-\d{2}-\d{2}$/.test(start_date) || (end_date && (!/^\d{4}-\d{2}-\d{2}$/.test(end_date) || end_date < start_date))) fail("INVALID_FINANCE_EXPENSE",422);
   return { name,category:String(body.category ?? existing.category ?? "other").trim().slice(0,80) || "other",amount:moneyValue(amount),frequency,start_date,end_date:end_date||null,is_active:body.is_active===undefined?existing.is_active!==false:body.is_active!==false,notes:String(body.notes ?? existing.notes ?? "").trim().slice(0,1000) };
 }
+function financeExpenseVersion(expense, startDate = expense.start_date, endDate = expense.end_date) {
+  return { name:expense.name,category:expense.category,amount:expense.amount,frequency:expense.frequency,start_date:startDate,end_date:endDate || null,active_from:expense.active_from||null,active_to:expense.active_to||null };
+}
+function dayBeforeFinanceDate(date) {
+  const day=new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate()-1);
+  return day.toISOString().slice(0,10);
+}
 app.get("/api/admin/finance/expenses",(_req,res)=>res.json(ok({ expenses:entityRows("finance_expenses").sort((a,b)=>Number(b.id)-Number(a.id)) })));
 app.post("/api/admin/finance/expenses",(req,res)=>res.json(ok({ expense:createRecord("finance_expenses",validatedFinanceExpense(req.body)) })));
-app.put("/api/admin/finance/expenses/:id",(req,res)=>{const old=getRecord("finance_expenses",req.params.id);if(!old)fail("EXPENSE_NOT_FOUND",404);res.json(ok({ expense:updateRecord("finance_expenses",old.id,validatedFinanceExpense(req.body,old)) }));});
-app.delete("/api/admin/finance/expenses/:id",(req,res)=>{const old=getRecord("finance_expenses",req.params.id);if(!old)fail("EXPENSE_NOT_FOUND",404);res.json(ok({ expense:updateRecord("finance_expenses",old.id,{is_active:false}) }));});
+app.put("/api/admin/finance/expenses/:id",(req,res)=>{
+  const old=getRecord("finance_expenses",req.params.id);
+  if(!old)fail("EXPENSE_NOT_FOUND",404);
+  const next=validatedFinanceExpense(req.body,old), effective=String(req.body?.effective_from||new Date().toISOString().slice(0,10)).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(effective)||effective<new Date().toISOString().slice(0,10))fail("INVALID_EFFECTIVE_DATE",422);
+  const changed=["name","category","amount","frequency","start_date","end_date"].some(key=>String(old[key]??"")!==String(next[key]??""));
+  if(changed){
+    const versions=asArray(old.versions).map(version=>({...version}));
+    if(!versions.length)versions.push(financeExpenseVersion(old));
+    const previous=versions.at(-1);
+    if((previous.active_from||previous.start_date)<effective)previous.active_to=dayBeforeFinanceDate(effective);
+    else versions.pop();
+    const anchorChanged=next.start_date!==old.start_date||next.frequency!==old.frequency;
+    const nextStart=anchorChanged&&next.start_date<effective?effective:next.start_date;
+    versions.push({...financeExpenseVersion(next,nextStart,next.end_date),active_from:effective});
+    next.versions=versions;
+  } else if(old.versions) next.versions=old.versions;
+  res.json(ok({ expense:updateRecord("finance_expenses",old.id,next) }));
+});
+app.delete("/api/admin/finance/expenses/:id",(req,res)=>{
+  const old=getRecord("finance_expenses",req.params.id);
+  if(!old)fail("EXPENSE_NOT_FOUND",404);
+  const today=new Date().toISOString().slice(0,10),versions=asArray(old.versions).map(version=>({...version}));
+  if(!versions.length)versions.push(financeExpenseVersion(old));
+  const current=versions.at(-1);
+  if(!current.active_to||current.active_to>=today)current.active_to=dayBeforeFinanceDate(today);
+  res.json(ok({ expense:updateRecord("finance_expenses",old.id,{is_active:false,versions}) }));
+});
+app.get("/api/admin/finance/expense-ledger",(req,res)=>{
+  const from=String(req.query.from||new Date().toISOString().slice(0,7)+"-01").slice(0,10),to=String(req.query.to||new Date().toISOString().slice(0,10)).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)fail("INVALID_DATE_RANGE",422);
+  res.json(ok({ occurrences:financeExpenseLedgerRows(from,to),from,to }));
+});
+app.post("/api/admin/finance/expense-ledger",(req,res)=>{
+  const expenseId=Number(req.body?.expense_id),date=String(req.body?.date||"").slice(0,10),status=String(req.body?.status||"");
+  const expense=getRecord("finance_expenses",expenseId);
+  if(!expense||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!["paid","skipped","due"].includes(status))fail("INVALID_EXPENSE_OCCURRENCE",422);
+  const scheduled=financeExpenseOccurrences(expense,date,date)[0];
+  if(!scheduled)fail("EXPENSE_OCCURRENCE_NOT_FOUND",404);
+  const existing=entityRows("finance_expense_occurrences").find(row=>Number(row.expense_id)===expenseId&&row.date===date);
+  const payload={expense_id:expenseId,date,status,amount:existing?.amount??scheduled.amount,paid_at:status==="paid"?new Date().toISOString():null,notes:String(req.body?.notes||existing?.notes||"").slice(0,1000)};
+  const occurrence=existing?updateRecord("finance_expense_occurrences",existing.id,payload):createRecord("finance_expense_occurrences",payload);
+  res.json(ok({occurrence}));
+});
 
 function financeReportSettings() {
   const saved=getSetting("financeReportSettings")||{};

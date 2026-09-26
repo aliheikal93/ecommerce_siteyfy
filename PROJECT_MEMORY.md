@@ -257,3 +257,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 ameAr, groupAr, hex_code); variant generation, color picking, and card summaries resolve those fields so Arabic names and actual swatches remain visible.
 - The shared product catalog section is a compact disclosure. It starts collapsed on edit and expanded on create, and explains categories, subcategories, filter facets, and card labels.
 - Variant cards show the main thumbnail, color swatch/name, option group/value, price, and stock state. Editing moves the live row to a viewport-centered overlay and restores it to its original list position before save; the serialized variant list keeps its original order and count.
+
+## Finance and catalog admin restructuring — 2026-09-27
+
+- Finance navigation separates Sales & Profit, Costs, Expense Items, Expense Ledger, and Reports. The expense-item list has search/status filters and a focused add/edit form; the ledger shows each due date with paid, skipped, and reset actions. A skipped date is excluded from operating cost.
+- Recurring expense edits keep prior schedule versions. A change starts at an explicit effective date without moving the original monthly/weekly anchor, so earlier reports remain stable. Pausing an item closes future dates. `finance_expense_occurrences` stores per-date overrides.
+- Product and bundle editors now use horizontal tabs, with one visible section at a time and the item name in the edit heading. Bundle option generation is available only during creation; compact option cards show their image, color, choice, price, and component count. Legacy options with a saved color/choice name but no lookup ID can still be saved.
+- Mobile data tables with many columns become expandable cards. Form controls have consistent padding and select-arrow spacing. The gallery usage index scans media fields that belong to each entity, rather than joined brand/category objects; brand logos no longer claim usage by every linked product.
+- Validated on an isolated database/server: expense revisions retained the first-of-month schedule, paid/skipped states, and skipped-cost exclusion; gallery logo use resolved only to the brand. Desktop and Arabic mobile browser checks covered the finance pages, table cards, product/bundle tabs, and successful saves.

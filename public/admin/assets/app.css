@@ -4584,3 +4584,67 @@ body>.variant-row.is-editing .variant-delete,body>.variant-row.is-editing .varia
 body>.variant-row.is-editing .variant-delete{grid-column:4;justify-self:end}
 body>.variant-row.is-editing .variant-editor-close{grid-column:1;justify-self:start}
 @media(max-width:700px){body>.variant-row.is-editing .variant-compact{top:-16px}body>.variant-row.is-editing .variant-delete{grid-column:2}}
+
+/* Focused product and bundle editors */
+.editor-tabs{position:sticky;top:0;z-index:35;display:flex;gap:6px;overflow-x:auto;max-width:100%;padding:9px;background:var(--panel);border:1px solid var(--line);border-radius:12px;scrollbar-width:thin}
+.editor-tabs button{position:relative;flex:none;min-height:40px;padding:8px 14px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-weight:700;white-space:nowrap;cursor:pointer}
+.editor-tabs button:hover{background:var(--panel-soft);color:var(--text)}
+.editor-tabs button.active{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
+.editor-tab-dirty{display:none;width:6px;height:6px;margin-inline-start:7px;border-radius:50%;background:var(--brand);vertical-align:middle}
+.editor-tabs button.is-dirty .editor-tab-dirty{display:inline-block}
+.catalog-form-section[hidden],.bundle-tab-panel[hidden],.bundle-generator[hidden]{display:none!important}
+.editor-current-name{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+.bundle-editor-body:has(.bundle-tab-panel){display:block}
+.bundle-tab-panel{min-width:0;margin-top:14px;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.bundle-tab-panel>.form-grid{margin-top:12px}
+.bundle-option-compact-traits{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px;color:var(--muted);font-size:11px}
+.bundle-option-compact-traits i{display:inline-block;width:16px;height:16px;flex:none;border:1px solid var(--line-strong);border-radius:50%}
+
+/* Separate finance pages and expense ledger */
+.finance-page-intro{margin:14px 0 20px;padding:15px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);color:var(--muted);line-height:1.6}
+.finance-list-tools{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin-bottom:16px}
+.finance-list-tools .field{min-width:160px;max-width:280px;flex:1}
+.finance-item-list{display:grid;gap:10px}
+.finance-item-card{display:grid;grid-template-columns:minmax(180px,1fr) minmax(130px,.55fr) auto;align-items:center;gap:16px;padding:17px 19px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.finance-item-card h3{margin:7px 0 4px;font-size:16px;line-height:1.35}
+.finance-item-card small,.finance-item-details span{color:var(--muted);font-size:12px}
+.finance-item-details{display:grid;gap:3px}
+.finance-item-details strong{font-size:17px}
+.finance-item-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+.finance-editor-backdrop{z-index:1200}
+.finance-editor-dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 24px);display:flex;flex-direction:column;overflow:hidden}
+.finance-editor-dialog .modal-body{overflow:auto;min-height:0}
+.finance-expense-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.finance-expense-form label{display:grid;align-content:start;gap:6px;font-size:12px;font-weight:700}
+.finance-expense-form label.full{grid-column:1/-1}
+.finance-expense-form input,.finance-expense-form select,.finance-expense-form textarea{width:100%;min-height:42px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);color:var(--text);font:inherit}
+.finance-expense-form textarea{min-height:80px;resize:vertical}
+
+/* Controls and readable data lists on narrow screens */
+select{padding-inline-end:36px!important}
+input[type="number"]{padding-inline:12px;min-height:40px}
+.mobile-row-toggle{display:none}
+@media(max-width:900px){.finance-item-card{grid-template-columns:minmax(0,1fr) auto}.finance-item-actions{grid-column:1/-1;justify-content:flex-start}}
+@media(max-width:640px){
+  .finance-item-card{grid-template-columns:1fr;gap:10px;padding:14px}
+  .finance-item-actions{grid-column:auto}
+  .finance-item-actions .btn{min-height:40px}
+  .finance-list-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finance-list-tools .field{min-width:0;max-width:none}
+  .finance-expense-form{grid-template-columns:1fr}
+  .finance-expense-form label.full{grid-column:auto}
+  .editor-tabs{top:0;padding:6px}
+  .editor-tabs button{min-height:42px;padding-inline:11px}
+  .bundle-tab-panel{padding:14px}
+  .table-scroll:has(.mobile-card-table){overflow:visible}
+  .data-table.mobile-card-table{display:block;width:100%;min-width:0!important;border:0;background:transparent}
+  .mobile-card-table thead{display:none}
+  .mobile-card-table tbody{display:grid;gap:10px;width:100%}
+  .mobile-card-table tr{display:grid;width:100%;gap:0;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .mobile-card-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-width:0;padding:7px 0!important;border:0!important;white-space:normal;overflow-wrap:anywhere;text-align:start}
+  .mobile-card-table td::before{content:attr(data-mobile-label);flex:none;max-width:42%;color:var(--muted);font-size:11px;font-weight:700;text-align:start}
+  .mobile-card-table td[data-mobile-extra]{display:none}
+  .mobile-card-table tr.mobile-expanded td[data-mobile-extra]{display:flex}
+  .mobile-card-table td:last-child{border-top:1px solid var(--line)!important;margin-top:6px;padding-top:10px!important}
+  .mobile-row-toggle{display:inline-flex;align-items:center;justify-content:center;min-height:38px;margin-top:4px;padding:7px 12px;border:1px solid var(--line-strong);border-radius:7px;background:var(--panel-soft);color:var(--text);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+}
