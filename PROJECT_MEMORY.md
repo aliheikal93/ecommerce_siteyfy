@@ -249,3 +249,11 @@ CodeGraph currently reports that the major checkout, shipping, payment, and fina
 - The initial storefront shell requests the configured loading icon before the main storefront data finishes. A valid custom GIF replaces the CSS spinner; a missing or failed file leaves the default spinner visible.
 - The public loader endpoint redirects to the saved GIF without caching the setting response. With no custom icon it returns 404 so the inline fallback remains active.
 - Verified at 1440x1050 and 390x844: instant local preview, successful upload, 128x128 animated asset rendering at 64x64, reset behavior, mobile width without overflow, persisted storefront replacement, and automatic fallback. Invalid PNG upload returns 422. Temporary test settings, history, and files were removed.
+
+## Product variant editor refinement — 2026-09-26
+
+- Combination generation appears only while creating a variable product. Existing products retain their variant cards and individual editing controls without the generator.
+- Admin catalog color and option rows may use camelCase names (
+ameAr, groupAr, hex_code); variant generation, color picking, and card summaries resolve those fields so Arabic names and actual swatches remain visible.
+- The shared product catalog section is a compact disclosure. It starts collapsed on edit and expanded on create, and explains categories, subcategories, filter facets, and card labels.
+- Variant cards show the main thumbnail, color swatch/name, option group/value, price, and stock state. Editing moves the live row to a viewport-centered overlay and restores it to its original list position before save; the serialized variant list keeps its original order and count.
