@@ -2352,6 +2352,10 @@
       const resource = resources[resourceKey];
       return switchButton({ id: row?.id, field: key, value, disabled: resource?.readOnly });
     }
+    if (resourceKey === "products" && /^(?:name|short_description|description)_(?:ar|en)$/.test(key)) {
+      const copy = productEditorCopy(value);
+      return `<span class="${copy.length > 80 ? "cell-clamp" : ""}" style="white-space:pre-line">${escapeHtml(copy)}</span>`;
+    }
     if (resourceKey === "products" && key === "stock") {
       if (row.inventory_mode === "out_of_stock" || value === 0) return `<span class="status-pill bad">${ui("Out of stock", "نافد")}</span>`;
       if (row.inventory_mode === "unlimited" || value === null || value === undefined || value === "") return `<span class="status-pill good">${t("unlimitedStock")}</span>`;
@@ -2629,6 +2633,24 @@ async function loadCatalogChoices() {
     document.getElementById("analyzeProductInEditor").onclick = () => analyzeProductInEditor(row);
   }
 
+  function productEditorCopy(value = "") {
+    const source = String(value ?? "").replace(/\\r\\n|\\n|\\r/g, "\n").replace(/\r\n?/g, "\n");
+    if (!/<[a-z][^>]*>/i.test(source) && !/&lt;\/?[a-z]/i.test(source)) return source;
+    const decode = text => new DOMParser().parseFromString(text, "text/html").body.textContent || "";
+    const markup = /&lt;\/?[a-z]/i.test(source) ? decode(source) : source;
+    const parsed = new DOMParser().parseFromString(markup, "text/html");
+    const blocked = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "SVG"]);
+    const blocks = new Set(["P", "DIV", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
+    const read = node => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+      if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName)) return "";
+      if (node.tagName === "BR") return "\n";
+      const content = [...node.childNodes].map(read).join("");
+      return blocks.has(node.tagName) ? `${node.tagName === "LI" ? "• " : ""}${content.trimEnd()}\n` : content;
+    };
+    return [...parsed.body.childNodes].map(read).join("").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   function field(name, labelKey, type, value, required, resourceKey = "") {
     if (type === "image") return imageUploadField(name, labelKey, value, required);
     if (type === "categorySelect") return choiceSelectField(name, labelKey, value, (state.rows.categories || []).filter(row => !row.parent_id), "category");
@@ -2641,7 +2663,8 @@ async function loadCatalogChoices() {
     if (type === "goodsTypeSelect") return marketChoiceField(name, labelKey, value, state.marketCatalog?.goods_types || [], "id");
     if (type === "shippingProfileSelect") return marketChoiceField(name, labelKey, value, state.marketCatalog?.shipping_profiles || [], "id");
     if (type === "countrySelect") return marketChoiceField(name, labelKey, value, state.marketCatalog?.countries || [], "code", true);
-    if (type === "textarea") return `<div class="field full"><label>${t(labelKey)}${required ? " *" : ""}</label><textarea name="${name}" ${required ? "required" : ""}>${value || ""}</textarea></div>`;
+    const copyField = resourceKey === "products" && /^(?:name|short_description|description)_(?:ar|en)$/.test(name);
+    if (type === "textarea" || (copyField && type === "text")) return `<div class="field full"><label>${t(labelKey)}${required ? " *" : ""}</label><textarea name="${name}" ${required ? "required" : ""} ${copyField && type === "text" ? 'rows="3"' : ""}>${escapeHtml(copyField ? productEditorCopy(value) : value || "")}</textarea></div>`;
     if (type === "checkbox") return `<div class="field"><label>${t(labelKey)}</label><input type="hidden" name="${name}" value="${value === false ? "false" : "true"}" />${switchButton({ field: name, value, id: "", label: true })}</div>`;
     return `<div class="field"><label>${t(labelKey)}${required ? " *" : ""}</label><input name="${name}" type="${type}" value="${value || ""}" ${required ? "required" : ""} /></div>`;
   }

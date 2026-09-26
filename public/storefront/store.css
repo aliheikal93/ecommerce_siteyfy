@@ -508,7 +508,7 @@ img { max-width: 100%; display: block; }
 .zoom-hint { position: absolute; bottom: 14px; inset-inline-end: 14px; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(255,255,255,.92); color: var(--primary); display: grid; place-items: center; }
 .product-summary { padding-top: 8px; }
 .product-summary .product-meta { font-size: 13px; }
-.product-summary h1 { color: var(--text); font-size: clamp(25px, 3vw, 36px); line-height: 1.45; margin: 8px 0 14px; }
+.product-summary h1 { color: var(--text); font-size: clamp(25px, 3vw, 36px); line-height: 1.45; margin: 8px 0 14px; white-space:pre-wrap; }
 .bundle-main-visual { overflow:hidden; min-height:520px; border-radius:8px; background:#f5f3f4; }
 .bundle-main-visual > img { width:100%; height:100%; min-height:520px; object-fit:cover; }
 .bundle-saving { width:max-content; max-width:100%; margin-bottom:15px; padding:8px 12px; border-radius:5px; background:#edf8f1; color:#167148; font-size:13px; font-weight:700; }
@@ -1308,7 +1308,7 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
   font-size: 14px;
   line-height: 1.8;
   font-weight: 400;
-  white-space: pre-line;
+  white-space: pre-wrap;
 }
 .detail-description p {
   white-space: pre-line;
@@ -1361,6 +1361,7 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 
 /* Product descriptions and bottom set configurator */
 .detail-description .rich-description{max-width:920px;color:#282229;font-size:15px;line-height:2;font-weight:500}
+.detail-description .product-copy-text{white-space:pre-wrap;overflow-wrap:anywhere}
 .rich-description>*:first-child{margin-top:0}.rich-description>*:last-child{margin-bottom:0}
 .rich-description p{margin:0 0 14px;white-space:normal}.rich-description h2,.rich-description h3,.rich-description h4{margin:26px 0 12px;color:var(--primary);line-height:1.5}.rich-description ul,.rich-description ol{margin:10px 0 18px;padding-inline-start:24px}.rich-description li{margin:7px 0}.rich-description a{color:var(--primary);font-weight:700;text-underline-offset:3px}
 .bundle-configurator{margin-top:18px;padding:28px;border:1px solid color-mix(in srgb,var(--primary) 18%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--primary) 3%,#fff);box-shadow:0 10px 30px rgba(35,25,42,.05);scroll-margin-top:96px}

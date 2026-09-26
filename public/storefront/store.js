@@ -178,6 +178,24 @@ function richDescriptionHtml(value = "") {
   return root.innerHTML.trim();
 }
 
+function productCopyText(value = "") {
+  const source = String(value ?? "").replace(/\\r\\n|\\n|\\r/g, "\n").replace(/\r\n?/g, "\n");
+  if (!/<[a-z][^>]*>/i.test(source) && !/&lt;\/?[a-z]/i.test(source)) return source.trim();
+  const decode = text => new DOMParser().parseFromString(text, "text/html").body.textContent || "";
+  const markup = /&lt;\/?[a-z]/i.test(source) ? decode(source) : source;
+  const parsed = new DOMParser().parseFromString(markup, "text/html");
+  const blocked = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "SVG"]);
+  const blocks = new Set(["P", "DIV", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6"]);
+  const read = node => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+    if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName)) return "";
+    if (node.tagName === "BR") return "\n";
+    const content = [...node.childNodes].map(read).join("");
+    return blocks.has(node.tagName) ? `${node.tagName === "LI" ? "• " : ""}${content.trimEnd()}\n` : content;
+  };
+  return [...parsed.body.childNodes].map(read).join("").replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function descriptionExcerpt(value = "", limit = 220) {
   const text = productText(normalizedDescriptionSource(value)).replace(/\s+/g, " ").trim();
   return text.length > limit ? `${text.slice(0, limit).trim()}…` : text;
@@ -1315,16 +1333,16 @@ function renderProduct(product) {
   let displayedVariant=selectedVariant;
   let quantity=1;
   const baseMedia=productMedia(product);
-  const mediaForVariant=variant=>{const urls=[variant?.image_url,...(variant?.images||[])].filter(Boolean),seen=new Set();return urls.length?urls.filter(url=>!seen.has(url)&&seen.add(url)).map((url,index)=>({type:"image",url,sort_order:index})):baseMedia;};
-  let media=mediaForVariant(selectedVariant);
-  const initialImage=media.find(item=>item.type === "image")?.url || product.main_photo_url;
+  const media=baseMedia;
+  const initialImage=selectedVariant?.image_url || selectedVariant?.images?.[0] || media.find(item=>item.type === "image")?.url || product.main_photo_url;
   let mediaIndex=Math.max(0,media.findIndex(item=>item.url===initialImage));
   const mediaIsOutOfStock=()=>false;
   const updateMediaStockState=()=>{const stage=document.getElementById("productGalleryStage"),overlay=document.getElementById("productStockOverlay");stage?.classList.remove("is-out-of-stock");if(overlay)overlay.hidden=true;document.querySelectorAll("[data-gallery-index]").forEach(button=>button.classList.remove("is-out-of-stock"));};
   const thumbnail=(item,index)=>`<button class="gallery-thumb ${index===mediaIndex?"active":""} ${item.type==="video"?"is-video":""}" type="button" data-gallery-index="${index}" aria-label="${item.type==="video"?"تشغيل فيديو المنتج":`عرض صورة ${index+1}`}">${item.type==="video"?`<video src="${esc(item.url)}" muted preload="metadata" playsinline></video><span>${icon("play",17)}</span>`:`<img src="${esc(item.url)}" alt="" loading="lazy" />`}</button>`;
-  const shortDescription=descriptionExcerpt(product.short_description_ar||"");
-  const fullDescription=richDescriptionHtml(product.description_ar||product.short_description_ar||"");
-  shell(`${breadcrumbs(product.name_ar)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${media.map(thumbnail).join("")}</div><div class="gallery-main" id="productGalleryStage" aria-live="polite"><div id="galleryStageContent"></div><span class="product-stock-overlay" id="productStockOverlay" hidden>Out of Stock</span><button class="gallery-nav gallery-prev" id="galleryPrev" type="button" aria-label="الوسائط السابقة">${icon("chevron-left")}</button><button class="gallery-nav gallery-next" id="galleryNext" type="button" aria-label="الوسائط التالية">${icon("chevron-right")}</button><button class="zoom-hint" id="zoomProduct" type="button" aria-label="عرض بالحجم الكامل">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(product.name_ar)}</h1>${shortDescription?`<p class="short-description">${esc(shortDescription)}</p>`:""}<div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="tax-inclusive">السعر شامل الضريبة</p><div class="product-sales-proof" id="productSalesProof" hidden></div><div id="productPaymentWidgets" class="product-payment-widgets"></div><div id="variantControls"></div><p class="variant-stock-state" id="variantStockState" role="status" hidden>${icon("circle-alert",17)}نفدت كمية هذا الاختيار</p><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div>${fullDescription?`<section class="detail-description"><h2>وصف المنتج</h2><div class="rich-description">${fullDescription}</div></section>`:""}<section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
+  const productName=productCopyText(product.name_ar || product.name_en || "");
+  const shortDescription=productCopyText(product.short_description_ar || "");
+  const fullDescription=productCopyText(product.description_ar || product.short_description_ar || "");
+  shell(`${breadcrumbs(productName)}<section class="container product-page"><div class="product-detail"><div class="product-gallery"><div class="gallery-thumbs" id="galleryThumbs">${media.map(thumbnail).join("")}</div><div class="gallery-main" id="productGalleryStage" aria-live="polite"><div id="galleryStageContent"></div><span class="product-stock-overlay" id="productStockOverlay" hidden>Out of Stock</span><button class="gallery-nav gallery-prev" id="galleryPrev" type="button" aria-label="الوسائط السابقة">${icon("chevron-left")}</button><button class="gallery-nav gallery-next" id="galleryNext" type="button" aria-label="الوسائط التالية">${icon("chevron-right")}</button><button class="zoom-hint" id="zoomProduct" type="button" aria-label="عرض بالحجم الكامل">${icon("maximize-2")}</button></div></div><div class="product-summary"><div class="product-meta">${esc(productCategoryName(product))}</div><h1>${esc(productName)}</h1>${shortDescription?`<p class="short-description">${esc(shortDescription)}</p>`:""}<div class="product-rating-summary" id="productRatingSummary" hidden></div><div class="price detail-price" id="detailPrice"></div><p class="tax-inclusive">السعر شامل الضريبة</p><div class="product-sales-proof" id="productSalesProof" hidden></div><div id="productPaymentWidgets" class="product-payment-widgets"></div><div id="variantControls"></div><p class="variant-stock-state" id="variantStockState" role="status" hidden>${icon("circle-alert",17)}نفدت كمية هذا الاختيار</p><div class="purchase-row"><div class="quantity-control"><button id="qtyPlus" aria-label="زيادة الكمية">+</button><strong id="qtyValue">1</strong><button id="qtyMinus" aria-label="تقليل الكمية">−</button></div><button class="primary-button" id="addProduct">${icon("shopping-cart")}إضافة إلى السلة</button></div><button class="secondary-button buy-now" id="buyNow">اشتري الآن</button><div class="product-trust"><span>${icon("shield-check",18)}دفع آمن وبيانات محمية</span><span>${icon("badge-check",18)}منتج أصلي من رداء الحشمة</span></div></div></div>${fullDescription?`<section class="detail-description"><h2>وصف المنتج</h2><div class="rich-description product-copy-text">${esc(fullDescription)}</div></section>`:""}<section class="product-reviews-root" id="productReviewsRoot" data-product-id="${esc(product.id)}" aria-live="polite"><div class="reviews-loading" aria-label="جاري تحميل التقييمات"><span></span><span></span><span></span></div></section></section><section class="section soft"><div class="container"><div class="section-head"><h2>منتجات قد تعجبك</h2></div><div class="product-grid">${state.products.filter(item=>item.id!==product.id).slice(0,4).map(productCard).join("")}</div></div></section>`);
 
   const openCurrentMedia=()=>{
     if(!media[mediaIndex])return;
@@ -1355,8 +1373,11 @@ function renderProduct(product) {
     hydrateIcons();
   };
   const bindGalleryThumbs=()=>document.querySelectorAll("[data-gallery-index]").forEach(button=>button.onclick=()=>renderMedia(Number(button.dataset.galleryIndex)));
-  const applyVariantMedia=variant=>{media=mediaForVariant(variant);mediaIndex=0;const thumbs=document.getElementById("galleryThumbs");if(thumbs)thumbs.innerHTML=media.map(thumbnail).join("");const prev=document.getElementById("galleryPrev"),next=document.getElementById("galleryNext");if(prev)prev.hidden=media.length<2;if(next)next.hidden=media.length<2;bindGalleryThumbs();renderMedia(0);};
+  const applyVariantMedia=variant=>{const urls=[variant?.image_url,...(variant?.images||[])].filter(Boolean);const index=urls.map(url=>media.findIndex(item=>item.url===url)).find(value=>value>=0);renderMedia(index ?? Math.max(0,mediaIndex));document.querySelector(`[data-gallery-index="${mediaIndex}"]`)?.scrollIntoView({block:"nearest",inline:"nearest"});};
   const selectMediaByUrl=url=>{const index=media.findIndex(item=>item.url===url);if(index>=0)renderMedia(index);};
+  document.getElementById("galleryPrev").hidden=media.length<2;
+  document.getElementById("galleryNext").hidden=media.length<2;
+  bindGalleryThumbs();
   applyVariantMedia(selectedVariant);
   document.getElementById("galleryPrev")?.addEventListener("click",()=>renderMedia(mediaIndex-1));
   document.getElementById("galleryNext")?.addEventListener("click",()=>renderMedia(mediaIndex+1));
