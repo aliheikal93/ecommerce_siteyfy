@@ -90,6 +90,7 @@
       financeLedger: "Expense ledger",
       financeReports: "Finance reports",
       userOverview: "Users overview",
+      wishlist: "Wishlist",
       shippingOverview: "Shipping overview",
       content: "Content",
       storefront: "Storefront",
@@ -434,6 +435,7 @@
       financeLedger: "سجل الاستحقاقات",
       financeReports: "تقارير المالية",
       userOverview: "نظرة عامة على المستخدمين",
+      wishlist: "المفضلة",
       shippingOverview: "نظرة عامة على الشحن",
       content: "المحتوى",
       storefront: "واجهة المتجر",
@@ -897,7 +899,7 @@
     { label: "inventoryManagement", icon:"box", items: [{ id: "inventoryOverview", icon: "dashboard" }, { id: "inventory", icon: "box" }] },
     { label: "sales", icon:"cart", items: [{ id: "salesOverview", icon: "dashboard" }, { id: "orders", icon: "cart" }, { id: "returns", icon: "refresh" }, { id: "checkoutRecovery", icon: "users" }, { id: "discounts", icon: "tag" }, { id: "combinedPromotions", icon: "layers" }] },
     { label: "financeManagement", icon:"credit-card", items: [{ id: "financeOverview", icon: "dashboard" }, { id: "financeProfit", icon: "dashboard" }, { id: "financeCosts", icon: "credit-card" }, { id: "financeExpenses", icon: "file" }, { id: "financeLedger", icon: "check" }, { id: "financeReports", icon: "bell" }] },
-    { label: "userManagement", icon:"users", items: [{ id: "userOverview", icon: "dashboard" }, { id: "users", icon: "users" }, { id: "staff", icon: "users" }, { id: "staffRoles", icon: "settings" }, { id: "staffActivity", icon: "file" }] },
+    { label: "userManagement", icon:"users", items: [{ id: "userOverview", icon: "dashboard" }, { id: "users", icon: "users" }, { id: "wishlist", icon: "heart" }, { id: "staff", icon: "users" }, { id: "staffRoles", icon: "settings" }, { id: "staffActivity", icon: "file" }] },
     { label: "integrations", icon:"settings", items: [{ id: "integrationCenter", icon: "settings" }, { id: "shippingIntegrations", icon: "truck" }, { id: "paymentGateways", icon: "credit-card" }, { id: "marketingPixels", icon: "dashboard" }] },
     { label: "shippingOperations", icon:"truck", items: [{ id: "shippingOverview", icon: "dashboard" }, { id: "shippingShipments", icon: "truck" }, { id: "shippingClosings", icon: "file" }, { id: "shippingAudit", icon: "check" }, { id: "locations", icon: "map", condition:"internal_shipping" }] },
     { label: "aiAssistant", icon:"sparkles", items: [{ id: "aiSetup", icon: "sparkles" }, { id: "aiProducts", icon: "image" }, { id: "aiSEO", icon: "file" }, { id: "aiPricing", icon: "tag" }, { id: "aiLogs", icon: "file" }] },
@@ -1019,7 +1021,7 @@
     market:"settings.view", currencies:"settings.view", locations:"settings.view", lighthouse:"settings.view", settings:"settings.view", dashboardIdentity:"settings.view",
     products:"catalog.view", categories:"catalog.view", brands:"catalog.view", colors:"catalog.view", options:"catalog.view", facets:"catalog.view", labels:"catalog.view", collections:"catalog.view", collectionEditor:"catalog.view", bundles:"catalog.view", reviewsRecommendations:"catalog.view", recommendationEditor:"catalog.view",
     inventory:"inventory.view", inventoryReceipt:"inventory.view", orders:"orders.view", orderDetail:"orders.view", manualOrder:"orders.manage", returns:"returns.view", checkoutRecovery:"orders.view", checkoutRecoveryDetail:"orders.view",
-    discounts:"promotions.view", combinedPromotions:"promotions.view", finance:"finance.view", financeProfit:"finance.view", financeCosts:"finance.view", financeExpenses:"finance.view", financeLedger:"finance.view", financeReports:"finance.view", users:"customers.view",
+    discounts:"promotions.view", combinedPromotions:"promotions.view", finance:"finance.view", financeProfit:"finance.view", financeCosts:"finance.view", financeExpenses:"finance.view", financeLedger:"finance.view", financeReports:"finance.view", users:"customers.view", wishlist:"customers.view",
     integrationCenter:"integrations.view", shippingIntegrations:"integrations.view", shippingProvider:"integrations.view", paymentGateways:"integrations.view", marketingPixels:"integrations.view",
     shippingShipments:"shipping.view", shippingClosings:"shipping.view", shippingReport:"shipping.view", shippingSettlement:"shipping.view", shippingLedger:"shipping.view", shippingAudit:"shipping.view", shippingAuditFinding:"shipping.view", shippingCarrierBill:"shipping.view", shippingCodBills:"shipping.view", shippingFeeBills:"shipping.view", shippingReconciliation:"shipping.view",
     aiSetup:"ai.view", aiProducts:"ai.view", aiSEO:"ai.view", aiPricing:"ai.view", aiLogs:"ai.view", notifications:"notifications.view",
@@ -1303,6 +1305,7 @@
     if (state.view === "overview") return renderOverview(page);
     if (["salesOverview","inventoryOverview","financeOverview","userOverview","shippingOverview"].includes(state.view)) return renderModuleOverview(page,state.view.replace("Overview","") || "orders");
     if (state.view === "settings") return renderSettings(page);
+    if (state.view === "wishlist") return renderAdminWishlist(page);
     if (state.view === "dashboardIdentity") return renderDashboardIdentity(page);
     if (state.view === "brandStudio") return renderBrandStudio(page);
     if (state.view === "market") return renderMarket(page);
@@ -1570,6 +1573,22 @@
     const addresses = payload.addresses || [];
     document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop user-addresses-backdrop"><section class="modal user-addresses-modal"><div class="modal-head"><div><span class="section-kicker">ADDRESS BOOK</span><h2>${ui("Customer addresses", "عناوين العميل")}</h2><p>${escapeHtml(user.name||user.full_name||user.email||`#${user.id}`)} · ${addresses.length} ${ui("saved addresses", "عنوان محفوظ")}</p></div><button class="btn icon-btn" type="button" data-close-user-addresses aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><div class="admin-address-list">${addresses.length?addresses.map(address=>`<article class="admin-address-card ${address.is_default?"is-default":""}"><header><span>${i("map")}</span><div><strong>${escapeHtml(address.label||ui("Saved address","عنوان محفوظ"))}</strong><small>${address.is_default?ui("Default address","العنوان الافتراضي"):address.type||"home"}</small></div>${address.is_default?`<b>${ui("Default","افتراضي")}</b>`:""}</header><p>${escapeHtml([address.city,address.district,address.street,address.building_number].filter(Boolean).join(" · "))}</p><dl><div><dt>${ui("Short address","الرمز المختصر")}</dt><dd><bdi>${escapeHtml(address.short_address||"-")}</bdi></dd></div><div><dt>${ui("Recipient","المستلم")}</dt><dd>${escapeHtml(address.full_name||[address.first_name,address.last_name].filter(Boolean).join(" "))}</dd></div><div><dt>${ui("Phone","الجوال")}</dt><dd><bdi>${escapeHtml(address.phone||"-")}</bdi></dd></div></dl></article>`).join(""):`<div class="empty-state"><div><h2>${ui("No saved addresses","لا توجد عناوين محفوظة")}</h2><p class="muted">${ui("The first complete order address will be synced automatically.","سيتم مزامنة أول عنوان مكتمل من الطلبات تلقائيًا.")}</p></div></div>`}</div></div><div class="modal-foot"><button class="btn primary" type="button" data-close-user-addresses>${t("close")}</button></div></section></div>`);
     const backdrop=document.querySelector(".user-addresses-backdrop");const close=()=>backdrop?.remove();backdrop.querySelectorAll("[data-close-user-addresses]").forEach(button=>button.onclick=close);
+  }
+
+  async function renderAdminWishlist(page) {
+    const data=await api("/api/admin/wishlist/overview");
+    const rows=data.items||[];
+    page.innerHTML=pageTitle("wishlist","",`<button class="btn" type="button" id="refreshWishlist">${i("refresh")}${ui("Refresh","تحديث")}</button>`)+`<section class="user-overview-grid wishlist-admin-stats"><article><span>${ui("Saved items","عناصر محفوظة")}</span><strong>${data.total||0}</strong></article><article><span>${ui("Customers","عملاء")}</span><strong>${data.customers||0}</strong></article><article><span>${ui("Guests","زوار")}</span><strong>${data.guests||0}</strong></article></section><section class="card wishlist-admin-card"><div class="user-management-head"><div><span class="section-kicker">WISHLIST INSIGHTS</span><h2>${ui("Most saved products","الأكثر إضافة للمفضلة")}</h2></div></div><div class="wishlist-admin-top">${(data.top_items||[]).length?data.top_items.slice(0,8).map(item=>`<article><img src="${escapeHtml(item.image_url||"")}" alt="" loading="lazy"><div><strong>${escapeHtml(item.name_ar)}</strong><small>${item.item_type==="bundle"?ui("Bundle","طقم"):ui("Product","منتج")}</small></div><b>${item.count}</b></article>`).join(""):`<p class="muted">${ui("No saved items yet","لا توجد عناصر محفوظة بعد")}</p>`}</div></section><section class="card wishlist-admin-card"><div class="user-management-head"><div><span class="section-kicker">CUSTOMER ACTIVITY</span><h2>${ui("Saved items by customer","المفضلة حسب العميل")}</h2><p>${ui("Guest activity is anonymous.","نشاط الزوار يظهر بدون بيانات تعريفية.")}</p></div><span class="pill" id="wishlistMatchCount"></span></div><div class="user-filters"><div class="field"><label>${ui("Search","بحث")}</label><input id="wishlistSearch" type="search" placeholder="${ui("Customer or product","عميل أو منتج")}"></div><div class="field"><label>${ui("Owner","صاحب المفضلة")}</label><select id="wishlistOwnerFilter"><option value="">${ui("Everyone","الكل")}</option><option value="user">${ui("Customers","العملاء")}</option><option value="guest">${ui("Guests","الزوار")}</option></select></div></div><div class="wishlist-admin-list" id="wishlistAdminList"></div></section>`;
+    const draw=()=>{
+      const query=document.getElementById("wishlistSearch").value.trim().toLowerCase(),owner=document.getElementById("wishlistOwnerFilter").value;
+      const filtered=rows.filter(item=>(!owner||item.owner_type===owner)&&(!query||[item.name_ar,item.customer_name,item.customer_email,item.item_id].join(" ").toLowerCase().includes(query)));
+      document.getElementById("wishlistMatchCount").textContent=`${filtered.length} ${ui("items","عنصر")}`;
+      document.getElementById("wishlistAdminList").innerHTML=filtered.length?filtered.map(item=>`<article class="wishlist-admin-row"><img src="${escapeHtml(item.image_url||"")}" alt="" loading="lazy"><div class="wishlist-admin-product"><strong>${escapeHtml(item.name_ar)}</strong><small>${item.item_type==="bundle"?ui("Bundle","طقم"):ui("Product","منتج")} #${item.item_id} · ${item.available?ui("Available","متاح"):ui("Unavailable","غير متاح")}</small></div><div class="wishlist-admin-owner"><strong>${escapeHtml(item.owner_type==="guest"?ui("Anonymous guest","زائر مجهول"):item.customer_name||`#${item.customer_id}`)}</strong><small>${item.owner_type==="guest"?"":escapeHtml(item.customer_email||"")}</small></div><time>${formatDateTime(item.created_at)}</time></article>`).join(""):`<div class="empty-state"><h2>${ui("No matching items","لا توجد عناصر مطابقة")}</h2></div>`;
+    };
+    document.getElementById("refreshWishlist").onclick=()=>renderAdminWishlist(page);
+    document.getElementById("wishlistSearch").oninput=draw;
+    document.getElementById("wishlistOwnerFilter").onchange=draw;
+    draw();
   }
 
   async function renderUsers(page) {

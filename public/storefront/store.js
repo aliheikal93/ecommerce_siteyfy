@@ -33,6 +33,7 @@ const state = {
   paymentMethods:{ methods:[] },
   marketingPixels:null,
   customer:null,
+  wishlist:[],
   checkoutRecovery:null,
   checkoutRecoveryPromise:null,
   cartRevisionToken:"",
@@ -344,6 +345,22 @@ function productCategoryName(product) {
   return product.category_name_ar || product.category?.name_ar || product.category?.nameAr || "رداء الحشمة";
 }
 
+function wishlistEntry(type,id){return state.wishlist.find(item=>item.item_type===type&&String(item.item_id)===String(id));}
+function wishlistButton(type,id,variantId=null,detail=false){
+  const saved=Boolean(wishlistEntry(type,id));
+  return `<button class="wish-button ${detail?"wish-detail":""} ${saved?"is-saved":""}" type="button" data-wishlist-type="${esc(type)}" data-wishlist-id="${esc(id)}" ${variantId!=null?`data-wishlist-variant="${esc(variantId)}"`:""} aria-label="${saved?"إزالة من المفضلة":"إضافة للمفضلة"}" aria-pressed="${saved}">${icon("heart",17)}${detail?`<span>${saved?"محفوظ في المفضلة":"أضف إلى المفضلة"}</span>`:""}</button>`;
+}
+function refreshWishlistButtons(){
+  document.querySelectorAll("[data-wishlist-type][data-wishlist-id]").forEach(button=>{
+    const saved=Boolean(wishlistEntry(button.dataset.wishlistType,button.dataset.wishlistId));
+    button.classList.toggle("is-saved",saved);button.setAttribute("aria-pressed",String(saved));button.setAttribute("aria-label",saved?"إزالة من المفضلة":"إضافة للمفضلة");
+    const label=button.querySelector("span");if(label)label.textContent=saved?"محفوظ في المفضلة":"أضف إلى المفضلة";
+  });
+}
+function renderWishlist(){
+  shell(`${breadcrumbs("المفضلة")}<section class="container wishlist-page"><header class="wishlist-heading"><div><span>اختياراتك المحفوظة</span><h1>المفضلة</h1><p>${state.wishlist.length} ${state.wishlist.length===1?"منتج محفوظ":"منتجات محفوظة"}</p></div><a class="secondary-button" href="/products">متابعة التسوق</a></header>${state.wishlist.length?`<div class="wishlist-grid">${state.wishlist.map(item=>`<article class="wishlist-tile"><div class="wishlist-tile-image">${item.url?`<a href="${esc(item.url)}"><img src="${esc(item.image_url)}" alt="${esc(item.name_ar)}" loading="lazy"></a>`:`<span>الصورة غير متاحة</span>`}</div><div class="wishlist-tile-info"><span class="wishlist-kind">${item.item_type==="bundle"?"طقم":"منتج"}</span><h2>${item.url?`<a href="${esc(item.url)}">${esc(item.name_ar)}</a>`:esc(item.name_ar)}</h2><strong>${item.exists?money(item.price):"غير متاح"}</strong><small class="${item.available?"available":"unavailable"}">${!item.exists?"لم يعد متاحًا":item.available?"متاح الآن":"نفد المخزون"}</small><div class="wishlist-tile-actions">${item.url?`<a class="primary-button" href="${esc(item.url)}">عرض ${item.item_type==="bundle"?"الطقم":"المنتج"}</a>`:""}<button type="button" data-wishlist-remove="${item.id}">إزالة</button></div></div></article>`).join("")}</div>`:`<div class="wishlist-empty">${icon("heart",38)}<h2>مفضلتك فارغة حاليًا</h2><p>اضغط على القلب بجوار أي منتج أو طقم لتحفظه هنا.</p><a class="primary-button" href="/products">تصفح المنتجات</a></div>`}</section>`);
+}
+
 function productCard(product, home = false, pinnedVariant = null) {
   const colors = uniqueColors(product);
   const price = pinnedVariant ? variantPrice(product,pinnedVariant) : productPrice(product);
@@ -360,7 +377,7 @@ function productCard(product, home = false, pinnedVariant = null) {
       ${sale ? `<span class="sale-badge">تخفيض</span>` : ""}
       ${badges.length?`<div class="product-card-badges ${sale?"under-sale":""}">${badges.map(label=>`<span style="--badge-bg:${esc(label.color)}">${esc(label.text)}</span>`).join("")}</div>`:""}
       ${soldOut ? `<span class="stock-badge">Out of Stock</span>` : ""}
-      <button class="wish-button" type="button" aria-label="إضافة للمفضلة">${icon("heart",17)}</button>
+      ${wishlistButton("product",product.id,pinnedVariant?.id)}
       <a href="${esc(link)}" aria-label="${esc(product.name_ar)}"><img src="${esc(image)}" alt="${esc(product.name_ar)}" loading="lazy" /></a>
     </div>
     <div class="product-info">
@@ -422,6 +439,7 @@ function collectionItemCard(item, collection, home = false) {
     <div class="product-media ${soldOut ? "is-out-of-stock" : ""}">
       ${compare ? `<span class="sale-badge">تخفيض</span>` : ""}
       ${soldOut ? `<span class="stock-badge">Out of Stock</span>` : ""}
+      ${wishlistButton("product",product.id,variant?.id)}
       <a href="${esc(link)}" aria-label="${esc(product.name_ar || product.name_en)}"><img src="${esc(image)}" alt="${esc(product.name_ar || product.name_en)}" loading="lazy" /></a>
     </div>
     <div class="product-info">
@@ -445,7 +463,7 @@ function bundleCard(bundle, pinnedVariant = null) {
   const soldOut=active.available_stock!==null&&active.available_stock!==undefined&&Number(active.available_stock)<=0;
   const link=`/bundle/${bundle.id}${selectedVariant?.id?`?variant=${encodeURIComponent(selectedVariant.id)}`:""}`;
   const visualBundle={...bundle,main_photo_url:active.image_url||bundle.main_photo_url,items:active.items||bundle.items};
-  return `<article class="product-card bundle-card"><div class="product-media ${soldOut?"is-out-of-stock":""}"><span class="bundle-badge">طقم</span>${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<a href="${esc(link)}" aria-label="${esc(bundle.name_ar)}">${bundleVisual(visualBundle,true)}</a></div><div class="product-info"><div class="product-meta">${Number(active.item_count||active.items?.length||bundle.item_count||bundle.items?.length||0)} منتجات معًا${selectedVariant?` · ${esc(selectedVariant.label_ar||selectedVariant.label_en||selectedVariant.color||"")}`:""}</div><a class="product-title" href="${esc(link)}">${esc(bundle.name_ar||bundle.name_en)}</a><div class="price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div><a class="card-add bundle-card-link" href="${esc(link)}">${soldOut?"نفد هذا الاختيار":"عرض الطقم"}</a></div></article>`;
+  return `<article class="product-card bundle-card"><div class="product-media ${soldOut?"is-out-of-stock":""}"><span class="bundle-badge">طقم</span>${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}${wishlistButton("bundle",bundle.id,selectedVariant?.id)}<a href="${esc(link)}" aria-label="${esc(bundle.name_ar)}">${bundleVisual(visualBundle,true)}</a></div><div class="product-info"><div class="product-meta">${Number(active.item_count||active.items?.length||bundle.item_count||bundle.items?.length||0)} منتجات معًا${selectedVariant?` · ${esc(selectedVariant.label_ar||selectedVariant.label_en||selectedVariant.color||"")}`:""}</div><a class="product-title" href="${esc(link)}">${esc(bundle.name_ar||bundle.name_en)}</a><div class="price">${compare>price?`<del>${money(compare)}</del>`:""}<strong>${money(price)}</strong></div><a class="card-add bundle-card-link" href="${esc(link)}">${soldOut?"نفد هذا الاختيار":"عرض الطقم"}</a></div></article>`;
 }
 
 function announcementHtml() {
@@ -577,9 +595,9 @@ function headerHtml() {
   return `${announcementHtml()}<header class="store-header ${layout.sticky ? "is-sticky" : ""}"><div class="container header-main">
     <a class="header-logo" href="/"><img src="${esc(company.logo_url)}" alt="${esc(company.site_name_ar || "رداء الحشمة")}" /></a>
     <nav class="main-nav desktop-only"><a href="/" class="${pathname==="/"?"active":""}">الرئيسية</a>${productsDesktopMenuHtml(pathname)}<a href="/cart" class="${pathname==="/cart"?"active":""}">السلة</a><a href="/checkout">إتمام الطلب</a><a href="#footer">تواصل معنا</a><a href="/page/about-us" class="${pathname==="/page/about-us"?"active":""}">من نحن</a></nav>
-    <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<button class="round-action" aria-label="المفضلة">${icon("heart")}</button>`:""}<a class="login-button" href="${state.customer?"/account":"/login.html"}"><span>${state.customer?"حسابي":"تسجيل الدخول"}</span>${icon("user-round",18)}</a></div>
+    <div class="header-actions start desktop-only">${layout.show_search!==false?`<button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button>`:""}${layout.show_cart!==false?`<a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a>`:""}${layout.show_wishlist!==false?`<a class="round-action" href="/wishlist" aria-label="المفضلة">${icon("heart")}</a>`:""}<a class="login-button" href="${state.customer?"/account":"/login.html"}"><span>${state.customer?"حسابي":"تسجيل الدخول"}</span>${icon("user-round",18)}</a></div>
     <button class="round-action mobile-only" type="button" data-menu-open aria-label="القائمة">${icon("menu")}</button>
-    <div class="header-actions mobile-only"><button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button><a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a></div>
+    <div class="header-actions mobile-only"><button class="round-action" type="button" data-search-open aria-label="البحث">${icon("search")}</button><a class="round-action" href="/wishlist" aria-label="المفضلة">${icon("heart")}</a><a class="round-action" href="/cart" aria-label="السلة">${icon("shopping-cart")}<span class="cart-count" data-cart-count>0</span></a></div>
   </div></header>${layout.show_category_strip!==false ? categoryStripHtml() : ""}`;
 }
 
@@ -653,6 +671,8 @@ function footerHtml() {
 
 function shell(content) {
   app.innerHTML = `${headerHtml()}<main class="page-main">${content}</main>${footerHtml()}`;
+  const match=location.pathname.match(/^\/(product|bundle)\/([^/]+)/);
+  if(match){const type=match[1],identifier=decodeURIComponent(match[2]),item=(type==="bundle"?state.bundles:state.products).find(row=>String(row.id)===identifier||row.slug===identifier);const title=app.querySelector(".product-summary h1, .bundle-summary h1, .product-detail h1");if(item&&title)title.insertAdjacentHTML("afterend",wishlistButton(type,item.id,new URLSearchParams(location.search).get("variant"),true));}
   bindGlobal();
 }
 
@@ -680,7 +700,7 @@ function closeOverlay() {
 
 function openMenu() {
   const company=state.appearance.company||{};
-  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a>${productsMobileMenuHtml()}<a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="${state.customer?"/account":"/login.html"}">${state.customer?"حسابي وعناويني":"تسجيل الدخول"}</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
+  openOverlay(`<aside class="side-drawer"><div class="drawer-head"><img src="${esc(company.logo_url)}" alt="" /><button class="close-button" data-overlay-close aria-label="إغلاق">${icon("x")}</button></div><div class="drawer-body"><nav class="drawer-menu"><a href="/">الرئيسية</a>${productsMobileMenuHtml()}<a href="/wishlist">المفضلة</a><a href="/cart">السلة</a><a href="/checkout">إتمام الطلب</a><a href="${state.customer?"/account":"/login.html"}">${state.customer?"حسابي وعناويني":"تسجيل الدخول"}</a><a href="#footer" data-overlay-close>تواصل معنا</a><a href="/page/about-us">من نحن</a></nav></div><div class="drawer-foot"><a class="primary-button" href="/products">تسوق الآن</a></div></aside>`);
   overlayRoot.querySelectorAll("[data-overlay-close]").forEach(button=>button.onclick=closeOverlay);
   bindDrawerProductsNavigation();
 }
@@ -778,7 +798,7 @@ function homeCategory(category) {
 function featuredProductCard(product) {
   const compare=comparePrice(product);
   const soldOut=!productInStock(product);
-  return `<article class="featured-product-card" data-card-href="/product/${product.id}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}"><a class="featured-product-image ${soldOut?"is-out-of-stock":""}" href="/product/${product.id}">${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>${productCardActions(product)}</div></article>`;
+  return `<article class="featured-product-card" data-card-href="/product/${product.id}" tabindex="0" aria-label="${esc(product.name_ar || product.name_en)}">${wishlistButton("product",product.id)}<a class="featured-product-image ${soldOut?"is-out-of-stock":""}" href="/product/${product.id}">${soldOut?`<span class="stock-badge">Out of Stock</span>`:""}<img src="${esc(product.main_photo_url||product.image_url)}" alt="${esc(product.name_ar)}" loading="lazy" /></a><div class="featured-product-info"><div class="product-meta">${esc(productCategoryName(product))}</div><a class="featured-product-title" href="/product/${product.id}">${esc(product.name_ar||product.name_en)}</a><div class="featured-stars" aria-label="التقييم">★★★★★</div><div class="price">${compare?`<del>${money(compare)}</del>`:""}<strong>${money(productPrice(product))}</strong></div>${productCardActions(product)}</div></article>`;
 }
 
 function eidShowcase(products) {
@@ -1490,6 +1510,8 @@ async function renderAccount(){
   if(!state.customer){location.href="/login.html";return;}
   const customer=state.customer,addresses=customer.addresses||[],ordersPayload=await api("/api/orders/my-orders").catch(()=>({orders:[]})),orders=ordersPayload.orders||[];
   shell(`${breadcrumbs("حسابي")}<section class="container account-page"><header class="account-hero"><div><span>حساب العميل</span><h1>مرحبًا، ${esc(customer.name||customer.full_name||"")}</h1><p>تحكمي في بياناتك وعناوين التوصيل من مكان واحد.</p></div><a class="secondary-button" href="/products">متابعة التسوق</a></header><div class="account-layout"><aside class="account-nav"><a href="#profileSection">البيانات الشخصية</a><a href="#addressesSection">عناويني <b>${addresses.length}</b></a><a href="#ordersSection">طلباتي <b>${orders.length}</b></a></aside><div class="account-content"><section class="account-panel" id="profileSection"><header><div><span>الملف الشخصي</span><h2>بيانات الحساب</h2></div></header><form class="account-profile-form" id="accountProfileForm"><label>الاسم الكامل<input name="name" value="${esc(customer.name||customer.full_name||"")}" required /></label><label>البريد الإلكتروني<input name="email" type="email" value="${esc(customer.email||"")}" required /></label><label>رقم الجوال<input name="phone" type="tel" value="${esc(customer.phone||"")}" /></label><button class="primary-button" type="submit">${icon("save",17)}حفظ البيانات</button></form></section><section class="account-panel" id="addressesSection"><header><div><span>دفتر العناوين</span><h2>عناوين التوصيل</h2><p>اختاري عنوانًا افتراضيًا ليظهر تلقائيًا عند إتمام الطلب.</p></div><button class="primary-button" type="button" id="addAccountAddress">${icon("plus",17)}إضافة عنوان</button></header><div class="account-address-list">${addresses.length?addresses.map(accountAddressCard).join(""):`<div class="account-empty"><span>${icon("map-pin",28)}</span><h3>لا توجد عناوين محفوظة</h3><p>أضيفي عنوان المنزل أو العمل لتسريع إتمام الطلب.</p></div>`}</div></section><section class="account-panel" id="ordersSection"><header><div><span>سجل الطلبات</span><h2>طلباتي</h2></div></header><div class="account-orders">${orders.length?orders.slice(0,12).map(order=>`<article><div><strong>طلب #${esc(order.id)}</strong><span>${esc(order.status||"pending")}</span></div><p>${esc(addressSummary(order.shipping_address||order.customer||{}))}</p><b>${money(order.total||0)}</b></article>`).join(""):`<div class="account-empty"><h3>لا توجد طلبات حتى الآن</h3></div>`}</div></section></div></div></section>`);
+  document.querySelector(".account-nav")?.insertAdjacentHTML("beforeend",`<a href="#wishlistSection">المفضلة <b>${state.wishlist.length}</b></a>`);
+  document.querySelector(".account-content")?.insertAdjacentHTML("beforeend",`<section class="account-panel" id="wishlistSection"><header><div><span>اختياراتك المحفوظة</span><h2>المفضلة</h2></div><a class="secondary-button" href="/wishlist">عرض المفضلة</a></header><div class="account-wishlist-preview">${state.wishlist.length?state.wishlist.slice(0,4).map(item=>`<a href="${esc(item.url||"/wishlist")}"><img src="${esc(item.image_url)}" alt=""><span>${esc(item.name_ar)}</span></a>`).join(""):`<p>لم تضف أي منتجات للمفضلة بعد.</p>`}</div></section>`);
   document.getElementById("addAccountAddress").onclick=()=>openAccountAddressEditor();
   document.querySelectorAll("[data-address-edit]").forEach(button=>button.onclick=()=>openAccountAddressEditor(addresses.find(row=>String(row.id)===button.dataset.addressEdit)||{}));
   document.querySelectorAll("[data-address-default]").forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api(`/api/users/addresses/${button.dataset.addressDefault}/default`,{method:"PATCH",body:"{}"});await refreshCustomerProfile();renderAccount();toast("تم تغيير العنوان الافتراضي");}catch(error){toast(error.message);button.disabled=false;}});
@@ -1507,6 +1529,7 @@ function renderStoreRoute() {
   else if(path.startsWith("/bundle/")){const id=decodeURIComponent(path.split("/").pop());const bundle=state.bundles.find(item=>String(item.id)===id||item.slug===id);bundle?renderBundle(bundle):renderNotFound();}
   else if(path.startsWith("/page/")){const slug=decodeURIComponent(path.split("/").pop());const page=state.pages.find(item=>item.slug===slug&&item.is_active!==false);page?renderDynamicPage(page):renderNotFound();}
   else if(path==="/account")renderAccount();
+  else if(path==="/wishlist")renderWishlist();
   else if(path==="/cart")renderCart(false);
   else if(path==="/checkout")renderCart(true);
   else if(path.startsWith("/payment/tamara/"))renderTamaraReturn(path.split("/").pop());
@@ -2107,6 +2130,7 @@ async function init() {
       api("/api/store/appearance"),api("/api/store/currencies"),api("/api/store/market"),api("/api/store/home-builder"),api("/api/categories"),api("/api/products"),api("/api/bundles"),api("/api/store/collections").catch(()=>({collections:[]})),api("/api/store/labels").catch(()=>({labels:[]})),api("/api/store/facets").catch(()=>({facets:[]})),api("/api/pages").catch(()=>({pages:[]})),api("/api/store/address/sa/config").catch(()=>({enabled:false,format:"AAAA0000"})),api("/api/store/payment-methods").catch(()=>({methods:[{id:"cod",title_ar:"الدفع عند الاستلام"}]})),api("/api/store/marketing-pixels").catch(()=>null),customerAuthToken()?api("/api/users/profile").catch(()=>null):Promise.resolve(null)
     ]);
     state.appearance=appearance;state.currencies=currencies;state.market=market;state.builder=builder;state.categories=categories.categories||categories||[];state.products=productsResponse.products||productsResponse||[];state.bundles=bundlesResponse.bundles||bundlesResponse||[];state.collections=collectionsResponse.collections||collectionsResponse||[];state.labels=labelsResponse.labels||labelsResponse||[];state.facets=facetsResponse.facets||facetsResponse||[];state.pages=pagesResponse.pages||pagesResponse||[];state.addressConfig=addressConfig||{enabled:false,format:"AAAA0000"};state.paymentMethods=paymentMethods||{methods:[]};state.customer=profile?.user||null;initializeMarketingPixels(marketingPixels||{});
+    state.wishlist=(await api("/api/wishlist").catch(()=>({items:[]}))).items||[];
     const oldFacetNames={"شراشف-منقطة":"منقط","شراشف-مشجرة":"مشجر","شراشف-سادة":"سادة"};
     if(["اطقم-سجاد-وشراشف","105"].includes(state.category)){const setsFacet=state.facets.find(facet=>facet.name_ar==="أطقم سجاد وشراشف");if(setsFacet){state.category="";state.facet=String(setsFacet.id);}}
     if(state.category==="شراشف-صلاة")state.category="شراشف";
@@ -2126,6 +2150,24 @@ async function init() {
 
 document.addEventListener("keydown",event=>{if(event.key==="Escape"){if(overlayRoot.querySelector(".cart-update-dialog"))return;closeOverlay();document.getElementById("filterSidebar")?.classList.remove("mobile-open");document.body.classList.remove("is-locked");}});
 document.addEventListener("click",event=>{
+  const wishButton=event.target.closest("[data-wishlist-type][data-wishlist-id]");
+  if(wishButton){
+    event.preventDefault();event.stopPropagation();
+    if(wishButton.disabled)return;
+    wishButton.disabled=true;
+    const type=wishButton.dataset.wishlistType,id=wishButton.dataset.wishlistId,existing=wishlistEntry(type,id);
+    const variantId=wishButton.dataset.wishlistVariant||null;
+    (async()=>{try{
+      if(existing)await api(`/api/wishlist/${existing.id}`,{method:"DELETE"});
+      else await api("/api/wishlist",{method:"POST",body:JSON.stringify({item_type:type,item_id:Number(id),variant_id:variantId})});
+      state.wishlist=(await api("/api/wishlist")).items||[];
+      if(location.pathname==="/wishlist")renderWishlist();else refreshWishlistButtons();
+      toast(existing?"تمت الإزالة من المفضلة":"تمت الإضافة إلى المفضلة");
+    }catch(error){toast(error.message);}finally{wishButton.disabled=false;}})();
+    return;
+  }
+  const removeButton=event.target.closest("[data-wishlist-remove]");
+  if(removeButton){event.preventDefault();removeButton.disabled=true;(async()=>{try{await api(`/api/wishlist/${removeButton.dataset.wishlistRemove}`,{method:"DELETE"});state.wishlist=(await api("/api/wishlist")).items||[];renderWishlist();toast("تمت الإزالة من المفضلة");}catch(error){toast(error.message);removeButton.disabled=false;}})();return;}
   const link=event.target.closest("a[href^='/collection/']");
   if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
   const url=new URL(link.href,location.origin);

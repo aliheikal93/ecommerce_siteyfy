@@ -10431,7 +10431,7 @@ function adminPermissionForRequest(req) {
   if (path.startsWith("/staff")) return path.startsWith("/staff/me") ? "dashboard.view" : mutation ? "staff.manage" : "staff.view";
   if (path === "/notifications/mark-all-read" || (/^\/notifications\/[^/]+$/.test(path) && req.method === "PATCH")) return "notifications.view";
   if (path.startsWith("/notifications")) return mutation ? "notifications.resolve" : "notifications.view";
-  if (path.startsWith("/users")) return mutation ? "customers.manage" : "customers.view";
+  if (path.startsWith("/users") || path.startsWith("/wishlist")) return mutation ? "customers.manage" : "customers.view";
   if (path.startsWith("/finance")) return mutation ? "finance.manage" : "finance.view";
   if (path.startsWith("/inventory")) return mutation ? "inventory.manage" : "inventory.view";
   if (path.startsWith("/returns")) return mutation ? "returns.manage" : "returns.view";
@@ -12451,7 +12451,26 @@ app.post("/api/admin/catalog-sales/:type/:id/adjust", (req, res) => {
 
 app.get("/api/admin/analytics/sales", (_req, res) => res.json(ok({ totalSales: 0, totalOrders: 0, revenue: 0, chart: [] })));
 app.get("/api/admin/analytics/user-stats", (_req, res) => res.json(ok({ totalUsers: 0, newUsers: 0 })));
-app.get("/api/admin/analytics/engagement", (_req, res) => res.json(ok({ wishlistCount: 0, cartCount: 0, views: 0 })));
+app.get("/api/admin/analytics/engagement", (_req, res) => res.json(ok({ wishlistCount: entityRows("wishlist_items").length, cartCount: 0, views: 0 })));
+app.get("/api/admin/wishlist/overview", (_req, res) => {
+  const rows = entityRows("wishlist_items");
+  const users = new Map(entityRows("users").map(user => [String(user.id), user]));
+  const products = storeProductRows(), bundles = storeBundleRows();
+  const items = rows.map(row => {
+    const publicItem = wishlistPublicItem(row, products, bundles);
+    const user = row.owner_type === "user" ? users.get(String(row.owner_id)) : null;
+    return { ...publicItem, owner_type:row.owner_type, customer_id:user?.id || Number(row.owner_id) || null, customer_name:user?.name || user?.full_name || "عميل غير متاح", customer_email:user?.email || "" };
+  });
+  const counts = new Map();
+  for (const item of items) {
+    const key = `${item.item_type}:${item.item_id}`;
+    const entry = counts.get(key) || { item_type:item.item_type, item_id:item.item_id, name_ar:item.name_ar, image_url:item.image_url, count:0 };
+    entry.count += 1; counts.set(key, entry);
+  }
+  res.json(ok({ total:items.length, customers:new Set(rows.filter(row => row.owner_type === "user").map(row => row.owner_id)).size,
+    guests:new Set(rows.filter(row => row.owner_type === "guest").map(row => row.owner_id)).size,
+    items, top_items:[...counts.values()].sort((a,b) => b.count-a.count).slice(0,20) }));
+});
 app.get("/api/admin/analytics/top-products", (_req, res) => res.json(ok({ products: [] })));
 app.get("/api/admin/analytics/top-cart-products", (_req, res) => res.json(ok({ products: [] })));
 app.get("/api/admin/lighthouse/targets", (req, res) => {
@@ -14189,9 +14208,72 @@ app.get("/api/pages", (_req, res) => {
   const pages = entityRows("pages").filter((page) => page.is_active !== false).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
   res.json(ok({ pages }));
 });
-app.get("/api/wishlist", (_req, res) => res.json(ok({ items: [] })));
-app.post("/api/wishlist", (_req, res) => res.json(ok({ message: "Wishlist disabled until user setup" })));
-app.delete("/api/wishlist/:id", (_req, res) => res.json(ok({ message: "Removed" })));
+function wishlistOwner(req, res) {
+  const guest = guestIdentity(req, res);
+  const user = customerSessionUser(req);
+  if (!user) return { type:"guest", id:guest.guest_hash };
+  const owner = { type:"user", id:String(user.id) };
+  const guestRows = entityRows("wishlist_items").filter(row => row.owner_type === "guest" && row.owner_id === guest.guest_hash);
+  if (guestRows.length) {
+    const userRows = entityRows("wishlist_items").filter(row => row.owner_type === "user" && row.owner_id === owner.id);
+    db.transaction(() => {
+      for (const row of guestRows) {
+        const duplicate = userRows.some(item => item.item_type === row.item_type && String(item.item_id) === String(row.item_id));
+        if (duplicate) db.prepare("UPDATE records SET is_deleted = 1 WHERE entity = 'wishlist_items' AND id = ?").run(row.id);
+        else updateRecord("wishlist_items", row.id, { owner_type:"user", owner_id:owner.id });
+      }
+    })();
+    const nextGuestId = crypto.randomUUID();
+    res.cookie("slyrah_guest", signedGuestToken(nextGuestId), { httpOnly:true, secure:process.env.NODE_ENV === "production", sameSite:"lax", path:"/", maxAge:1000*60*60*24*365 });
+  }
+  return owner;
+}
+
+function wishlistRows(owner) {
+  return entityRows("wishlist_items").filter(row => row.owner_type === owner.type && row.owner_id === owner.id);
+}
+
+function wishlistPublicItem(row, products, bundles) {
+  const item = (row.item_type === "bundle" ? bundles : products).find(entry => String(entry.id) === String(row.item_id));
+  const variant = (item?.variants || []).find(entry => String(entry.id) === String(row.variant_id));
+  const selected = variant || item;
+  const stock = row.item_type === "bundle" ? selected?.available_stock : selected?.stock;
+  const basePrice = Number(item?.sale_price || item?.price || 0);
+  const price = variant?.price !== null && variant?.price !== undefined && variant?.price !== "" ? Number(variant.price) : (row.item_type === "product" && variant ? basePrice + Number(variant.price_adjustment || variant.price_delta || 0) : Number(selected?.price ?? basePrice));
+  return { id:row.id, item_type:row.item_type, item_id:row.item_id, variant_id:row.variant_id || null,
+    name_ar:item?.name_ar || item?.name_en || "منتج غير متاح", image_url:selected?.image_url || item?.main_photo_url || item?.image_url || "",
+    price, available:Boolean(item) && (!row.variant_id || Boolean(variant)) && selected?.is_in_stock !== false && (stock == null || Number(stock) > 0),
+    exists:Boolean(item), url:item ? `/${row.item_type}/${encodeURIComponent(item.slug || item.id)}${row.variant_id ? `?variant=${encodeURIComponent(row.variant_id)}` : ""}` : null,
+    created_at:row.created_at };
+}
+
+app.get("/api/wishlist", (req, res) => {
+  const owner = wishlistOwner(req, res);
+  const products = storeProductRows(), bundles = storeBundleRows();
+  res.json(ok({ items:wishlistRows(owner).map(row => wishlistPublicItem(row, products, bundles)) }));
+});
+app.post("/api/wishlist", (req, res) => {
+  const owner = wishlistOwner(req, res);
+  const type = req.body?.item_type === "bundle" ? "bundle" : req.body?.item_type === "product" ? "product" : "";
+  const id = Number(req.body?.item_id);
+  if (!type || !Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ success:false, error:{ message:"اختر منتجًا صالحًا" } });
+  const item = (type === "bundle" ? storeBundleRows() : storeProductRows()).find(row => Number(row.id) === id);
+  if (!item) return res.status(404).json({ success:false, error:{ message:"المنتج غير متاح" } });
+  const variantId = req.body?.variant_id == null ? null : String(req.body.variant_id);
+  if (variantId && !(item.variants || []).some(row => String(row.id) === variantId)) return res.status(400).json({ success:false, error:{ message:"الاختيار غير صالح" } });
+  const existing = wishlistRows(owner).find(row => row.item_type === type && Number(row.item_id) === id);
+  const saved = existing ? updateRecord("wishlist_items", existing.id, { variant_id:variantId || existing.variant_id || null }) : createRecord("wishlist_items", { owner_type:owner.type, owner_id:owner.id, item_type:type, item_id:id, variant_id:variantId });
+  if (!existing) createRecord("wishlist_events", { action:"add", owner_type:owner.type, item_type:type, item_id:id });
+  res.json(ok({ item:wishlistPublicItem(saved, type === "product" ? [item] : [], type === "bundle" ? [item] : []) }));
+});
+app.delete("/api/wishlist/:id", (req, res) => {
+  const owner = wishlistOwner(req, res);
+  const row = wishlistRows(owner).find(item => Number(item.id) === Number(req.params.id));
+  if (!row) return res.status(404).json({ success:false, error:{ message:"العنصر غير موجود في المفضلة" } });
+  db.prepare("UPDATE records SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE entity = 'wishlist_items' AND id = ?").run(row.id);
+  createRecord("wishlist_events", { action:"remove", owner_type:owner.type, item_type:row.item_type, item_id:row.item_id });
+  res.json(ok({ removed:true }));
+});
 app.post("/api/store/checkout-recovery/session", (req, res) => {
   const settings = checkoutRecoverySettings();
   if (!settings.enabled) return res.json(ok({ enabled:false }));
@@ -15181,7 +15263,7 @@ function storefrontProductDocument(product) {
     .replace(/<meta name="description"[^>]*>/i, `<meta name="description" content="${escapeHtml(description)}" />`)
     .replace("</head>", `    ${meta}\n  </head>`);
 }
-app.get(["/", "/products", "/shop", "/cart", "/checkout", "/account", "/payment/tamara/success", "/payment/tamara/failure", "/payment/tamara/cancel", "/payment/edfapay/return", "/payment/tabby/success", "/payment/tabby/failure", "/payment/tabby/cancel"], (_req, res) => res.sendFile(storefrontHtml));
+app.get(["/", "/products", "/shop", "/cart", "/checkout", "/account", "/wishlist", "/payment/tamara/success", "/payment/tamara/failure", "/payment/tamara/cancel", "/payment/edfapay/return", "/payment/tabby/success", "/payment/tabby/failure", "/payment/tabby/cancel"], (_req, res) => res.sendFile(storefrontHtml));
 app.get("/product/:id", (req, res) => {
   const product = findProduct(req.params.id);
   if (!product) {
@@ -15213,7 +15295,7 @@ app.use("/uploads", express.static(path.join(__dirname, "public", "uploads"), { 
 app.use("/_next/static", express.static(path.join(__dirname, "public", "_next", "static"), { maxAge: "30d", immutable: true }));
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
-app.get(["/wishlist", "/login", "/register", "/forgot-password", "/verify-email"], (req, res) => {
+app.get(["/login", "/register", "/forgot-password", "/verify-email"], (req, res) => {
   const htmlFile = path.join(__dirname, "public", `${req.path.slice(1)}.html`);
   res.sendFile(fs.existsSync(htmlFile) ? htmlFile : path.join(__dirname, "public", "index.html"));
 });
