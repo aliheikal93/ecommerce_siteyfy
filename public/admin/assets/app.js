@@ -1435,22 +1435,82 @@
     return `<div class="switch-row"><strong>${num}. ${t(key)}</strong><span class="status-pill ${done ? "good" : "warn"}">${done ? t("healthy") : t("needsSetup")}</span></div>`;
   }
 
+  function bindProductListFilters(root, products, drawTable) {
+    const categories=state.rows.categories||[], facets=state.rows.facets||[], colors=state.rows.colors||[];
+    const title=row=>state.lang==="ar"?(row.name_ar||row.nameAr||row.name_en||row.nameEn||row.slug||row.id):(row.name_en||row.nameEn||row.name_ar||row.nameAr||row.slug||row.id);
+    const variantRows=product=>(Array.isArray(product.variants)?product.variants:[]).filter(variant=>variant.is_active!==false);
+    const colorKey=variant=>{const row=colors.find(color=>String(color.id)===String(variant.color_id||"")||[color.name_ar,color.nameAr,color.name_en,color.nameEn].some(name=>name&&String(name).toLowerCase()===String(variant.color||"").toLowerCase()));return String(row?.id||variant.color_id||variant.color||"");};
+    const colorName=key=>title(colors.find(color=>String(color.id)===key)||{})||key;
+    const optionKey=variant=>String(variant.value||variant.option||"").trim();
+    const available=variant=>variant.is_in_stock!==false&&variant.inventory_mode!=="out_of_stock"&&(variant.inventory_mode!=="tracked"||Number(variant.stock||0)>0);
+    const basicAvailable=product=>product.is_in_stock!==false&&product.inventory_mode!=="out_of_stock"&&(product.inventory_mode!=="tracked"||Number(product.stock||0)>0);
+    const choices=(values,labels={})=>[...new Set(values.map(value=>String(value||"").trim()).filter(Boolean))].sort((a,b)=>String(labels[a]||a).localeCompare(String(labels[b]||b),state.lang==="ar"?"ar":"en"));
+    const categoryValues=choices(products.map(product=>product.category_id||product.category_slug));
+    const subcategoryValues=choices(products.flatMap(product=>product.subcategory_ids||[]));
+    const facetValues=choices(products.flatMap(product=>product.facet_ids||[]));
+    const colorValues=choices(products.flatMap(product=>variantRows(product).map(colorKey)));
+    const optionValues=choices(products.flatMap(product=>variantRows(product).map(optionKey)));
+    const stockValues=choices(products.map(product=>(variantRows(product).length?variantRows(product).some(available):basicAvailable(product))?"in_stock":"out_of_stock"));
+    const statusValues=choices(products.map(product=>product.is_active!==false?"active":"inactive"));
+    const categoryLabels=Object.fromEntries(categoryValues.map(key=>[key,title(categories.find(row=>String(row.id)===key||row.slug===key)||{})||key]));
+    const subcategoryLabels=Object.fromEntries(subcategoryValues.map(key=>[key,title(categories.find(row=>String(row.id)===key)||{})||key]));
+    const facetLabels=Object.fromEntries(facetValues.map(key=>[key,title(facets.find(row=>String(row.id)===key)||{})||key]));
+    const colorLabels=Object.fromEntries(colorValues.map(key=>[key,colorName(key)]));
+    const select=(name,label,values,labels={})=>`<label class="field"><span>${label}</span><select data-product-filter="${name}"><option value="">${ui("All","الكل")}</option>${values.map(value=>`<option value="${escapeHtml(value)}">${escapeHtml(labels[value]||value)}</option>`).join("")}</select></label>`;
+    root.innerHTML=`<section class="card product-list-filters"><div class="product-filter-heading"><div><span class="section-kicker">CATALOG</span><h2>${ui("Find products","تصفية المنتجات")}</h2><p>${ui("Filters show only values used by existing products and options.","تظهر قيم الفلاتر المستخدمة فعلًا في المنتجات وخياراتها.")}</p></div><button class="btn" type="button" data-reset-product-filters>${i("rotate-ccw")}${ui("Clear filters","مسح الفلاتر")}</button></div><div class="product-filter-grid"><label class="field product-filter-search"><span>${ui("Search","بحث")}</span><input data-product-filter="search" type="search" placeholder="${ui("Product, variant, SKU or barcode","منتج، متغير، كود أو باركود")}" /></label>${select("type",ui("Type","النوع"),choices(products.map(product=>product.product_type||"basic")),{basic:ui("Basic","ثابت"),variable:ui("Variable","بمتغيرات")})}${select("category",ui("Category","التصنيف"),categoryValues,categoryLabels)}${select("subcategory",ui("Subcategory","التصنيف الفرعي"),subcategoryValues,subcategoryLabels)}${select("facet",ui("Facet","الفئة"),facetValues,facetLabels)}${select("color",ui("Color","اللون"),colorValues,colorLabels)}${select("option",ui("Option","الخيار"),optionValues)}${select("stock",ui("Stock","المخزون"),stockValues,{in_stock:ui("Available","متاح"),out_of_stock:ui("Out of stock","نافد")})}${select("status",ui("Visibility","الظهور"),statusValues,{active:ui("Active","نشط"),inactive:ui("Inactive","غير نشط")})}</div><div class="product-filter-results" data-product-filter-results></div></section>`;
+    const inputs=[...root.querySelectorAll("[data-product-filter]")];
+    const apply=()=>{
+      const filters=Object.fromEntries(inputs.map(input=>[input.dataset.productFilter,input.value]));
+      const query=filters.search.trim().toLowerCase();
+      const visible=products.flatMap(product=>{
+        if(filters.type&&String(product.product_type||"basic")!==filters.type)return [];
+        if(filters.category&&String(product.category_id||product.category_slug||"")!==filters.category)return [];
+        if(filters.subcategory&&!(product.subcategory_ids||[]).some(id=>String(id)===filters.subcategory))return [];
+        if(filters.facet&&!(product.facet_ids||[]).some(id=>String(id)===filters.facet))return [];
+        if(filters.status&&(product.is_active!==false?"active":"inactive")!==filters.status)return [];
+        const variants=variantRows(product);
+        const productText=[product.id,product.name_ar,product.name_en,product.sku,product.barcode,product.slug].join(" ").toLowerCase();
+        const productMatch=!query||productText.includes(query);
+        const candidate=variants.filter(variant=>(!filters.color||colorKey(variant)===filters.color)&&(!filters.option||optionKey(variant)===filters.option)&&(!query||productMatch||[variant.color,variant.option,variant.value,variant.sku,variant.barcode,variant.id].join(" ").toLowerCase().includes(query)));
+        if((filters.color||filters.option)&&!candidate.length)return [];
+        if(query&&!productMatch&&!candidate.length)return [];
+        const inStock=variants.length?candidate.some(available):basicAvailable(product);
+        if(filters.stock==="in_stock"&&!inStock||filters.stock==="out_of_stock"&&inStock)return [];
+        const relevant=(filters.color||filters.option||query&&!productMatch)&&candidate.length;
+        if(!relevant)return [product];
+        const matched=candidate.map(variant=>[variant.color,variant.value||variant.option].filter(Boolean).join(" · ")).filter(Boolean);
+        const result={...product,_matched_variants:matched};
+        if(filters.color||filters.option){const prices=candidate.map(variant=>Number(variant.price)).filter(Number.isFinite);result.price=prices.length?Math.min(...prices):product.price;result.cost=Math.min(...candidate.map(variant=>Number(variant.cost||0)));result.stock=candidate.some(variant=>variant.inventory_mode==="unlimited"||variant.stock==null)?null:candidate.reduce((sum,variant)=>sum+Number(variant.stock||0),0);result.inventory_mode=result.stock===null?"unlimited":"tracked";result.main_photo_url=candidate.find(variant=>variant.image_url)?.image_url||product.main_photo_url;}
+        return [result];
+      });
+      root.querySelector("[data-product-filter-results]").textContent=`${visible.length} ${ui("products match","منتج مطابق")} ${visible.length!==products.length?`· ${products.length} ${ui("total","الإجمالي")}`:""}`;
+      drawTable(visible);
+    };
+    inputs.forEach(input=>input.addEventListener(input.tagName==="SELECT"?"change":"input",apply));
+    root.querySelector("[data-reset-product-filters]").onclick=()=>{inputs.forEach(input=>input.value="");apply();};
+    apply();
+  }
+
   async function renderResource(page, key) {
     const resource = resources[key];
     const renderToken = `${Date.now()}-${Math.random()}`;
     page.dataset.resourceRender = renderToken;
     page.innerHTML = pageTitle(key, "", resource.readOnly ? "" : `${key==="products"?`<button class="btn" id="bulkProducts">${i("edit")}${ui("Bulk update","تعديل جماعي")}</button>`:""}<button class="btn primary" id="addBtn">${i("plus")}${t("add")}</button>`);
-    page.innerHTML += `<div class="card table-wrap"><div class="table-header"><h2>${t(key)}</h2><span class="pill" id="countPill">0 ${t("records")}</span></div><div id="tableArea"></div></div>`;
-    const rows = await loadResource(key);
+    page.innerHTML += `${key === "products" ? '<div id="productFilters"></div>' : ""}<div class="card table-wrap"><div class="table-header"><h2>${t(key)}</h2><span class="pill" id="countPill">0 ${t("records")}</span></div><div id="tableArea"></div></div>`;
+    const rows = key === "products" ? (await Promise.all([loadResource(key), ...["categories","facets","colors"].map(name => loadResource(name).catch(() => []))]))[0] : await loadResource(key);
     if (!page.isConnected || page.dataset.resourceRender !== renderToken || !page.querySelector("#countPill")) return;
-    document.getElementById("countPill").textContent = `${rows.length} ${t("records")}`;
-    document.getElementById("tableArea").innerHTML = table(resource, rows, key);
+    const drawTable = visible => {
+      document.getElementById("countPill").textContent = `${visible.length} / ${rows.length} ${t("records")}`;
+      document.getElementById("tableArea").innerHTML = table(resource, visible, key);
+      document.querySelector("[data-bulk-select-all]")?.addEventListener("change",event=>document.querySelectorAll("[data-bulk-select]").forEach(input=>input.checked=event.target.checked));
+      document.querySelectorAll("[data-edit]").forEach(btn => btn.onclick = () => openEditor(key, rows.find(row => String(row.id) === btn.dataset.edit)));
+      document.querySelectorAll("[data-delete]").forEach(btn => btn.onclick = () => deleteRow(key, btn.dataset.delete));
+      document.querySelectorAll("[data-status-toggle]").forEach(btn => btn.onclick = () => toggleRowStatus(key, btn.dataset.statusToggle, btn.dataset.statusField, btn.dataset.statusValue !== "true"));
+    };
+    if (key === "products") bindProductListFilters(document.getElementById("productFilters"), rows, drawTable);
+    else drawTable(rows);
     if (!resource.readOnly) document.getElementById("addBtn").onclick = () => openEditor(key);
     document.getElementById("bulkProducts")?.addEventListener("click",()=>openCatalogBulkDialog("products",rows));
-    document.querySelector("[data-bulk-select-all]")?.addEventListener("change",event=>document.querySelectorAll("[data-bulk-select]").forEach(input=>input.checked=event.target.checked));
-    document.querySelectorAll("[data-edit]").forEach(btn => btn.onclick = () => openEditor(key, rows.find(row => String(row.id) === btn.dataset.edit)));
-    document.querySelectorAll("[data-delete]").forEach(btn => btn.onclick = () => deleteRow(key, btn.dataset.delete));
-    document.querySelectorAll("[data-status-toggle]").forEach(btn => btn.onclick = () => toggleRowStatus(key, btn.dataset.statusToggle, btn.dataset.statusField, btn.dataset.statusValue !== "true"));
   }
 
   function openCatalogBulkDialog(entity, rows) {
@@ -2444,7 +2504,8 @@
     }
     if (resourceKey === "products" && /^(?:name|short_description|description)_(?:ar|en)$/.test(key)) {
       const copy = productEditorCopy(value);
-      return `<span class="${copy.length > 80 ? "cell-clamp" : ""}" style="white-space:pre-line">${escapeHtml(copy)}</span>`;
+      const matched = key === "name_ar" && row._matched_variants?.length ? `<span class="product-filter-variant-match">${escapeHtml(row._matched_variants.slice(0,2).join("، "))}${row._matched_variants.length>2?` +${row._matched_variants.length-2}`:""}</span>` : "";
+      return `<span class="${copy.length > 80 ? "cell-clamp" : ""}" style="white-space:pre-line">${escapeHtml(copy)}</span>${matched}`;
     }
     if (resourceKey === "products" && key === "stock") {
       if (row.inventory_mode === "out_of_stock" || value === 0) return `<span class="status-pill bad">${ui("Out of stock", "نافد")}</span>`;
@@ -2675,6 +2736,8 @@
     if (inferredType === "variable") bindVariantBuilder();
     bindProductGallery(row);
     if (inferredType === "basic") bindProductInventory();
+    document.getElementById("editorForm").addEventListener("input", () => updateProductPricingInsights(document.getElementById("editorForm")));
+    updateProductPricingInsights(document.getElementById("editorForm"));
     bindProductDirtyState();
     const productPanels=[...document.querySelectorAll("#editorForm .catalog-form-layout > .catalog-form-section"),document.querySelector("#productReviewsSection")].filter(Boolean);
     setupEditorTabs(document.getElementById("editorForm"),productPanels,productPanels.map(panel=>panel.querySelector(".product-section-heading h3, .product-catalog-title strong")?.textContent?.trim()||ui("Reviews","التقييمات")));
@@ -2695,6 +2758,33 @@ async function loadCatalogChoices() {
     return state.marketCatalog;
   }
 
+  function productPricingPanel(mode) {
+    return `<div class="product-pricing-insights" data-pricing-mode="${mode}" aria-live="polite"><span data-pricing-discount></span><span data-pricing-margin></span></div>`;
+  }
+
+  function updateProductPricingInsights(root = document) {
+    root.querySelectorAll("[data-pricing-mode]").forEach(panel => {
+      const scope = panel.dataset.pricingMode === "variant" ? panel.closest(".variant-row") : panel.closest(".catalog-form-section");
+      if (!scope) return;
+      const read = selector => { const input=scope.querySelector(selector); return input?.value.trim() === "" ? null : Number(input?.value); };
+      const variant = panel.dataset.pricingMode === "variant";
+      const before = read(variant ? '[data-variant-field="compare_at_price"]' : '[name="price"]');
+      const after = read(variant ? '[data-variant-field="price"]' : '[name="sale_price"]');
+      const cost = read(variant ? '[data-variant-field="cost"]' : '[name="cost"]');
+      const selling = variant ? after : after !== null && after > 0 ? after : before;
+      const discount = panel.querySelector("[data-pricing-discount]");
+      const margin = panel.querySelector("[data-pricing-margin]");
+      const percent = value => `${new Intl.NumberFormat(state.lang === "ar" ? "ar-SA" : "en-US", { maximumFractionDigits:1 }).format(value)}%`;
+      const discounted = Number.isFinite(before) && before > 0 && Number.isFinite(after) && after > 0 && before > after;
+      discount.textContent = discounted ? `${ui("Discount", "الخصم")} ${percent((before-after)/before*100)}` : ui("Enter before and after prices to see the discount", "أدخل السعر قبل وبعد الخصم لعرض النسبة");
+      discount.classList.toggle("is-value", discounted);
+      const hasMargin = Number.isFinite(selling) && selling > 0 && Number.isFinite(cost) && cost >= 0;
+      margin.textContent = hasMargin ? `${cost > selling ? ui("Loss margin", "هامش الخسارة") : ui("Profit margin", "هامش الربح")} ${percent(Math.abs((selling-cost)/selling*100))}` : ui("Enter the cost to see the profit margin", "أدخل التكلفة لعرض هامش الربح");
+      margin.classList.toggle("is-value", hasMargin);
+      margin.classList.toggle("is-loss", hasMargin && cost > selling);
+    });
+  }
+
   function groupedFields(key, fields, row = {}) {
     const fieldMap = Object.fromEntries(fields.map(field => [field[0], field]));
     const pick = names => names.map(name => fieldMap[name]).filter(Boolean);
@@ -2713,7 +2803,7 @@ async function loadCatalogChoices() {
       return [
         { id:"productMediaSection", kicker:"01", title:ui("Product gallery", "معرض صور المنتج"), description:ui("One unified gallery for this fixed product.", "معرض صور موحد للمنتج الثابت."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
         { kicker:"02", title:ui("Product details", "بيانات المنتج"), description:ui("Names, codes, visibility, and storefront identity.", "الأسماء والأكواد وحالة الظهور في المتجر."), fields:pick(["name_en", "name_ar", "slug", "sku", "barcode", "is_active"]) },
-        { kicker:"03", title:ui("Pricing & inventory", "السعر والمخزون"), description:ui("The price, cost, and stock belong to the product itself.", "السعر والتكلفة والمخزون تابعين للمنتج نفسه."), fields:pick(["price", "sale_price", "cost"]), extra:productInventoryField(row) },
+        { kicker:"03", title:ui("Pricing & inventory", "السعر والمخزون"), description:ui("The price, cost, and stock belong to the product itself.", "السعر والتكلفة والمخزون تابعين للمنتج نفسه."), fields:pick(["price", "sale_price", "cost"]), extra:productPricingPanel("basic")+productInventoryField(row) },
         { kicker:"04", title:t("catalog"), collapsible:true, fields:commonCatalog },
         { kicker:"05", title:ui("Shipping & fulfillment", "الشحن والتجهيز"), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
         { kicker:"06", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
@@ -3027,6 +3117,7 @@ async function loadCatalogChoices() {
       <label><span>${t("sku")}</span><input data-variant-field="sku" value="${escapeHtml(variant.sku||"")}" placeholder="${ui("Generated if empty","يتولد تلقائيًا عند تركه فارغًا")}" /></label>
       <label><span>${t("barcode")}</span><input data-variant-field="barcode" value="${escapeHtml(variant.barcode||"")}" placeholder="${ui("Generated if empty","يتولد تلقائيًا عند تركه فارغًا")}" /></label>
       <label><span>${t("price")}</span><input data-variant-field="price" type="number" step="0.01" value="${variant.price??""}" /></label><label><span>${t("compareAtPrice")}</span><input data-variant-field="compare_at_price" type="number" step="0.01" value="${variant.compare_at_price??""}" /></label><label><span>${t("cost")}</span><input data-variant-field="cost" type="number" step="0.01" value="${variant.cost??""}" /></label><label><span>${t("priceAdjustment")}</span><input data-variant-field="price_adjustment" type="number" step="0.01" value="${Number(variant.price_adjustment||0)}" /></label>
+      ${productPricingPanel("variant")}
       <label><span>${ui("Inventory","المخزون")}</span><select data-variant-inventory-mode><option value="unlimited" ${inventoryMode==="unlimited"?"selected":""}>${ui("Unlimited","غير محدود")}</option><option value="tracked" ${inventoryMode==="tracked"?"selected":""}>${ui("Track quantity","تتبع كمية")}</option><option value="out_of_stock" ${inventoryMode==="out_of_stock"?"selected":""}>${ui("Out of stock","نافد")}</option></select></label><label data-variant-stock-wrap ${inventoryMode==="tracked"?"":"hidden"}><span>${t("stock")}</span><input data-variant-field="stock" type="number" min="0" value="${inventoryMode==="tracked"?Math.max(0,Number(variant.stock??0)):""}" /></label>
       <div class="variant-switch">${switchButton({field:"variant_is_active",value:active,id:"",label:true})}</div><div class="variant-switch variant-stock-switch"><span>${ui("Available for sale","متاح للبيع")}</span>${switchButton({field:"variant_in_stock",value:inStock,id:"",label:false})}</div>
       <div class="variant-gallery-strip" data-variant-gallery-strip>${variantMediaStrip(images)}</div>
@@ -3043,7 +3134,7 @@ async function loadCatalogChoices() {
     const sync=()=>{const active=document.querySelector("body > .variant-row.is-editing"),rows=[...list.children].map(node=>node.classList.contains("variant-row-slot")?active:node).filter(node=>node?.classList.contains("variant-row")).map(row=>{const item={};row.querySelectorAll("[data-variant-field]").forEach(input=>{const key=input.dataset.variantField;if(key==="is_active"||key==="is_in_stock")item[key]=input.value!=="false";else if(input.type==="number"&&input.value==="")item[key]="";else item[key]=input.type==="number"?Number(input.value||0):input.value;});item.images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);item.image_url=item.images[0]||"";refreshCard(row);return item;}).filter(item=>item.color||item.option||item.value||item.sku||item.barcode||item.image_url||item.price||item.compare_at_price||item.cost||item.price_adjustment||item.stock);const hidden=document.querySelector("[data-variants-value]");if(hidden){hidden.value=JSON.stringify(rows);hidden.dispatchEvent(new Event("input",{bubbles:true}));}};
     const setImages=(row,urls=[])=>{const images=[...new Set(urls.filter(Boolean))];row.querySelector("[data-variant-images]").value=JSON.stringify(images);row.querySelector("[data-variant-field='image_url']").value=images[0]||"";row.querySelector("[data-variant-gallery-strip]").innerHTML=variantMediaStrip(images);rebind();sync();renderProductGallery();};
     const rebind=()=>{
-      all("[data-variant-field]").forEach(input=>input.oninput=sync);
+      all("[data-variant-field]").forEach(input=>input.oninput=()=>{sync();updateProductPricingInsights(input.closest(".variant-row"));});
       all("[data-variant-option-choice]").forEach(select=>select.onchange=()=>{const row=select.closest(".variant-row"),selected=select.selectedOptions[0],option=row?.querySelector("[data-variant-field='option']"),value=row?.querySelector("[data-variant-field='value']");if(option)option.value=selected?.dataset.optionGroup||"";if(value)value.value=select.value;sync();});
       all("[data-form-switch='variant_is_active']").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);const hidden=btn.closest(".variant-row")?.querySelector("[data-variant-field='is_active']");if(hidden)hidden.value=btn.dataset.switchValue;sync();});
       all("[data-form-switch='variant_in_stock']").forEach(btn=>btn.onclick=()=>{updateFormSwitch(btn);const row=btn.closest(".variant-row"),hidden=row?.querySelector("[data-variant-field='is_in_stock']"),mode=row?.querySelector("[data-variant-field='inventory_mode']"),modeSelect=row?.querySelector("[data-variant-inventory-mode]"),stockWrap=row?.querySelector("[data-variant-stock-wrap]");if(hidden)hidden.value=btn.dataset.switchValue;if(btn.dataset.switchValue==="false"){if(mode)mode.value="out_of_stock";if(modeSelect)modeSelect.value="out_of_stock";}else if(mode?.value==="out_of_stock"){mode.value="unlimited";if(modeSelect)modeSelect.value="unlimited";}if(stockWrap)stockWrap.hidden=mode?.value!=="tracked";sync();});
@@ -3087,7 +3178,7 @@ async function loadCatalogChoices() {
       draw();
       modal.querySelector("[data-generate-color],[data-generate-option],[data-close-generator]")?.focus();
     });
-    rebind();sync();
+    rebind();sync();updateProductPricingInsights(document);
   }
 
   function generatedImageCard(url) {
