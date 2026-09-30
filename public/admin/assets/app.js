@@ -184,6 +184,7 @@
       homeContent: "Home content",
       homeSections: "Home sections",
       imageGallery: "Image gallery",
+      recycleBin: "Recycle bin",
       uploadImages: "Upload images",
       syncGallery: "Sync gallery",
       deleteUnused: "Delete unused",
@@ -529,6 +530,7 @@
       homeContent: "محتوى الرئيسية",
       homeSections: "أقسام الرئيسية",
       imageGallery: "معرض الصور",
+      recycleBin: "سلة المحذوفات",
       uploadImages: "رفع صور",
       syncGallery: "مزامنة المعرض",
       deleteUnused: "حذف غير المستخدم",
@@ -894,6 +896,7 @@
       { id: "labels", icon: "tag" },
       { id: "collections", icon: "collection" },
       { id: "bundles", icon: "layers" },
+      { id: "recycleBin", icon: "trash" },
       { id: "reviewsRecommendations", icon: "message" }
     ] },
     { label: "inventoryManagement", icon:"box", items: [{ id: "inventoryOverview", icon: "dashboard" }, { id: "inventory", icon: "box" }] },
@@ -1019,7 +1022,7 @@
   const viewPermissions = {
     overview:"dashboard.view", salesOverview:"orders.view", inventoryOverview:"inventory.view", financeOverview:"finance.view", userOverview:"customers.view", shippingOverview:"shipping.view", brandStudio:"content.view", storefrontLayout:"content.view", homeSections:"content.view", content:"content.view", imageGallery:"content.view", pages:"content.view",
     market:"settings.view", currencies:"settings.view", locations:"settings.view", lighthouse:"settings.view", settings:"settings.view", dashboardIdentity:"settings.view",
-    products:"catalog.view", categories:"catalog.view", brands:"catalog.view", colors:"catalog.view", options:"catalog.view", facets:"catalog.view", labels:"catalog.view", collections:"catalog.view", collectionEditor:"catalog.view", bundles:"catalog.view", reviewsRecommendations:"catalog.view", recommendationEditor:"catalog.view",
+    products:"catalog.view", categories:"catalog.view", brands:"catalog.view", colors:"catalog.view", options:"catalog.view", facets:"catalog.view", labels:"catalog.view", collections:"catalog.view", collectionEditor:"catalog.view", bundles:"catalog.view", recycleBin:"catalog.view", reviewsRecommendations:"catalog.view", recommendationEditor:"catalog.view",
     inventory:"inventory.view", inventoryReceipt:"inventory.view", orders:"orders.view", orderDetail:"orders.view", manualOrder:"orders.manage", returns:"returns.view", checkoutRecovery:"orders.view", checkoutRecoveryDetail:"orders.view",
     discounts:"promotions.view", combinedPromotions:"promotions.view", finance:"finance.view", financeProfit:"finance.view", financeCosts:"finance.view", financeExpenses:"finance.view", financeLedger:"finance.view", financeReports:"finance.view", users:"customers.view", wishlist:"customers.view",
     integrationCenter:"integrations.view", shippingIntegrations:"integrations.view", shippingProvider:"integrations.view", paymentGateways:"integrations.view", marketingPixels:"integrations.view",
@@ -1335,6 +1338,7 @@
     if (state.view === "storefrontLayout") return renderStorefrontLayout(page);
     if (state.view === "homeSections") return renderHomeSections(page);
     if (state.view === "imageGallery") return renderGallery(page);
+    if (state.view === "recycleBin") return renderRecycleBin(page);
     if (state.view === "locations") return renderLocations(page);
     if (state.view === "lighthouse") return renderLighthouse(page);
     if (state.view === "aiSetup") return renderAiSetup(page);
@@ -3147,17 +3151,34 @@ async function loadCatalogChoices() {
     return `${names[item.entity] || item.entity} #${item.id}`;
   }
 
-  function showMediaDeleteWarning(image, onDeleted) {
-    const activeUsage = (image.usage || []).filter(item => !item.is_deleted);
-    document.body.insertAdjacentHTML("beforeend", `<div class="modal-backdrop media-delete-backdrop"><div class="modal media-delete-dialog" role="alertdialog" aria-modal="true"><div class="modal-head"><div><span class="section-kicker">MEDIA SAFETY</span><h2>${activeUsage.length ? ui("This image cannot be deleted", "لا يمكن حذف الصورة") : ui("Delete this image?", "حذف هذه الصورة؟")}</h2><p>${activeUsage.length ? ui("It is still linked to active content. Remove those links first.", "الصورة ما زالت مرتبطة بمحتوى نشط. أزل الارتباطات أولًا.") : ui("The file will be removed from the media library.", "سيتم حذف الملف من مكتبة الصور.")}</p></div><button class="btn icon-btn" type="button" data-close-media-warning>${i("x")}</button></div><div class="modal-body"><div class="media-delete-preview"><img src="${escapeHtml(mediaPreviewUrl(image.url,320))}" alt="" loading="lazy" decoding="async"/><div><strong>${escapeHtml(image.filename || image.url.split("/").pop())}</strong><small>${escapeHtml(image.url)}</small></div></div>${activeUsage.length ? `<div class="media-usage-warning"><strong>${ui("Used in", "مستخدمة في")}</strong>${activeUsage.map(item => `<div><span>${mediaUsageLabel(item)}</span><small>${escapeHtml(item.label || "")}</small></div>`).join("")}</div>` : ""}</div><div class="modal-foot"><button class="btn" type="button" data-close-media-warning>${t("cancel")}</button>${activeUsage.length ? "" : `<button class="btn danger" type="button" data-confirm-media-delete>${i("trash")}${t("delete")}</button>`}</div></div></div>`);
-    const backdrop = document.querySelector(".media-delete-backdrop:last-child");
-    const close = () => backdrop?.remove();
-    backdrop.querySelectorAll("[data-close-media-warning]").forEach(button => button.onclick = close);
-    backdrop.querySelector("[data-confirm-media-delete]")?.addEventListener("click", async event => {
-      event.currentTarget.disabled = true;
-      try { await api(`/api/admin/image-gallery/${image.id}`, { method:"DELETE" }); close(); toast(t("deleted")); await onDeleted?.(); }
-      catch (error) { toast(error.message, "error"); event.currentTarget.disabled = false; }
-    });
+  function showMediaDeleteWarning(image, onChanged) {
+    document.querySelector(".media-delete-backdrop")?.remove();
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop media-delete-backdrop";
+    document.body.append(backdrop);
+    let current = image;
+    const close = () => backdrop.remove();
+    const draw = () => {
+      const activeUsage = (current.usage || []).filter(item => !item.is_deleted);
+      const productCount = new Set(activeUsage.filter(item => item.entity === "products").map(item => String(item.id))).size;
+      backdrop.innerHTML = `<div class="modal media-delete-dialog" role="dialog" aria-modal="true"><div class="modal-head"><div><span class="section-kicker">MEDIA LIBRARY</span><h2>${activeUsage.length ? ui("Image links", "ارتباطات الصورة") : ui("Delete this image permanently?", "حذف الصورة نهائيًا؟")}</h2><p>${activeUsage.length ? ui("Unlink the image from each location here; the original file remains in the gallery until you delete it.", "افصل الصورة من أماكن استخدامها هنا؛ يظل الملف الأصلي في المعرض حتى تحذفه نهائيًا.") : ui("The original file will be removed from the gallery.", "سيُحذف الملف الأصلي من المعرض نهائيًا.")}</p></div><button class="btn icon-btn" type="button" data-close-media-warning aria-label="${t("close")}">${i("x")}</button></div><div class="modal-body"><div class="media-delete-preview"><img src="${escapeHtml(mediaPreviewUrl(current.url,320))}" alt="" loading="lazy" decoding="async"/><div><strong>${escapeHtml(current.filename || current.url.split("/").pop())}</strong><small>${escapeHtml(current.url)}</small></div></div><div class="media-link-summary"><strong>${productCount} ${ui("products", "منتج")}</strong><span>${activeUsage.length} ${ui("active links", "ارتباط نشط")}</span></div>${activeUsage.length ? `<div class="media-usage-warning"><strong>${ui("Linked locations", "أماكن الارتباط")}</strong>${activeUsage.map(item => `<div><span>${mediaUsageLabel(item)}<small>${escapeHtml(item.label || "")}</small></span><button class="btn" type="button" data-unlink-media-entity="${escapeHtml(item.entity)}" data-unlink-media-id="${escapeHtml(item.id)}" ${item.entity === "draft" ? "disabled" : ""}>${i("link")}${ui("Unlink", "فك الربط")}</button></div>`).join("")}</div>` : ""}</div><div class="modal-foot"><button class="btn" type="button" data-close-media-warning>${t("cancel")}</button><button class="btn danger" type="button" data-confirm-media-delete ${activeUsage.length ? "disabled" : ""}>${i("trash")}${ui("Delete permanently", "حذف نهائي")}</button></div></div>`;
+      backdrop.querySelectorAll("[data-close-media-warning]").forEach(button => button.onclick = close);
+      backdrop.querySelectorAll("[data-unlink-media-entity]").forEach(button => button.onclick = async () => {
+        button.disabled = true;
+        try {
+          const data = await api(`/api/admin/image-gallery/${current.id}/unlink`, { method:"POST", body:JSON.stringify({ entity:button.dataset.unlinkMediaEntity, record_id:button.dataset.unlinkMediaId }) });
+          current = data.image;
+          await onChanged?.();
+          draw();
+        } catch (error) { toast(error.message, "error"); button.disabled = false; }
+      });
+      backdrop.querySelector("[data-confirm-media-delete]").onclick = async event => {
+        event.currentTarget.disabled = true;
+        try { await api(`/api/admin/image-gallery/${current.id}`, { method:"DELETE" }); close(); toast(ui("Image deleted permanently", "تم حذف الصورة نهائيًا")); await onChanged?.(); }
+        catch (error) { toast(error.message, "error"); event.currentTarget.disabled = false; }
+      };
+    };
+    draw();
   }
 
   async function openMediaLibraryPicker({ multiple = false, productId = activeProductId(), bundleId = "", selected = [], draftUrls = productId ? currentDraftImageUrls() : [], title = "", onSelect } = {}) {
@@ -3186,7 +3207,7 @@ async function loadCatalogChoices() {
         const image = images.find(item => item.url === card.dataset.mediaUrl);
         card.querySelector(".media-library-select").onclick = () => { if (!multiple) chosen.clear(); chosen.has(image.url) ? chosen.delete(image.url) : chosen.add(image.url); draw(); };
         card.querySelector(".media-library-select").ondblclick = () => { if (!multiple) { chosen.clear(); chosen.add(image.url); commit(); } };
-        card.querySelector("[data-delete-library-image]").onclick = event => { event.stopPropagation(); showMediaDeleteWarning(draftSet.has(image.url) ? { ...image, usage:[...(image.usage || []), { entity:"products", id:productId || "draft", label:ui("Current unsaved product draft", "مسودة المنتج الحالية غير المحفوظة"), is_deleted:false }] } : image, async () => { const refreshed = await api("/api/admin/image-gallery"); images = refreshed.images || []; chosen.delete(image.url); draw(); }); };
+        card.querySelector("[data-delete-library-image]").onclick = event => { event.stopPropagation(); showMediaDeleteWarning(draftSet.has(image.url) ? { ...image, usage:[...(image.usage || []), { entity:"draft", id:"current", label:ui("Remove this image from the unsaved draft before deleting it.", "أزل الصورة من المسودة غير المحفوظة قبل حذفها."), is_deleted:false }] } : image, async () => { const refreshed = await api("/api/admin/image-gallery"); images = refreshed.images || []; chosen.delete(image.url); draw(); }); };
       });
     };
     backdrop.querySelectorAll("[data-close-media-library]").forEach(button => button.onclick = close);
@@ -4199,7 +4220,7 @@ async function loadCatalogChoices() {
         <div class="loading-icon-stage">
           <div class="loading-icon-canvas">
             <span class="loading-icon-fallback" ${value ? "hidden" : ""}></span>
-            <img src="${escapeHtml(value)}" alt="" class="loading-icon-preview" ${value ? "" : "hidden"} />
+            <img ${value ? `src="${escapeHtml(value)}"` : ""} alt="" class="loading-icon-preview" ${value ? "" : "hidden"} onerror="this.hidden=true;this.previousElementSibling.hidden=false" />
           </div>
           <span>${ui("Actual website size", "الحجم الفعلي في الموقع")}</span>
         </div>
@@ -5877,6 +5898,32 @@ async function loadCatalogChoices() {
     document.getElementById("addHomeSection").onclick=()=>{document.getElementById("homeSectionsList").insertAdjacentHTML("beforeend",homeSectionCard({},document.querySelectorAll("[data-home-section]").length,true));bind();renumber();};
     bind();
   }
+  async function renderRecycleBin(page) {
+    const [trash, gallery] = await Promise.all([api("/api/admin/products/trash"), api("/api/admin/image-gallery?filter=unused")]);
+    const products = trash.products || [];
+    const images = (gallery.images || []).filter(image => image.is_orphan || image.is_linked_to_deleted);
+    page.innerHTML = pageTitle("recycleBin", "");
+    page.innerHTML += `<div class="recycle-intro">${i("trash")}<div><strong>${ui("Review before permanent deletion", "راجع قبل الحذف النهائي")}</strong><p>${ui("Deleted products can be restored. Images stay in the gallery until you delete each file permanently.", "يمكن استعادة المنتجات المحذوفة. الصور تظل في المعرض حتى تحذف كل ملف نهائيًا.")}</p></div></div>
+      <section class="card card-pad recycle-section"><div class="recycle-section-head"><div><span class="section-kicker">PRODUCTS</span><h2>${ui("Deleted products", "المنتجات المحذوفة")}</h2></div><span class="pill">${products.length}</span></div><div class="recycle-list">${products.length ? products.map(product => `<article class="recycle-product" data-trash-product="${product.id}"><img src="${escapeHtml(mediaPreviewUrl(product.main_photo_url || product.image_url || "", 120))}" alt="" loading="lazy" decoding="async"/><div><strong>${escapeHtml(state.lang === "ar" ? product.name_ar || product.name_en : product.name_en || product.name_ar)}</strong><small>#${product.id}</small></div><button class="btn" type="button" data-restore-product="${product.id}">${i("refresh")}${ui("Restore", "استعادة")}</button><button class="btn danger" type="button" data-purge-product="${product.id}">${i("trash")}${ui("Delete permanently", "حذف نهائي")}</button></article>`).join("") : `<div class="empty-inline">${ui("No deleted products", "لا توجد منتجات محذوفة")}</div>`}</div></section>
+      <section class="card card-pad recycle-section"><div class="recycle-section-head"><div><span class="section-kicker">MEDIA</span><h2>${ui("Unused or old images", "الصور غير المستخدمة أو القديمة")}</h2><p>${ui("Includes images no longer linked to active content. Removing a product does not remove its image files.", "تضم الصور غير المرتبطة بمحتوى نشط. حذف المنتج لا يحذف ملفات صوره.")}</p></div><span class="pill">${images.length}</span></div><div class="recycle-image-grid">${images.slice(0,60).map(image => `<article class="recycle-image" data-trash-image="${escapeHtml(image.id)}"><img src="${escapeHtml(mediaPreviewUrl(image.url,240))}" alt="" loading="lazy" decoding="async"/><strong title="${escapeHtml(image.filename)}">${escapeHtml(image.filename)}</strong><small>${image.is_linked_to_deleted ? ui("Linked to deleted content", "مرتبطة بمحتوى محذوف") : ui("Unused", "غير مستخدمة")}</small><button class="btn danger" type="button" data-purge-image="${escapeHtml(image.id)}">${i("trash")}${ui("Review deletion", "مراجعة الحذف")}</button></article>`).join("") || `<div class="empty-inline">${ui("No unused images", "لا توجد صور غير مستخدمة")}</div>`}</div>${images.length > 60 ? `<button class="btn" type="button" id="openFullGallery">${ui("Open full gallery to review all images", "افتح المعرض الكامل لمراجعة كل الصور")}</button>` : ""}</section>`;
+    page.querySelectorAll("[data-restore-product]").forEach(button => button.onclick = async () => {
+      button.disabled = true;
+      try { await api(`/api/admin/products/${button.dataset.restoreProduct}/restore`, { method:"POST", body:JSON.stringify({}) }); toast(ui("Product restored", "تمت استعادة المنتج")); renderRecycleBin(page); }
+      catch (error) { toast(error.message, "error"); button.disabled = false; }
+    });
+    page.querySelectorAll("[data-purge-product]").forEach(button => button.onclick = async () => {
+      if (!confirm(ui("Delete this product permanently? Its uploaded images will remain in the gallery.", "حذف هذا المنتج نهائيًا؟ ستظل صوره المرفوعة في المعرض."))) return;
+      button.disabled = true;
+      try { await api(`/api/admin/products/${button.dataset.purgeProduct}/force`, { method:"DELETE" }); toast(ui("Product deleted permanently", "تم حذف المنتج نهائيًا")); renderRecycleBin(page); }
+      catch (error) { toast(error.message, "error"); button.disabled = false; }
+    });
+    page.querySelectorAll("[data-purge-image]").forEach(button => button.onclick = () => {
+      const image = images.find(item => String(item.id) === button.dataset.purgeImage);
+      if (image) showMediaDeleteWarning(image, () => renderRecycleBin(page));
+    });
+    page.querySelector("#openFullGallery")?.addEventListener("click", () => { location.hash = "imageGallery"; });
+  }
+
   async function renderGallery(page) {
     const data = await api("/api/admin/image-gallery");
     const images = data.images || [];
@@ -5966,7 +6013,8 @@ async function loadCatalogChoices() {
 
   function galleryUsageHtml(usage) {
     if (!usage.length) return `<span class="muted">${t("unused")}</span>`;
-    return usage.map(item => `<div class="pill" style="margin:2px;">${escapeHtml(item.entity)} #${escapeHtml(item.id)} - ${escapeHtml(item.label || "")}${item.is_deleted ? ` (${t("deleted")})` : ""}</div>`).join("");
+    const products = new Set(usage.filter(item => item.entity === "products" && !item.is_deleted).map(item => String(item.id))).size;
+    return `<strong class="gallery-product-count">${products} ${ui("products", "منتج")}</strong>` + usage.map(item => `<div class="pill" style="margin:2px;">${mediaUsageLabel(item)} - ${escapeHtml(item.label || "")}${item.is_deleted ? ` (${t("deleted")})` : ""}</div>`).join("");
   }
 
   function formatBytes(bytes) {

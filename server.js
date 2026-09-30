@@ -1136,11 +1136,12 @@ function fail(message, status = 400) {
 
 function entityRows(entity, includeDeleted = false) {
   const rows = db
-    .prepare(`SELECT id, payload, created_at, updated_at FROM records WHERE entity = ? ${includeDeleted ? "" : "AND is_deleted = 0"} ORDER BY id DESC`)
+    .prepare(`SELECT id, payload, created_at, updated_at, is_deleted FROM records WHERE entity = ? ${includeDeleted ? "" : "AND is_deleted = 0"} ORDER BY id DESC`)
     .all(entity);
   return rows.map((row) => ({
     id: row.id,
     ...JSON.parse(row.payload),
+    ...(includeDeleted ? { is_deleted:Boolean(row.is_deleted) } : {}),
     created_at: row.created_at,
     updated_at: row.updated_at
   }));
@@ -1176,7 +1177,32 @@ function updateProductRecord(id, payload = {}) {
   delete merged.created_at;
   delete merged.updated_at;
   const normalized = validateProductPayload(merged, { requireExplicitType: Boolean(payload.product_type || payload.productType) });
-  return existing ? updateRecord("products", id, normalized) : createRecord("products", normalized);
+  if (!existing) return createRecord("products", normalized);
+  return db.transaction(() => {
+    const previousVariants = normalizeProductPayload(existing).variants;
+    const nextVariants = normalized.variants;
+    const oldById = new Map(previousVariants.map(variant => [String(variant.id), variant]));
+    const nextById = new Map(nextVariants.filter(variant => variant.is_active !== false).map(variant => [String(variant.id), variant]));
+    const sameChoice = (left, right) => String(left.color_id || left.color || "").trim() === String(right.color_id || right.color || "").trim()
+      && String(left.option || "").trim() === String(right.option || "").trim()
+      && String(left.value || "").trim() === String(right.value || "").trim();
+    for (const bundle of entityRows("bundles", true)) {
+      let changed = false;
+      const relink = items => asArray(items).map(item => {
+        if (Number(item.product_id) !== Number(id) || !item.variant_id || nextById.has(String(item.variant_id))) return item;
+        const oldVariant = oldById.get(String(item.variant_id));
+        if (!oldVariant) fail(`Bundle ${bundle.id} references a missing product variant; repair the bundle before editing this product`, 422);
+        const matches = nextVariants.filter(variant => variant.is_active !== false && sameChoice(oldVariant, variant));
+        if (matches.length !== 1) fail(`Bundle ${bundle.id} uses a variant that would be removed or become ambiguous`, 422);
+        changed = true;
+        return { ...item, variant_id:matches[0].id };
+      });
+      const items = relink(bundle.items);
+      const bundleVariants = asArray(bundle.bundle_variants).map(variant => ({ ...variant, items:relink(variant.items) }));
+      if (changed) updateRecord("bundles", bundle.id, { items, bundle_variants:bundleVariants });
+    }
+    return updateRecord("products", id, normalized);
+  })();
 }
 
 function normalizeFulfillmentSettings(value = getSetting("fulfillmentSettings") || {}) {
@@ -6889,15 +6915,6 @@ function imageUsageIndex() {
     urls.forEach((url) => add(url, { entity: "settings", id: key, label: key, is_deleted: false }));
   }
 
-  for (const row of entityRows("ai_usage_logs", true)) {
-    collectImageUrls(row).forEach((url) => add(url, {
-      entity: "ai_usage_logs",
-      id: row.id,
-      label: row.action || `AI log #${row.id}`,
-      is_deleted: false
-    }));
-  }
-
   return usage;
 }
 
@@ -6946,6 +6963,41 @@ function listGalleryImages({ includeTrash = false, onlyUnused = false } = {}) {
 
 function galleryImageById(id) {
   return listGalleryImages({ includeTrash: true }).find((item) => item.id === id || item.url === id);
+}
+
+function unlinkGalleryImage(id, entity, recordId) {
+  const image = galleryImageById(id);
+  if (!image) fail("Image not found", 404);
+  const link = image.usage.find(item => item.entity === entity && String(item.id) === String(recordId) && !item.is_deleted);
+  if (!link) fail("This active link was not found", 404);
+  const url = image.url;
+  const withoutUrl = value => {
+    if (typeof value === "string") return value.split(/[?#]/)[0] === url ? "" : value;
+    if (Array.isArray(value)) return value.filter(item => !(typeof item === "string" && item.split(/[?#]/)[0] === url) && !(item && typeof item === "object" && String(item.url || "").split(/[?#]/)[0] === url)).map(withoutUrl);
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, withoutUrl(item)]));
+    return value;
+  };
+  if (entity === "settings") {
+    const value = getSetting(recordId);
+    if (!value) fail("Setting not found", 404);
+    setSetting(recordId, withoutUrl(value));
+  } else {
+    const fields = {
+      products:["main_photo_url","mainPhotoUrl","image_url","side_photos","sidePhotos","gallery","images","media_gallery","generated_images","variants"],
+      bundles:["main_photo_url","image_url","images","gallery","side_photos","bundle_variants"],
+      categories:["image_url","image"], brands:["logo_url","image_url"],
+      collections:["image_url","cover_image_url","images"],
+      content:["image_url","desktop_image_url","mobile_image_url","images"],
+      pages:["image_url","cover_image_url","images"]
+    }[entity];
+    if (!fields) fail("Unsupported media link", 422);
+    const row = getRecord(entity, recordId);
+    if (!row) fail("Linked record not found", 404);
+    const changes = Object.fromEntries(fields.filter(field => field in row).map(field => [field, withoutUrl(row[field])]));
+    updateRecord(entity, recordId, changes);
+    if (entity === "products" || entity === "categories") invalidateStoreCategoryCache();
+  }
+  return galleryImageById(id);
 }
 
 function deleteGalleryImage(id) {
@@ -11740,6 +11792,11 @@ app.post("/api/admin/categories/preview", (req, res) => {
   }));
 });
 
+app.get("/api/admin/products/trash", (_req, res) => {
+  const products = entityRows("products", true).filter(row => row.is_deleted).map(productForAdminList);
+  res.json(ok({ products, total:products.length }));
+});
+
 for (const [route, entity] of Object.entries(entityMap)) {
   app.get(`/api/admin/${route}`, (req, res) => {
     const rows = entityRows(entity);
@@ -11916,16 +11973,36 @@ for (const [route, entity] of Object.entries(entityMap)) {
 
   app.delete(`/api/admin/${route}/:id`, (req, res) => {
     if (entity === "orders") fail("Orders cannot be deleted through the generic API", 405);
+    if (entity === "products") assertProductNotUsedByActiveBundle(req.params.id);
     softDelete(entity, req.params.id);
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     res.json(ok({ message: "Deleted" }));
   });
 }
 
-app.get("/api/admin/products/trash", (_req, res) => res.json(ok({ products: [], total: 0 })));
-app.post("/api/admin/products/:id/restore", (req, res) => res.json(ok(updateRecord("products", req.params.id, { is_deleted: 0 }))));
-app.delete("/api/admin/products/:id/force", (_req, res) => res.json(ok({ message: "Deleted permanently" })));
+function assertProductNotUsedByActiveBundle(productId) {
+  const bundle = activeRows("bundles").find(row => [...asArray(row.items), ...asArray(row.bundle_variants).flatMap(option => asArray(option.items))].some(item => Number(item.product_id) === Number(productId)));
+  if (bundle) fail(`Product is used by active bundle #${bundle.id}; remove that component first`, 422);
+}
+app.post("/api/admin/products/:id/restore", (req, res) => {
+  const row = db.prepare("SELECT is_deleted FROM records WHERE entity = ? AND id = ?").get("products", req.params.id);
+  if (!row) fail("Product not found", 404);
+  if (!row.is_deleted) fail("Product is not in trash", 422);
+  db.prepare("UPDATE records SET is_deleted = 0, updated_at = CURRENT_TIMESTAMP WHERE entity = ? AND id = ?").run("products", req.params.id);
+  invalidateStoreCategoryCache();
+  res.json(ok({ product:getRecord("products", req.params.id) }));
+});
+app.delete("/api/admin/products/:id/force", (req, res) => {
+  const row = db.prepare("SELECT is_deleted FROM records WHERE entity = ? AND id = ?").get("products", req.params.id);
+  if (!row) fail("Product not found", 404);
+  if (!row.is_deleted) fail("Move the product to trash before permanent deletion", 422);
+  assertProductNotUsedByActiveBundle(req.params.id);
+  db.prepare("DELETE FROM records WHERE entity = ? AND id = ? AND is_deleted = 1").run("products", req.params.id);
+  invalidateStoreCategoryCache();
+  res.json(ok({ message:"Deleted permanently; uploaded images remain in the gallery until removed there" }));
+});
 app.post("/api/admin/products/:id/delete", (req, res) => {
+  assertProductNotUsedByActiveBundle(req.params.id);
   softDelete("products", req.params.id);
   res.json(ok({ message: "Moved to trash" }));
 });
@@ -14148,6 +14225,10 @@ app.post("/api/admin/product-media/upload", productMediaUpload.array("files", 40
   res.json(ok({ media, images: media, count: media.length }));
 });
 app.get("/api/admin/image-gallery/trash", (_req, res) => res.json(ok({ images: entityRows("image_gallery_deleted", true) })));
+app.post("/api/admin/image-gallery/:id/unlink", (req, res) => {
+  const image = unlinkGalleryImage(req.params.id, String(req.body?.entity || ""), String(req.body?.record_id || ""));
+  res.json(ok({ image }));
+});
 app.post("/api/admin/image-gallery/sync", (_req, res) => {
   const images = listGalleryImages();
   createRecord("image_gallery_sync", { synced_at: new Date().toISOString(), image_count: images.length });
