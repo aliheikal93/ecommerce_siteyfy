@@ -633,6 +633,7 @@ img { max-width: 100%; display: block; }
 .review-author > div { display:grid; gap:4px; }
 .review-avatar { width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:50%; background:#f0ebf5; color:var(--primary); font-weight:700; }
 .verified-purchase { display:flex; align-items:center; gap:4px; color:#28775c; font-size:9px; font-weight:600; }
+.imported-review-badge { display:inline-flex; align-items:center; width:max-content; margin-top:3px; color:#6b5586; font-size:10px; font-weight:600; }
 .customer-review time { color:var(--muted); font-size:9px; }
 .customer-review > p { margin:12px 0 14px; color:#514b53; font-size:13px; line-height:2; white-space:pre-line; }
 .helpful-review { min-height:31px; padding:0 10px; border:1px solid var(--line); border-radius:4px; display:inline-flex; align-items:center; gap:7px; background:#fff; color:var(--muted); font-size:10px; }

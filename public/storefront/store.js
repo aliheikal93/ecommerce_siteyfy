@@ -1186,9 +1186,9 @@ function renderReviewRows(reviews = []) {
     const verified=review.verified_purchase===true||review.is_verified_purchase===true||review.verified===true;
     const helpful=Number(review.helpful_count||review.helpful||0);
     return `<article class="customer-review">
-      <header><div class="review-author"><span class="review-avatar" aria-hidden="true">${esc(String(review.display_name||review.customer_name||review.name||"ع").trim().charAt(0)||"ع")}</span><div><strong>${esc(review.display_name||review.customer_name||review.name||"عميل المتجر")}</strong>${verified?`<span class="verified-purchase">${icon("badge-check",14)}عملية شراء موثقة</span>`:""}</div></div><time datetime="${esc(review.published_at||review.created_at||review.date||"")}">${esc(reviewDate(review.published_at||review.created_at||review.date))}</time></header>
+      <header><div class="review-author"><span class="review-avatar" aria-hidden="true">${esc(String(review.display_name||review.customer_name||review.name||"ع").trim().charAt(0)||"ع")}</span><div><strong>${esc(review.display_name||review.customer_name||review.name||"عميل المتجر")}</strong>${verified?`<span class="verified-purchase">${icon("badge-check",14)}عملية شراء موثقة</span>`:""}${review.entry_origin==="legacy_store"?`<span class="imported-review-badge">منقول من الموقع السابق</span>`:""}</div></div><time datetime="${esc(review.published_at||review.created_at||review.date||"")}">${esc(reviewDate(review.published_at||review.created_at||review.date))}</time></header>
       ${starRating(review.rating,`تقييم ${Number(review.rating||0)} من 5 نجوم`)}
-      <p>${esc(review.comment||review.review||review.content||"")}</p>
+      ${(review.comment||review.review||review.content)?`<p>${esc(review.comment||review.review||review.content)}</p>`:""}
       <button class="helpful-review ${state.helpfulReviews.has(String(review.id))?"is-done":""}" type="button" data-helpful-review="${esc(review.id)}" ${state.helpfulReviews.has(String(review.id))?"disabled":""}>${icon("thumbs-up",15)}<span>${state.helpfulReviews.has(String(review.id))?"شكرًا لك":"هل كان مفيدًا؟"}</span><small>${helpful}</small></button>
     </article>`;
   }).join("");

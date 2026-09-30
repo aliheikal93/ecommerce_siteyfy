@@ -8534,10 +8534,11 @@ function publicCustomerReview(review = {}, helpfulByCurrentGuest = false) {
     display_name: review.display_name,
     rating: Number(review.rating),
     comment: review.comment,
+    entry_origin: review.entry_origin === "legacy_store" ? "legacy_store" : "customer",
     is_verified_purchase: review.is_verified_purchase === true,
     helpful_count: Math.max(0, Number(review.helpful_count || 0)),
     helpful_by_current_guest: helpfulByCurrentGuest === true,
-    published_at: review.published_at || review.created_at
+    published_at: review.original_reviewed_at || review.published_at || review.created_at
   };
 }
 
@@ -8584,7 +8585,7 @@ function publicStoreRecommendation(recommendation = {}) {
 function publishedProductReviews(productId) {
   return entityRows("product_reviews")
     .filter((review) => Number(review.product_id) === Number(productId) && review.source === "customer" && review.status === "published")
-    .sort((a, b) => String(b.published_at || b.created_at).localeCompare(String(a.published_at || a.created_at)));
+    .sort((a, b) => String(b.original_reviewed_at || b.published_at || b.created_at).localeCompare(String(a.original_reviewed_at || a.published_at || a.created_at)));
 }
 
 function ratingAggregate(reviews = []) {
@@ -8752,6 +8753,9 @@ function adminReviewView(review = {}) {
     display_name: review.display_name,
     rating: Number(review.rating),
     comment: review.comment,
+    entry_origin: review.entry_origin === "legacy_store" ? "legacy_store" : "customer",
+    original_reviewed_at: review.original_reviewed_at || null,
+    legacy_source: review.legacy_source || "",
     status: review.status,
     is_verified_purchase: review.is_verified_purchase === true,
     order_id: review.order_id || null,
@@ -8781,11 +8785,34 @@ function activeRecommendationRecord(id) {
   return entityRows("product_recommendations").find((recommendation) => Number(recommendation.id) === Number(id)) || null;
 }
 
+function importedReviewDate(value) {
+  const date = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail("Original review date must be YYYY-MM-DD");
+  const parsed = new Date(`${date}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date || parsed.getTime() > Date.now()) fail("Invalid original review date");
+  return parsed.toISOString();
+}
+
 function updateCustomerReview(review, payload = {}, actor = "admin") {
   const next = { ...review };
   const changed = {};
-  if (["display_name", "comment", "rating", "is_verified_purchase", "source"].some((field) => payload[field] !== undefined)) {
+  if (["is_verified_purchase", "source", "entry_origin", "order_id"].some((field) => payload[field] !== undefined)) {
     fail("Customer review content and verification cannot be edited", 400);
+  }
+  const imported = review.entry_origin === "legacy_store";
+  const contentFields = ["product_id", "display_name", "comment", "rating", "original_reviewed_at", "legacy_source"];
+  if (!imported && contentFields.some((field) => payload[field] !== undefined)) fail("Customer review content and verification cannot be edited", 400);
+  if (imported) {
+    if (payload.product_id !== undefined) {
+      const productId = Number(payload.product_id);
+      if (!Number.isInteger(productId) || !productRecord(productId)) fail("Product not found", 404);
+      next.product_id = productId;
+    }
+    if (payload.display_name !== undefined) next.display_name = cleanReviewText(payload.display_name, 2, 80, "Name");
+    if (payload.comment !== undefined) next.comment = cleanReviewText(payload.comment, 0, 2000, "Comment");
+    if (payload.rating !== undefined) next.rating = validRating(payload.rating);
+    if (payload.original_reviewed_at !== undefined) next.original_reviewed_at = importedReviewDate(payload.original_reviewed_at);
+    if (payload.legacy_source !== undefined) next.legacy_source = String(payload.legacy_source || "").trim().slice(0, 120);
   }
   if (payload.status !== undefined) {
     const status = String(payload.status || "").toLowerCase();
@@ -8793,14 +8820,15 @@ function updateCustomerReview(review, payload = {}, actor = "admin") {
     next.status = status;
     if (status === "published" && !review.published_at) next.published_at = new Date().toISOString();
   }
-  for (const field of ["display_name", "comment", "rating", "status"]) {
+  for (const field of [...contentFields, "status"]) {
     if (next[field] !== review[field]) changed[field] = { from: review[field], to: next[field] };
   }
   const updated = updateRecord("product_reviews", review.id, {
+    ...(imported ? Object.fromEntries(contentFields.map((field) => [field, next[field]])) : {}),
     status: next.status,
     published_at: next.published_at || null
   });
-  if (Object.keys(changed).length) reviewEvent(review.id, "moderated", actor, { changed });
+  if (Object.keys(changed).length) reviewEvent(review.id, imported ? "imported_review_updated" : "moderated", actor, { changed });
   return updated;
 }
 
@@ -12434,6 +12462,37 @@ app.get("/api/admin/reviews", (req, res) => {
       average_rating: ratingAggregate(customerReviews.filter((row) => row.status === "published")).average
     }
   }));
+});
+
+app.post("/api/admin/reviews", (req, res) => {
+  const payload = req.body || {};
+  const productId = Number(payload.product_id);
+  if (!Number.isInteger(productId) || !productRecord(productId)) fail("Product not found", 404);
+  const status = String(payload.status || "hidden").toLowerCase();
+  if (!["hidden", "published"].includes(status)) fail("Invalid imported review status");
+  const now = new Date().toISOString();
+  const review = createRecord("product_reviews", {
+    product_id: productId,
+    customer_id: null,
+    source: "customer",
+    entry_origin: "legacy_store",
+    status,
+    display_name: cleanReviewText(payload.display_name, 2, 80, "Name"),
+    rating: validRating(payload.rating),
+    comment: cleanReviewText(payload.comment, 0, 2000, "Comment"),
+    original_reviewed_at: importedReviewDate(payload.original_reviewed_at),
+    legacy_source: String(payload.legacy_source || "").trim().slice(0, 120),
+    is_verified_purchase: false,
+    order_id: null,
+    helpful_count: 0,
+    submitted_at: now,
+    published_at: status === "published" ? now : null
+  });
+  reviewEvent(review.id, "imported", req.user.email || "admin", { status, product_id: productId, original_reviewed_at: review.original_reviewed_at });
+  if (payload.enable_product_reviews === true) {
+    saveProductSocialProofSettings(productId, { reviews_enabled: true, show_rating_summary: true });
+  }
+  res.status(201).json(ok({ review: adminReviewView(review) }));
 });
 
 app.get("/api/admin/reviews/:id", (req, res) => {
