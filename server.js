@@ -7207,11 +7207,11 @@ function normalizeProductPayload(payload = {}) {
     label_ids: [...new Set(asArray(payload.label_ids).map(value => String(value || "").trim()).filter(Boolean))],
     facet_ids: [...new Set(asArray(payload.facet_ids).map(value => String(value || "").trim()).filter(Boolean))],
     active_variants: canonicalVariants.filter((variant) => variant.is_active !== false),
-    generated_images: variableReset ? [] : asArray(payload.generated_images),
-    media_gallery: variableReset ? [] : mediaGallery,
-    side_photos: variableReset ? [] : mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
-    gallery: variableReset || payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
-    images: variableReset || payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
+    generated_images: asArray(payload.generated_images),
+    media_gallery: mediaGallery,
+    side_photos: mediaGallery.filter((item) => item.type === "image").map((item) => item.url),
+    gallery: payload.side_photos !== undefined ? [] : asArray(payload.gallery).filter(Boolean),
+    images: payload.side_photos !== undefined ? [] : asArray(payload.images).filter(Boolean),
     main_photo_url: normalizedMainImage,
     image_url: normalizedMainImage
   };
@@ -8669,7 +8669,7 @@ function productSalesSocialProof(productId, settings = productSocialProofSetting
   const displayed = actual + imported + verifiedLegacy + manual;
   const mode = settings.sales_display_mode;
   const threshold = Math.max(1, Number(settings.sales_threshold || 10));
-  let visible = settings.show_sales === true && mode !== "hidden";
+  let visible = settings.show_sales === true && displayed > 0 && mode !== "hidden";
   let label = { ar: "", en: "" };
   if (mode === "threshold") {
     visible = visible && displayed >= threshold;
@@ -11823,8 +11823,17 @@ for (const [route, entity] of Object.entries(entityMap)) {
 
   app.post(`/api/admin/${route}`, (req, res) => {
     if (entity === "orders") fail("Orders can only be created through checkout", 405);
+    const productInput = entity === "products" ? { ...(req.body || {}) } : null;
+    const initialSalesUnits = productInput ? Number(productInput.initial_sales_units || 0) : 0;
+    const initialSocialProof = productInput?.initial_social_proof;
+    if (productInput) {
+      delete productInput.initial_sales_units;
+      delete productInput.initial_social_proof;
+      if (!Number.isSafeInteger(initialSalesUnits) || initialSalesUnits < 0 || initialSalesUnits > 1000000) fail("Previous sold units must be a whole number from 0 to 1,000,000", 422);
+      if (initialSocialProof !== undefined && (!initialSocialProof || typeof initialSocialProof !== "object" || Array.isArray(initialSocialProof))) fail("Invalid social proof settings", 422);
+    }
     const payload = entity === "products"
-      ? validateProductPayload(req.body || {}, { requireExplicitType: true })
+      ? validateProductPayload(productInput, { requireExplicitType: true })
       : entity === "categories"
         ? validateCategoryPayload(req.body || {})
       : entity === "bundles"
@@ -11838,7 +11847,12 @@ for (const [route, entity] of Object.entries(entityMap)) {
               : entity === "pages"
                 ? normalizeDynamicPagePayload(req.body || {})
               : (req.body || {});
-    const record = createRecord(entity, payload);
+    const record = entity === "products" ? db.transaction(() => {
+      const saved = createRecord(entity, payload);
+      if (initialSalesUnits) addManualCatalogUnits("product", saved.id, initialSalesUnits, req.user?.email || "admin");
+      if (initialSocialProof) saveProductSocialProofSettings(saved.id, initialSocialProof);
+      return saved;
+    })() : createRecord(entity, payload);
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     if (entity === "collections") {
       const collection = collectionForAdmin(record);

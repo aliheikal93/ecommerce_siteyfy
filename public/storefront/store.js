@@ -1416,7 +1416,7 @@ function renderProduct(product) {
     hydrateIcons();
   };
   const bindGalleryThumbs=()=>document.querySelectorAll("[data-gallery-index]").forEach(button=>button.onclick=()=>renderMedia(Number(button.dataset.galleryIndex)));
-  const applyVariantMedia=variant=>{const urls=[variant?.image_url,...(variant?.images||[])].filter(Boolean);const index=urls.map(url=>media.findIndex(item=>item.url===url)).find(value=>value>=0);renderMedia(index ?? Math.max(0,mediaIndex));document.querySelector(`[data-gallery-index="${mediaIndex}"]`)?.scrollIntoView({block:"nearest",inline:"nearest"});};
+  const applyVariantMedia=variant=>{const urls=[variant?.image_url,...(variant?.images||[])].filter(Boolean);const index=urls.map(url=>media.findIndex(item=>item.url===url)).find(value=>value>=0);const sharedMain=media.findIndex(item=>item.url===(product.main_photo_url||product.image_url));renderMedia(index ?? Math.max(0,sharedMain));document.querySelector(`[data-gallery-index="${mediaIndex}"]`)?.scrollIntoView({block:"nearest",inline:"nearest"});};
   const selectMediaByUrl=url=>{const index=media.findIndex(item=>item.url===url);if(index>=0)renderMedia(index);};
   document.getElementById("galleryPrev").hidden=media.length<2;
   document.getElementById("galleryNext").hidden=media.length<2;

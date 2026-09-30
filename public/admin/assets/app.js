@@ -2580,7 +2580,7 @@
       <div class="product-editor-head product-type-head"><div><button class="btn back-link" type="button" id="backToProducts">${i("arrow-left")}${ui("Back to products", "العودة للمنتجات")}</button><span class="section-kicker">NEW PRODUCT</span><h1>${ui("Choose the product type", "اختر نوع المنتج")}</h1><p>${ui("This choice controls where price, stock, images, and sellable options are managed.", "الاختيار ده بيحدد مكان إدارة السعر والمخزون والصور والخيارات القابلة للبيع.")}</p></div></div>
       <section class="product-type-grid">
         <button type="button" class="product-type-card" data-new-product-type="basic"><span class="product-type-icon">${i("box")}</span><div><b>01</b><h2>${ui("Basic product", "منتج ثابت")}</h2><p>${ui("One price, one inventory record, and one unified gallery. No colors or variants.", "سعر ومخزون ومعرض صور موحد، من غير ألوان أو متغيرات.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
-        <button type="button" class="product-type-card" data-new-product-type="variable"><span class="product-type-icon">${i("sliders-horizontal")}</span><div><b>02</b><h2>${ui("Variable product", "منتج بمتغيرات")}</h2><p>${ui("Every variant owns its price, cost, stock, SKU, weight, and image. Minimum two variants.", "كل متغير له سعره وتكلفته ومخزونه وكوده ووزنه وصورته. الحد الأدنى متغيران.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
+        <button type="button" class="product-type-card" data-new-product-type="variable"><span class="product-type-icon">${i("sliders-horizontal")}</span><div><b>02</b><h2>${ui("Variable product", "منتج بمتغيرات")}</h2><p>${ui("Every variant has its own price and stock; images may be shared or added per variant. Minimum two variants.", "لكل متغير سعره ومخزونه، ويمكن استخدام صور المنتج المشتركة أو إضافة صور خاصة له. الحد الأدنى متغيران.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
         <button type="button" class="product-type-card is-bundle" data-new-product-type="bundle"><span class="product-type-icon">${i("layers")}</span><div><b>03</b><h2>${ui("Bundle", "طقم")}</h2><p>${ui("Build bundle options and map each option to whole basic products or exact product variants.", "أنشئ خيارات للطقم واربط كل خيار بمنتجات ثابتة كاملة أو متغيرات محددة.")}</p></div><em>${ui("Choose", "اختيار")} ${i("arrow-right")}</em></button>
       </section>`;
     document.getElementById("backToProducts").onclick = () => renderResource(page, "products");
@@ -2657,7 +2657,7 @@
             </section>
           `).join("")}
         </div>
-        ${row.id ? productReviewsPanelShell(row) : `<section class="catalog-form-section product-editor-locked"><span>${i("star")}</span><div><h3>${ui("Reviews & social proof", "التقييمات وSocial Proof")}</h3><p>${ui("Save the product once, then its reviews and sales settings will be available here.", "احفظ المنتج أولًا، وبعدها ستظهر تقييماته وإعدادات المبيعات هنا.")}</p></div></section>`}
+        ${row.id ? productReviewsPanelShell(row) : productCreateFeedbackPanel()}
       </form>
     `;
     const leave = () => renderResource(page, "products");
@@ -2669,7 +2669,8 @@
     document.querySelectorAll("[data-label-choice]").forEach(button => button.onclick = () => { const hidden=button.closest(".field")?.querySelector("[data-label-values]"); const values=new Set(JSON.parse(hidden?.value || "[]")); const id=button.dataset.labelChoice; values.has(id)?values.delete(id):values.add(id); if(hidden) hidden.value=JSON.stringify([...values]); button.classList.toggle("selected",values.has(id)); });
     bindProductSubcategoryField();
     if (inferredType === "variable") bindVariantBuilder();
-    if (inferredType === "basic") { bindProductGallery(row); bindProductInventory(); }
+    bindProductGallery(row);
+    if (inferredType === "basic") bindProductInventory();
     bindProductDirtyState();
     const productPanels=[...document.querySelectorAll("#editorForm .catalog-form-layout > .catalog-form-section"),document.querySelector("#productReviewsSection")].filter(Boolean);
     setupEditorTabs(document.getElementById("editorForm"),productPanels,productPanels.map(panel=>panel.querySelector(".product-section-heading h3, .product-catalog-title strong")?.textContent?.trim()||ui("Reviews","التقييمات")));
@@ -2699,8 +2700,8 @@ async function loadCatalogChoices() {
       if (productType === "variable") return [
         { kicker:"01", title:ui("Product identity", "هوية المنتج"), description:ui("Shared names, URL, visibility, and catalog placement only.", "الاسم والرابط وحالة الظهور وربط الكتالوج فقط.") , fields:pick(["name_en", "name_ar", "slug", "is_active"]) },
         { kicker:"02", title:t("catalog"), collapsible:true, fields:commonCatalog },
-        { kicker:"03", title:ui("Product card image", "صورة كارت المنتج"), description:ui("This image represents the variable product before a customer chooses an option.", "هذه الصورة تمثل المنتج المتغير على الكارت قبل اختيار أحد الخيارات."), accent:true, single:true, fields:pick(["main_photo_url"]) },
-        { kicker:"04", title:t("productVariants"), description:ui("Each option has a main image, gallery, price, cost, stock, SKU, and barcode.", "كل خيار له صورة رئيسية ومعرض وسعر وتكلفة ومخزون وSKU وباركود."), single:true, fields:[], extra:variantsField(row) },
+        { id:"productMediaSection", kicker:"03", title:ui("Product images", "صور المنتج"), description:ui("Choose the card image and shared gallery images. Variant images are optional.", "اختر صورة الكارت وصور المعرض المشتركة. صور المتغيرات اختيارية."), accent:true, single:true, fields:[], extra:productGalleryField(row) },
+        { kicker:"04", title:t("productVariants"), description:ui("Each option has its own price and stock. Add images only when they differ from the shared gallery.", "لكل خيار سعر ومخزون، وأضف له صورًا فقط لو اختلفت عن معرض المنتج."), single:true, fields:[], extra:variantsField(row) },
         { kicker:"05", title:ui("Shared shipping details", "بيانات الشحن المشتركة"), description:ui("Weight and package dimensions apply to every option.", "الوزن وأبعاد الطرد تطبق على كل الخيارات."), fields:pick(["goods_type_id", "shipping_profile_id", "requires_shipping", "weight", "length", "width", "height", "origin_country_code", "hs_code"]) },
         { kicker:"06", title:t("shortDescription"), single:true, fields:pick(["short_description_en", "short_description_ar", "description_en", "description_ar"]) },
         { kicker:"07", title:"SEO", single:true, fields:pick(["meta_title_en", "meta_title_ar", "meta_description_en", "meta_description_ar"]) }
@@ -2951,7 +2952,11 @@ async function loadCatalogChoices() {
   }
 
   function productReviewsPanelShell(row = {}) {
-    return `<section class="catalog-form-section product-reviews-inline" id="productReviewsSection"><div class="product-section-heading"><div><span class="section-kicker">09</span><h3>${ui("Reviews & social proof", "التقييمات وSocial Proof")}</h3><p>${ui("Only feedback and settings for this product are shown here.", "تظهر هنا تقييمات وإعدادات هذا المنتج فقط.")}</p></div><button class="btn" type="button" id="openFullReviews">${i("external-link")}${ui("Full review center", "مركز التقييمات الكامل")}</button></div><div class="product-reviews-body" id="productReviewsBody"><div class="review-loading">${i("refresh")} ${ui("Loading product feedback…", "جاري تحميل تقييمات المنتج…")}</div></div></section>`;
+    return `<section class="catalog-form-section product-reviews-inline" id="productReviewsSection"><div class="product-section-heading"><div><span class="section-kicker">09</span><h3>${ui("Reviews & sales", "التقييمات والمبيعات")}</h3><p>${ui("Manage this product's reviews and displayed sold count.", "تحكم في تقييمات المنتج وعدد القطع المباعة المعروض.")}</p></div><button class="btn" type="button" id="openFullReviews">${i("external-link")}${ui("Full review center", "مركز التقييمات الكامل")}</button></div><div class="product-reviews-body" id="productReviewsBody"><div class="review-loading">${i("refresh")} ${ui("Loading product feedback…", "جاري تحميل تقييمات المنتج…")}</div></div></section>`;
+  }
+
+  function productCreateFeedbackPanel() {
+    return `<section class="catalog-form-section product-reviews-inline" id="productReviewsSection"><div class="product-section-heading"><div><span class="section-kicker">09</span><h3>${ui("Reviews & sales", "التقييمات والمبيعات")}</h3><p>${ui("Set the review display and previous sold units while creating the product.", "حدد عرض التقييمات والمبيعات السابقة أثناء إنشاء المنتج.")}</p></div></div><div class="product-create-feedback"><div><h4>${ui("Review display", "عرض التقييمات")}</h4>${[["reviews_enabled",ui("Show reviews","عرض التقييمات")],["accepting_reviews",ui("Accept new reviews","قبول تقييمات جديدة")],["show_rating_summary",ui("Show rating summary","عرض ملخص التقييم")],["show_sales",ui("Show sold count","عرض عدد المبيعات")]].map(([key,label])=>`<div class="editor-toggle-row"><strong>${label}</strong>${switchButton({field:`create_${key}`,value:true,label:false})}</div>`).join("")}<p class="muted">${ui("Customer reviews can be managed after the product is saved.","تظهر تقييمات العملاء وإدارتها بعد حفظ المنتج.")}</p></div><div><h4>${ui("Previous sales", "المبيعات السابقة")}</h4><label class="field"><span>${ui("Add previously sold units", "إضافة قطع مباعة سابقًا")}</span><input type="number" name="initial_sales_units" min="0" max="1000000" step="1" value="0" inputmode="numeric"></label><p class="muted">${ui("Store orders remain separate. This number adds to the displayed total only.","طلبات المتجر الحقيقية تظل منفصلة، وهذا العدد يُضاف إلى الإجمالي المعروض فقط.")}</p></div></div></section>`;
   }
 
   function variantsField(row = {}) {
@@ -2959,7 +2964,7 @@ async function loadCatalogChoices() {
     return `
       <input type="hidden" name="variants" value="${escapeHtml(JSON.stringify(variants))}" data-variants-value />
       <div class="variant-builder">
-        ${row.id ? "" : `<div class="variant-generator"><div><strong>${ui("Generate combinations","توليد المتغيرات")}</strong><small>${ui("Select colors and option values to create every combination.","اختر الألوان والخياطات لإنشاء كل التركيبات مرة واحدة.")}</small></div><div class="variant-generator-choices"><div><span>${t("colors")}</span><div>${(state.rows.colors||[]).filter(item=>item.is_active!==false).map(item=>`<label class="variant-generator-chip"><input type="checkbox" data-generate-color value="${escapeHtml(item.nameAr||item.name_ar||item.nameEn||item.name_en||item.color||"")}"/><i style="background:${escapeHtml(item.hex_code||item.color||item.hex||"#ddd")}"></i><span>${escapeHtml(item.nameAr||item.name_ar||item.nameEn||item.name_en||"")}</span></label>`).join("")}</div></div><div><span>${t("options")}</span><div>${(state.rows.options||[]).filter(item=>item.is_active!==false).map(item=>`<label class="variant-generator-chip"><input type="checkbox" data-generate-option value="${escapeHtml(item.nameAr||item.name_ar||item.nameEn||item.name_en||"")}" data-option-group="${escapeHtml(item.groupAr||item.group_ar||item.groupEn||item.group_en||"")}"/><span>${escapeHtml(item.nameAr||item.name_ar||item.nameEn||item.name_en||"")}</span></label>`).join("")}</div></div><button class="btn" type="button" data-generate-variants>${ui("Generate variants","توليد المتغيرات")}</button></div></div>`}
+        <div class="variant-generator-launch"><div><strong>${ui("Generate combinations","توليد المتغيرات")}</strong><small>${row.id ? ui("Add new combinations without changing existing variants.","أضف تركيبات جديدة دون تعديل المتغيرات الموجودة.") : ui("The two empty starter cards will be replaced when you generate variants.","سيتم استبدال الكارتين الفارغين عند توليد المتغيرات.")}</small></div><button class="btn primary" type="button" data-open-variant-generator>${i("plus")}${ui("Generate variants","توليد المتغيرات")}</button></div>
         <div class="variant-list" id="variantList">
           ${(variants.length ? variants : [{ type: "color_option", color: "", option: "", value: "", price: "", stock: "", is_active: true, is_in_stock: true }, { type: "color_option", color: "", option: "", value: "", price: "", stock: "", is_active: true, is_in_stock: true }]).map(variantRow).join("")}
         </div>
@@ -3048,7 +3053,36 @@ async function loadCatalogChoices() {
       all("[data-remove-variant-gallery-image]").forEach(button=>button.onclick=()=>{const row=button.closest(".variant-row"),url=button.closest("[data-variant-gallery-url]").dataset.variantGalleryUrl,images=parseJsonArray(row.querySelector("[data-variant-images]")?.value);setImages(row,images.filter(item=>item!==url));});
     };
     document.querySelectorAll("[data-add-variant-type]").forEach(btn=>btn.onclick=()=>{list.insertAdjacentHTML("beforeend",variantRow({type:btn.dataset.addVariantType,is_active:true,is_in_stock:true}));rebind();sync();});
-    document.querySelector("[data-generate-variants]")?.addEventListener("click",()=>{const colors=[...document.querySelectorAll("[data-generate-color]:checked")].map(input=>input.value),options=[...document.querySelectorAll("[data-generate-option]:checked")].map(input=>({value:input.value,group:input.dataset.optionGroup}));if(!colors.length&&!options.length){toast(ui("Select colors or options","اختر ألوانًا أو خيارات"),"error");return;}const pairs=(colors.length?colors:[""]).flatMap(color=>(options.length?options:[{value:"",group:""}]).map(option=>({color,...option})));if(pairs.length>100){toast(ui("Maximum 100 combinations at once","الحد الأقصى 100 متغير في المرة"),"error");return;}const canonical=(colorValue,optionValue)=>{const color=(state.rows.colors||[]).find(item=>[item.id,item.name_ar,item.name_en,item.nameAr,item.nameEn].some(value=>String(value||"").toLowerCase()===String(colorValue||"").toLowerCase())),option=(state.rows.options||[]).find(item=>[item.id,item.name_ar,item.name_en,item.nameAr,item.nameEn].some(value=>String(value||"").toLowerCase()===String(optionValue||"").toLowerCase()));return `${color?.id||String(colorValue||"").toLowerCase()}|${option?.id||String(optionValue||"").toLowerCase()}`;};const current=parseJsonArray(document.querySelector("[data-variants-value]")?.value),exists=new Set(current.map(item=>canonical(item.color_id||item.color,item.value)));let added=0;for(const pair of pairs){const key=canonical(pair.color,pair.value);if(exists.has(key))continue;exists.add(key);const color=(state.rows.colors||[]).find(item=>[item.nameAr,item.name_ar,item.nameEn,item.name_en].includes(pair.color));list.insertAdjacentHTML("beforeend",variantRow({type:pair.color&&pair.value?"color_option":pair.color?"color":"option",color:pair.color,color_id:color?.id||null,hex_code:color?.hex_code||color?.color||color?.hex||"",option:pair.group,value:pair.value,is_active:true,is_in_stock:true,inventory_mode:"out_of_stock",price:""}));added++;}rebind();sync();toast(`${added} ${ui("variants generated","متغير اتولد")}`);});
+    const catalogColors=(state.rows.colors||[]).filter(item=>item.is_active!==false);
+    const catalogOptions=(state.rows.options||[]).filter(item=>item.is_active!==false);
+    const colorName=item=>item?.nameAr||item?.name_ar||item?.nameEn||item?.name_en||item?.color||"";
+    const optionName=item=>item?.nameAr||item?.name_ar||item?.nameEn||item?.name_en||"";
+    const optionGroup=item=>item?.groupAr||item?.group_ar||item?.groupEn||item?.group_en||"";
+    const normalizeKey=value=>String(value||"").trim().normalize("NFC").toLowerCase();
+    const variantKey=(colorValue,optionValue,groupValue="")=>{
+      const color=catalogColors.find(item=>[item.id,item.nameAr,item.name_ar,item.nameEn,item.name_en].some(value=>normalizeKey(value)===normalizeKey(colorValue)));
+      const option=catalogOptions.find(item=>[item.id,item.nameAr,item.name_ar,item.nameEn,item.name_en].some(value=>normalizeKey(value)===normalizeKey(optionValue)) && (!groupValue||[item.groupAr,item.group_ar,item.groupEn,item.group_en].some(value=>normalizeKey(value)===normalizeKey(groupValue))));
+      return `${color?.id||normalizeKey(colorValue)}|${option?.id||`${normalizeKey(groupValue)}:${normalizeKey(optionValue)}`}`;
+    };
+    const emptyStarter=row=>!["color","value","sku","barcode","price","compare_at_price","cost"].some(key=>String(row.querySelector(`[data-variant-field='${key}']`)?.value||"").trim()) && !parseJsonArray(row.querySelector("[data-variant-images]")?.value).length;
+    document.querySelector("[data-open-variant-generator]")?.addEventListener("click",()=>{
+      closeVariantEditor();
+      const modal=document.createElement("div");modal.className="modal-backdrop variant-generator-backdrop";
+      modal.innerHTML=`<section class="modal variant-generator-dialog" role="dialog" aria-modal="true" aria-label="${ui("Generate variants","توليد المتغيرات")}"><div class="modal-head"><div><span class="section-kicker">PRODUCT OPTIONS</span><h2>${ui("Generate variants","توليد المتغيرات")}</h2><p>${ui("Select colors and option values, then review what will be added.","اختر الألوان والخياطات ثم راجع المتغيرات التي ستُضاف.")}</p></div><button class="btn icon-btn" type="button" data-close-generator aria-label="${t("close")}">${i("x")}</button></div><div class="variant-generator-body"><div class="variant-generator-choices"><div><span>${t("colors")}</span><div>${catalogColors.map(item=>`<label class="variant-generator-chip"><input type="checkbox" data-generate-color value="${escapeHtml(item.id)}"/><i style="background:${escapeHtml(item.hex_code||item.color||item.hex||"#ddd")}"></i><span>${escapeHtml(colorName(item))}</span></label>`).join("")}</div></div><div><span>${t("options")}</span><div>${catalogOptions.map(item=>`<label class="variant-generator-chip"><input type="checkbox" data-generate-option value="${escapeHtml(item.id)}"/><span>${escapeHtml(optionName(item))}</span></label>`).join("")}</div></div></div><div class="variant-generator-preview" data-generator-preview></div></div><div class="modal-foot"><button class="btn" type="button" data-close-generator>${t("cancel")}</button><button class="btn primary" type="button" data-confirm-generator>${ui("Add new variants","إضافة المتغيرات الجديدة")}</button></div></section>`;
+      document.body.append(modal);
+      document.body.style.overflow="hidden";
+      const close=()=>{modal.remove();document.body.style.overflow="";};
+      modal.querySelectorAll("[data-close-generator]").forEach(button=>button.onclick=close);
+      modal.addEventListener("click",event=>{if(event.target===modal)close();});
+      modal.addEventListener("keydown",event=>{if(event.key==="Escape"){event.stopPropagation();close();}});
+      const selectedPairs=()=>{const colors=[...modal.querySelectorAll("[data-generate-color]:checked")].map(input=>catalogColors.find(item=>String(item.id)===input.value)).filter(Boolean),options=[...modal.querySelectorAll("[data-generate-option]:checked")].map(input=>catalogOptions.find(item=>String(item.id)===input.value)).filter(Boolean);return (colors.length?colors:[null]).flatMap(color=>(options.length?options:[null]).map(option=>({color,option}))).filter(pair=>pair.color||pair.option);};
+      const existingKeys=()=>new Set(parseJsonArray(document.querySelector("[data-variants-value]")?.value).map(item=>variantKey(item.color_id||item.color,item.value,item.option)));
+      const draw=()=>{const pairs=selectedPairs(),existing=existingKeys(),newPairs=pairs.filter(pair=>!existing.has(variantKey(pair.color?.id,pair.option?.id,optionGroup(pair.option))));modal.querySelector("[data-generator-preview]").innerHTML=`<strong>${pairs.length} ${ui("combinations selected","تركيبات مختارة")} · ${newPairs.length} ${ui("new","جديدة")}</strong>${pairs.length<2?`<p class="variant-generator-warning">${ui("Choose at least two combinations to generate variants.","لازم تختار تركيبتين على الأقل لتوليد المتغيرات.")}</p>`:""}${pairs.length>100?`<p class="variant-generator-warning">${ui("Maximum 100 combinations at once.","الحد الأقصى 100 متغير في المرة.")}</p>`:""}<ul>${pairs.slice(0,100).map(pair=>`<li><span>${escapeHtml([colorName(pair.color),optionName(pair.option)].filter(Boolean).join(" · "))}</span><small>${existing.has(variantKey(pair.color?.id,pair.option?.id,optionGroup(pair.option)))?ui("Already exists","موجود بالفعل"):ui("New","جديد")}</small></li>`).join("")}</ul>`;};
+      modal.querySelectorAll("[data-generate-color],[data-generate-option]").forEach(input=>input.onchange=draw);
+      modal.querySelector("[data-confirm-generator]").onclick=()=>{const pairs=selectedPairs();if(pairs.length<2){toast(ui("Generate at least two variants","لازم تعمل متغيرين على الأقل"),"error");draw();return;}if(pairs.length>100){toast(ui("Maximum 100 combinations at once","الحد الأقصى 100 متغير في المرة"),"error");return;}const exists=existingKeys();let added=0;for(const pair of pairs){const key=variantKey(pair.color?.id,pair.option?.id,optionGroup(pair.option));if(exists.has(key))continue;exists.add(key);list.insertAdjacentHTML("beforeend",variantRow({type:pair.color&&pair.option?"color_option":pair.color?"color":"option",color:colorName(pair.color),color_id:pair.color?.id||null,hex_code:pair.color?.hex_code||pair.color?.color||pair.color?.hex||"",option:optionGroup(pair.option),value:optionName(pair.option),is_active:true,is_in_stock:false,inventory_mode:"out_of_stock",price:""}));added++;}if(added){[...list.querySelectorAll(".variant-row")].filter(emptyStarter).forEach(row=>row.remove());rebind();sync();renderProductGallery();}close();toast(`${added} ${ui("variants added","متغيرات جديدة اتضافت")}`);};
+      draw();
+      modal.querySelector("[data-generate-color],[data-generate-option],[data-close-generator]")?.focus();
+    });
     rebind();sync();
   }
 
@@ -3475,13 +3509,15 @@ async function loadCatalogChoices() {
       else payload[name] = value;
     });
     if (key === "products") {
+      if (!id) {
+        const enabled=name=>document.querySelector(`[data-form-switch="create_${name}"]`)?.dataset.switchValue!=="false";
+        payload.initial_social_proof={ reviews_enabled:enabled("reviews_enabled"), accepting_reviews:enabled("accepting_reviews"), show_rating_summary:enabled("show_rating_summary"), show_sales:enabled("show_sales"), sales_display_mode:"exact" };
+      }
       if (payload.product_type === "variable") {
         if (!Array.isArray(payload.variants) || payload.variants.length < 2) { toast(ui("Add at least two variants", "أضف متغيرين على الأقل"), "error"); return; }
         const incomplete = payload.variants.findIndex(variant => variant.price === "" || variant.price === null || variant.price === undefined || !(variant.color || variant.option || variant.value));
         if (incomplete >= 0) { toast(ui(`Complete variant ${incomplete + 1}: choose a color or option and enter its price.`, `أكمل المتغير رقم ${incomplete + 1}: اختر لونًا أو خيارًا وأدخل السعر.`), "error"); return; }
         payload.image_url = payload.main_photo_url || "";
-        payload.media_gallery = [];
-        payload.side_photos = [];
       } else {
         payload.variants = [];
         payload.image_url = payload.main_photo_url || "";
