@@ -14389,15 +14389,17 @@ function wishlistRows(owner) {
 
 function wishlistPublicItem(row, products, bundles) {
   const item = (row.item_type === "bundle" ? bundles : products).find(entry => String(entry.id) === String(row.item_id));
-  const variant = (item?.variants || []).find(entry => String(entry.id) === String(row.variant_id));
-  const selected = variant || item;
+  const variants = item?.variants || [];
+  const variant = row.variant_id ? variants.find(entry => String(entry.id) === String(row.variant_id)) : null;
+  const inStock = entry => entry?.is_in_stock !== false && (row.item_type === "bundle" ? entry?.available_stock == null || Number(entry.available_stock) > 0 : entry?.stock == null || Number(entry.stock) > 0);
+  const selected = variant || (!row.variant_id ? variants.find(inStock) || variants[0] : null) || item;
   const stock = row.item_type === "bundle" ? selected?.available_stock : selected?.stock;
   const basePrice = Number(item?.sale_price || item?.price || 0);
-  const price = variant?.price !== null && variant?.price !== undefined && variant?.price !== "" ? Number(variant.price) : (row.item_type === "product" && variant ? basePrice + Number(variant.price_adjustment || variant.price_delta || 0) : Number(selected?.price ?? basePrice));
+  const price = selected?.price !== null && selected?.price !== undefined && selected?.price !== "" ? Number(selected.price) : (row.item_type === "product" && selected !== item ? basePrice + Number(selected.price_adjustment || selected.price_delta || 0) : basePrice);
   return { id:row.id, item_type:row.item_type, item_id:row.item_id, variant_id:row.variant_id || null,
     name_ar:item?.name_ar || item?.name_en || "منتج غير متاح", image_url:selected?.image_url || item?.main_photo_url || item?.image_url || "",
     price, available:Boolean(item) && (!row.variant_id || Boolean(variant)) && selected?.is_in_stock !== false && (stock == null || Number(stock) > 0),
-    exists:Boolean(item), url:item ? `/${row.item_type}/${encodeURIComponent(item.slug || item.id)}${row.variant_id ? `?variant=${encodeURIComponent(row.variant_id)}` : ""}` : null,
+    exists:Boolean(item), url:item ? `/${row.item_type}/${encodeURIComponent(item.slug || item.id)}${selected?.id ? `?variant=${encodeURIComponent(selected.id)}` : ""}` : null,
     created_at:row.created_at };
 }
 

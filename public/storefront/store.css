@@ -1417,3 +1417,25 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 .featured-product-card { position:relative; }
 .featured-product-card .wish-button { opacity:1; transform:none; }
 @media(max-width:700px){.product-card .wish-button,.home-rail .wish-button,.featured-product-card .wish-button { opacity:1; transform:none; width:42px; height:42px; }.wishlist-grid { grid-template-columns:1fr; }.wishlist-tile { max-width:440px; width:100%; margin-inline:auto; }.wishlist-tile-image { aspect-ratio:4/3; }}
+
+/* Keep every bundle choice visible; distinguish a missing color combination from sold-out components. */
+.bundle-configurator-inline .bundle-option-picker>div { max-height:none; overflow:visible; padding-inline-end:0; }
+.bundle-configurator-inline .bundle-option-picker:not(.bundle-color-picker) button { grid-template-columns:1fr; align-content:center; }
+.bundle-option-picker button.is-unavailable { border-style:dashed; color:#817b85; background:#f7f5f8; cursor:not-allowed; }
+.bundle-option-picker button.is-unavailable small { color:#817b85; }
+@media(max-width:520px){.bundle-configurator-inline .bundle-option-picker>div { grid-template-columns:repeat(2,minmax(0,1fr)); }}
+
+/* The same purchase hierarchy on products and bundles. */
+.purchase-actions { margin-top:25px; }
+.purchase-actions .purchase-row { grid-template-columns:92px minmax(0,1fr) minmax(0,1fr); gap:8px; margin:0; }
+.purchase-actions .purchase-row>.secondary-button { min-width:0; min-height:48px; margin:0; padding:7px 9px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:13px; font-weight:750; white-space:nowrap; }
+.purchase-actions .purchase-row>.secondary-button .icon { width:17px; height:17px; flex:none; }
+.purchase-actions .purchase-card { width:100%; min-height:54px; margin-top:10px; display:flex; justify-content:center; gap:9px; font-size:16px; font-weight:850; }
+.bundle-configurator-inline .purchase-actions { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+@media(max-width:520px){.purchase-actions .purchase-row { grid-template-columns:80px minmax(0,1fr) minmax(0,1fr); gap:6px; }.purchase-actions .purchase-row>.secondary-button { padding-inline:5px; gap:4px; font-size:12px; }.purchase-actions .purchase-card { min-height:52px; font-size:15px; }}
+
+/* Visible wishlist destination and feedback after saving an item. */
+.wishlist-nav-link { position:relative; }
+.wishlist-count { position:absolute; inset-block-start:-5px; inset-inline-end:-6px; min-width:18px; height:18px; padding-inline:3px; display:grid; place-items:center; border-radius:999px; background:var(--primary); color:#fff; font-size:10px; font-weight:800; line-height:1; }
+.wishlist-count[hidden] { display:none; }
+.toast a { display:inline-block; margin-inline-start:12px; color:#fff; font-weight:800; text-decoration:underline; text-underline-offset:3px; }
