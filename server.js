@@ -11949,6 +11949,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
 
   app.put(`/api/admin/${route}/:id`, (req, res) => {
     if (entity === "orders") fail("Use order management endpoints to update orders", 405);
+    if (entity === "products") assertProductNotMigrated(req.params.id);
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
       : entity === "categories"
@@ -11975,6 +11976,7 @@ for (const [route, entity] of Object.entries(entityMap)) {
 
   app.patch(`/api/admin/${route}/:id`, (req, res) => {
     if (entity === "orders") fail("Use order management endpoints to update orders", 405);
+    if (entity === "products") assertProductNotMigrated(req.params.id);
     const record = entity === "products"
       ? updateProductRecord(req.params.id, req.body || {})
       : entity === "categories"
@@ -12001,11 +12003,17 @@ for (const [route, entity] of Object.entries(entityMap)) {
 
   app.delete(`/api/admin/${route}/:id`, (req, res) => {
     if (entity === "orders") fail("Orders cannot be deleted through the generic API", 405);
+    if (entity === "products") assertProductNotMigrated(req.params.id);
     if (entity === "products") assertProductNotUsedByActiveBundle(req.params.id);
     softDelete(entity, req.params.id);
     if (["categories", "products"].includes(entity)) invalidateStoreCategoryCache();
     res.json(ok({ message: "Deleted" }));
   });
+}
+
+function assertProductNotMigrated(productId) {
+  const product=getRecord("products",productId);
+  if (product?.migrated_bundle_id) fail(`This historical product moved to bundle #${product.migrated_bundle_id}; edit the bundle instead`,409);
 }
 
 function assertProductNotUsedByActiveBundle(productId) {
@@ -12030,6 +12038,7 @@ app.delete("/api/admin/products/:id/force", (req, res) => {
   res.json(ok({ message:"Deleted permanently; uploaded images remain in the gallery until removed there" }));
 });
 app.post("/api/admin/products/:id/delete", (req, res) => {
+  assertProductNotMigrated(req.params.id);
   assertProductNotUsedByActiveBundle(req.params.id);
   softDelete("products", req.params.id);
   res.json(ok({ message: "Moved to trash" }));
