@@ -1070,16 +1070,17 @@ function matchingCatalogEntries(omit="") {
   if(omit!=="collection"&&state.collection){const collection=state.collections.find(item=>String(item.slug)===state.collection);rows=rows.filter(item=>collectionIncludesCatalogEntry(collection,item));}
   if((omit!=="color"&&state.color)||(omit!=="option"&&state.option))rows=rows.map(item=>{const matches=catalogEntryVariants(item).filter(variant=>colorMatches(variant,omit==="color"?"":state.color)&&optionMatches(variant,omit==="option"?"":state.option));const matched=matches.find(variant=>catalogVariantInStock(item,variant))||matches[0];return matched?{...item,_matched_variant:matched}:null;}).filter(Boolean);
   if(omit!=="price")rows=rows.filter(item=>{const price=item._matched_variant?Number(item._matched_variant.price??catalogEntryPrice(item)):catalogEntryPrice(item);return price>=Number(state.minPrice||0)&&(!Number.isFinite(state.maxPrice)||price<=state.maxPrice);});
-  if(!state.color&&!state.option)rows=rows.filter(item=>catalogEntryInStock(item));
   return rows;
 }
 function filteredCatalogEntries() {
   const rows=matchingCatalogEntries();
   const selectedCategory=state.categories.find(category=>String(category.slug)===state.category);
-  if(state.sort==="price-asc")rows.sort((a,b)=>catalogEntryPrice(a)-catalogEntryPrice(b));
-  else if(state.sort==="price-desc")rows.sort((a,b)=>catalogEntryPrice(b)-catalogEntryPrice(a));
-  else if(state.sort==="name")rows.sort((a,b)=>(a.name_ar||"").localeCompare(b.name_ar||"","ar"));
-  else if(selectedCategory?.category_type==="smart"){const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));rows.sort((a,b)=>(ranks.get(Number(a.id))??9999)-(ranks.get(Number(b.id))??9999));}
+  const stockFirst=(a,b)=>Number(catalogEntryInStock(b,b._matched_variant))-Number(catalogEntryInStock(a,a._matched_variant));
+  if(state.sort==="price-asc")rows.sort((a,b)=>stockFirst(a,b)||catalogEntryPrice(a)-catalogEntryPrice(b));
+  else if(state.sort==="price-desc")rows.sort((a,b)=>stockFirst(a,b)||catalogEntryPrice(b)-catalogEntryPrice(a));
+  else if(state.sort==="name")rows.sort((a,b)=>stockFirst(a,b)||(a.name_ar||"").localeCompare(b.name_ar||"","ar"));
+  else if(selectedCategory?.category_type==="smart"){const ranks=new Map((selectedCategory.product_ids||[]).map((id,index)=>[Number(id),index]));rows.sort((a,b)=>stockFirst(a,b)||(ranks.get(Number(a.id))??9999)-(ranks.get(Number(b.id))??9999));}
+  else rows.sort(stockFirst);
   return rows;
 }
 
@@ -1109,7 +1110,7 @@ function renderProducts() {
 }
 
 function filterHtml(maxCatalog) {
-  const countFor=(omit,predicate)=>matchingCatalogEntries(omit).filter(item=>catalogEntryInStock(item,item._matched_variant)).filter(predicate).length;
+  const countFor=(omit,predicate)=>matchingCatalogEntries(omit).filter(predicate).length;
   const catalogTypes=[{value:"product",name:"المنتجات"},{value:"bundle",name:"الأطقم"}].map(row=>({...row,count:countFor("catalogType",item=>item._catalog_type===row.value)}));
   const categories=state.categories.filter(category=>!category.parent_id&&category.show_in_filters!==false&&category.is_active!==false).map(category=>({...category,count:countFor("category",item=>categoryIncludesCatalogEntry(category,item))})).filter(category=>category.count||state.category===category.slug);
   const selectedRoot=state.categories.find(category=>!category.parent_id&&String(category.slug)===state.category);
