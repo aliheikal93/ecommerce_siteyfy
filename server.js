@@ -2499,6 +2499,8 @@ function trackingOrderView(order = {}) {
     shipping: Number(order.shipping_cost || order.shipping_total || 0),
     currency: order.currency_snapshot?.code || order.currency || "SAR",
     items: Array.isArray(order.items) ? order.items.map((item) => ({
+      item_type: item.item_type || (item.bundle_id ? "bundle" : "product"),
+      bundle_id: item.bundle_id || null,
       product_id: item.product_id || null,
       variant_id: item.variant_id || null,
       sku: item.sku || "",
@@ -14876,10 +14878,45 @@ app.post("/api/orders", async (req, res, next) => {
  }
 });
 app.get("/api/store/payment-methods", (_req, res) => res.json(ok(publicPaymentGateways({ storefront: true }))));
+function marketingCatalogRows() {
+  const settings=normalizeMarketingPixels(),origin=normalizeWebsiteDomain(getSetting("settings")?.website_domain),currency=getSetting("currencies")?.base_currency||"SAR",company=getSetting("companyInfo")||{};
+  const text=value=>String(value||"").replace(/\\n/g," ").replace(/<[^>]*>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\s+/g," ").trim();
+  const absolute=value=>{try{const url=new URL(String(value||""),origin);return /^https?:$/.test(url.protocol)?url.href:"";}catch{return "";}};
+  const migrated=new Set(activeRows("bundles").map(row=>Number(row.legacy_product_id)).filter(Boolean));
+  return [...storeProductRows().filter(row=>!row.migrated_bundle_id&&!migrated.has(Number(row.id))).map(row=>({...row,_type:"product"})),...storeBundleRows().map(row=>({...row,_type:"bundle"}))].map(row=>{
+    const options=asArray(row.variants).filter(option=>option.is_active!==false),inStock=option=>option.is_in_stock!==false&&(option.available_stock==null||Number(option.available_stock)>0),stockOptions=options.filter(inStock);
+    const selected=stockOptions[0]||options[0]||row;
+    const amount=Number(row._type==="bundle"?(selected.price??row.price):(options.length?selected.price:(row.sale_price??row.price)));
+    const compare=Number(selected.compare_at_price||row.compare_at_price||0);
+    const image=row.main_photo_url||row.image_url||selected.image_url||"";
+    const id=String(settings.content_id_source==="sku"?(row.sku||row.id):row.id);
+    return {id,sku_id:id,title:text(row.name_ar||row.name_en).slice(0,150),description:text(row.description_ar||row.short_description_ar||row.description_en||row.name_ar||row.name_en).slice(0,5000),availability:(options.length?stockOptions.length:row._type==="bundle"?(row.available_stock==null||Number(row.available_stock)>0):row.is_in_stock!==false)?"in stock":"out of stock",condition:"new",price:`${(compare>amount?compare:amount).toFixed(2)} ${currency}`,sale_price:compare>amount?`${amount.toFixed(2)} ${currency}`:"",link:absolute(`/${row._type}/${row.id}${options.length?`?variant=${encodeURIComponent(selected.id)}`:""}`),image_link:image.startsWith("/uploads/")?absolute(`/api/store/catalog-image/${row._type}/${row.id}.jpg`):absolute(image),brand:text(row.brand?.name_ar||row.brand?.name_en||company.name_ar||company.name_en||getSetting("settings")?.store_name||"Store"),product_type:text(row.category?.name_ar||row.category_name_ar||row.category_slug||(row._type==="bundle"?"أطقم":"منتجات")),custom_label_0:row._type};
+  }).filter(row=>row.title&&row.image_link&&Number.parseFloat(row.price)>0);
+}
+app.get("/api/store/catalog/:platform.csv", (req,res)=>{
+  if(!["meta","tiktok"].includes(req.params.platform))return res.sendStatus(404);
+  const rows=marketingCatalogRows(),fields=[req.params.platform==="tiktok"?"sku_id":"id","title","description","availability","condition","price","sale_price","link","image_link","brand","product_type","custom_label_0"];
+  const quote=value=>`"${String(value??"").replaceAll('"','""')}"`;
+  res.setHeader("Cache-Control","no-cache");res.type("text/csv; charset=utf-8").send([fields.join(","),...rows.map(row=>fields.map(field=>quote(row[field])).join(","))].join("\r\n"));
+});
+app.get("/api/store/catalog-image/:type/:id.jpg",async(req,res,next)=>{
+  try{
+    if(!["product","bundle"].includes(req.params.type))return res.sendStatus(404);
+    const row=(req.params.type==="bundle"?storeBundleRows():storeProductRows()).find(row=>String(row.id)===req.params.id);
+    const source=row?.main_photo_url||row?.image_url||row?.variants?.find(option=>option.image_url)?.image_url||"";
+    if(!source.startsWith("/uploads/")||source.includes("\\"))return res.sendStatus(404);
+    const uploadRoot=path.resolve(__dirname,"public/uploads"),original=path.resolve(uploadRoot,source.slice(9));
+    if(!original.startsWith(uploadRoot+path.sep))return res.sendStatus(400);
+    const stats=await fs.promises.stat(original).catch(()=>null);if(!stats?.isFile())return res.sendStatus(404);
+    const key=crypto.createHash("sha1").update(`${source}|${stats.size}|${stats.mtimeMs}`).digest("hex"),target=path.join(__dirname,"public/image-cache",`catalog-${key}.jpg`);
+    if(!fs.existsSync(target)){let job=mediaPreviewJobs.get(target);if(!job){job=sharp(original).rotate().resize({width:1200,height:1200,fit:"inside",withoutEnlargement:true}).flatten({background:"#ffffff"}).jpeg({quality:90}).toFile(target);mediaPreviewJobs.set(target,job);job.finally(()=>mediaPreviewJobs.delete(target)).catch(()=>{});}await job;}
+    res.setHeader("Cache-Control","public, max-age=3600");res.type("image/jpeg").sendFile(target);
+  }catch(error){next(error);}
+});
 app.get("/api/store/marketing-pixels", (_req, res) => res.json(ok(publicMarketingPixels())));
 app.post("/api/store/marketing-pixels/events", (req, res) => {
   const settings = normalizeMarketingPixels();
-  const allowedEvents = new Set(["page_view", "view_item", "view_cart", "add_to_cart", "remove_from_cart", "begin_checkout", "add_payment_info", "purchase", "search"]);
+  const allowedEvents = new Set(["page_view", "view_item", "view_cart", "add_to_cart", "remove_from_cart", "begin_checkout", "add_payment_info", "purchase", "search", "add_to_wishlist"]);
   const eventName = String(req.body?.event_name || "").trim().toLowerCase();
   if (!allowedEvents.has(eventName)) fail("TRACKING_EVENT_INVALID", 422);
   const eventId = String(req.body?.event_id || "").trim().slice(0, 100);
@@ -14889,6 +14926,7 @@ app.post("/api/store/marketing-pixels/events", (req, res) => {
   const items = asArray(req.body?.items).slice(0, 100).map((item) => ({
     content_id: String(item?.content_id || item?.item_id || "").slice(0, 100),
     product_id: Number(item?.product_id || 0) || null,
+    bundle_id: Number(item?.bundle_id || 0) || null,
     variant_id: item?.variant_id ? String(item.variant_id).slice(0, 100) : null,
     name: String(item?.name || item?.item_name || "").slice(0, 200),
     category: String(item?.category || item?.item_category || "").slice(0, 100),

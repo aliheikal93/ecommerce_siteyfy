@@ -224,3 +224,11 @@ GitHub repository هو https://github.com/aliheikal93/ecommerce_siteyfy والف
 4. اكتب ما تم وما تبقى بوضوح في commit message أو وثيقة مخصصة.
 5. ارفع commit إلى `origin/main` بعد التحقق.
 6. تأكد أن `git status --short --branch` نظيف ومتزامن.
+
+## Marketing pixel integration — 2026-10-03
+- Meta and TikTok enabled through existing normalized settings APIs; IDs stay in settings, not source.
+- Catalog feeds: /api/store/catalog/meta.csv and /api/store/catalog/tiktok.csv. Live active product/bundle parent IDs match browser events; SKU mode also uses parent SKU. Legacy migrated products are excluded. Images have safe cached JPEG endpoints. Prices/stock are selected from a purchasable variant and links pin that variant.
+- Bundle ViewContent and payment-return bundle identities repaired; Purchase uses deterministic order event ID and browser deduplication. TikTok now uses Purchase and search_string; custom cart/removal events are not misreported as standard TikTok product views. Added wishlist and search events; search includes bundles.
+- Platform catalog subscription and final Events Manager receipt require advertiser account access; local event log alone does not prove platform ingestion.
+- Verified deployed desktop/mobile: PageView, product/bundle ViewContent, AddToCart, AddToWishlist, InitiateCheckout, AddPaymentInfo and Search; Meta/TikTok event HTTP responses 200. Both feed formats contain 16 active rows and all 16 catalog JPEG endpoints return 200. Purchase serialization and deterministic deduplication validated without creating an order or advertising a synthetic purchase. Meta autoConfig disabled to avoid extra automatic PageView alongside explicit site events.
+- Pre-setting backup retained at /root/slyrah-pixel-stage.sqlite.gz.
