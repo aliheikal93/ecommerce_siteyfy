@@ -5559,11 +5559,19 @@ function financeOrderAnalysis(order, context) {
   };
 }
 
+function financeDateKey(value = new Date()) {
+  if(typeof value==="string" && /^\d{4}-\d{2}-\d{2}$/.test(value))return value;
+  const date=new Date(value);if(!Number.isFinite(date.getTime()))return "";
+  const saved=getSetting("financeReportSettings")||{},timezone=["Asia/Riyadh","Africa/Cairo","UTC"].includes(saved.timezone)?saved.timezone:"Asia/Riyadh";
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+  const part=type=>parts.find(row=>row.type===type)?.value;return `${part("year")}-${part("month")}-${part("day")}`;
+}
 function financeOverview(filters = {}) {
   const settings = { ...(getSetting("financeSettings") || defaults.financeSettings) };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = financeDateKey();
   const periodFrom = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.date_from || "")) ? String(filters.date_from) : `${today.slice(0, 7)}-01`;
   const periodTo = /^\d{4}-\d{2}-\d{2}$/.test(String(filters.date_to || "")) ? String(filters.date_to) : today;
+  if(periodFrom>periodTo)fail("INVALID_DATE_RANGE",422);
   const operating = financeOperatingSummary(periodFrom, periodTo);
   const context = {
     shipments: entityRows("shipping_shipments"),
@@ -5571,8 +5579,7 @@ function financeOverview(filters = {}) {
     transactions: entityRows("payment_transactions")
   };
   let orders = entityRows("orders");
-  if (filters.date_from) orders = orders.filter((order) => financeOrderDate(order).slice(0, 10) >= String(filters.date_from));
-  if (filters.date_to) orders = orders.filter((order) => financeOrderDate(order).slice(0, 10) <= String(filters.date_to));
+  orders = orders.filter(order=>{const date=financeDateKey(financeOrderDate(order));return date && date>=periodFrom && date<=periodTo;});
   if (filters.include_historical === "false") orders = orders.filter((order) => !order.is_historical);
   const all = orders.map((order) => financeOrderAnalysis(order, context));
   const recognized = all.filter((row) => row.recognized);
@@ -5623,6 +5630,9 @@ function financeOverview(filters = {}) {
       payment_fees: sum("payment_fee"),
       contribution_profit: sum("contribution_profit"),
       operating_cost: operating.operating_cost,
+      operating_paid: operating.paid_cost,
+      operating_due: operating.due_cost,
+      operating_recorded: operating.recorded_cost,
       net_profit: moneyValue(sum("contribution_profit") - operating.operating_cost),
       negative_profit_orders: recognized.filter((row) => row.contribution_profit < 0).length,
       actual_shipping_orders: recognized.filter((row) => row.shipping_confidence === "actual").length,
@@ -5637,7 +5647,9 @@ function financeOverview(filters = {}) {
       currency: settings.currency || "SAR"
     },
     promotions: promotionRows,
+    period: { date_from:periodFrom, date_to:periodTo },
     operating_expenses: operating.occurrences,
+    operating_categories: operating.categories,
     payments: paymentRows,
     shipping_providers: shippingRows,
     provider_comparisons: providerComparisons.sort((a, b) => Number(b.needs_review) - Number(a.needs_review) || Math.abs(Number(b.cost_variance || 0)) - Math.abs(Number(a.cost_variance || 0))),
@@ -8663,14 +8675,21 @@ function financeExpenseOccurrences(expense, from, to) {
 }
 
 function financeExpenseLedgerRows(from, to) {
-  const overrides = new Map(entityRows("finance_expense_occurrences").map((row) => [`${row.expense_id}:${row.date}`, row]));
-  return entityRows("finance_expenses").flatMap((expense) => financeExpenseOccurrences(expense, from, to))
-    .map((row) => { const override=overrides.get(`${row.expense_id}:${row.date}`); return { ...row, amount:override?.amount ?? row.amount, status:override?.status || (row.date < new Date().toISOString().slice(0,10) ? "due" : "scheduled"), paid_at:override?.paid_at || null }; })
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const expenses=entityRows("finance_expenses"),stored=entityRows("finance_expense_occurrences"),overrides=new Map(stored.map(row=>[`${row.expense_id}:${row.date}`,row])),today=financeDateKey();
+  const rows=new Map(expenses.flatMap(expense=>financeExpenseOccurrences(expense,from,to)).map(row=>[`${row.expense_id}:${row.date}`,row]));
+  // A paid occurrence is financial evidence even if its schedule was later changed or paused.
+  stored.filter(row=>row.status==="paid"&&row.date>=from&&row.date<=to).forEach(row=>{
+    const key=`${row.expense_id}:${row.date}`;if(rows.has(key))return;
+    const expense=expenses.find(item=>Number(item.id)===Number(row.expense_id))||{};
+    rows.set(key,{expense_id:row.expense_id,date:row.date,name:row.name||expense.name||`#${row.expense_id}`,category:row.category||expense.category||"other",frequency:row.frequency||expense.frequency||"once",amount:row.amount});
+  });
+  return [...rows.entries()].map(([key,row])=>{const override=overrides.get(key);return {...row,name:override?.name||row.name,category:override?.category||row.category,amount:moneyValue(override?.amount??row.amount),status:override?.status||(row.date>today?"scheduled":row.frequency==="once"?"recorded":"due"),paid_at:override?.paid_at||null};}).sort((a,b)=>a.date.localeCompare(b.date)||Number(a.expense_id)-Number(b.expense_id));
 }
 function financeOperatingSummary(from, to) {
-  const occurrences=financeExpenseLedgerRows(from,to).filter((row) => row.status !== "skipped");
-  return { occurrences, operating_cost:moneyValue(occurrences.reduce((sum, row) => sum + row.amount, 0)) };
+  const occurrences=financeExpenseLedgerRows(from,to).filter(row=>row.status!=="skipped");
+  const sum=rows=>moneyValue(rows.reduce((total,row)=>total+Number(row.amount||0),0));
+  const categories=[...new Set(occurrences.map(row=>row.category))].map(category=>({category,amount:sum(occurrences.filter(row=>row.category===category))}));
+  return {occurrences,categories,operating_cost:sum(occurrences),paid_cost:sum(occurrences.filter(row=>row.status==="paid")),due_cost:sum(occurrences.filter(row=>row.status==="due")),recorded_cost:sum(occurrences.filter(row=>row.status==="recorded"))};
 }
 
 function catalogSalesAdjustment(type, id) {
@@ -10345,11 +10364,12 @@ function dashboardOrderDate(order = {}) {
 }
 
 function dashboardOverview(req) {
-  const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  const monthPeriod=![7,30,90].includes(Number(req.query.days)),today=financeDateKey();
+  const days=monthPeriod?Number(today.slice(8)):Number(req.query.days);
   const requestedModule = String(req.query.module || "").toLowerCase();
   const wants = (module) => !requestedModule || requestedModule === module;
   const end = new Date();
-  const start = new Date(end.getTime() - (days - 1) * 86400000);
+  const start = monthPeriod?new Date(`${today.slice(0,7)}-01T00:00:00Z`):new Date(end.getTime() - (days - 1) * 86400000);
   start.setUTCHours(0, 0, 0, 0);
   const allOrders = entityRows("orders");
   const orders = allOrders.filter((order) => {
@@ -10391,7 +10411,7 @@ function dashboardOverview(req) {
     modules.inventory = { summary, stock_status:[{ label:"available", value:Math.max(0, Number(summary.tracked_targets || 0) - Number(summary.low_stock || 0) - Number(summary.out_of_stock || 0)) }, { label:"low_stock", value:Number(summary.low_stock || 0) }, { label:"out_of_stock", value:Number(summary.out_of_stock || 0) }], receipts:Object.entries(summary.receipts || {}).map(([label, value]) => ({ label, value:Number(value || 0) })) };
   }
   if (wants("finance") && requestCan(req, "finance.view")) {
-    const finance = financeOverview({ date_from:start.toISOString().slice(0, 10), date_to:end.toISOString().slice(0, 10) });
+    const finance = financeOverview({ date_from:start.toISOString().slice(0, 10), date_to:today });
     modules.finance = { summary:finance.summary, payments:(finance.payments || []).slice(0, 8), promotions:(finance.promotions || []).slice(0, 6), data_quality:finance.data_quality };
   }
   if (wants("shipping") && requestCan(req, "shipping.view")) {
@@ -10426,7 +10446,7 @@ function dashboardOverview(req) {
     modules.promotions = { summary:{ total:discounts.length, active:discounts.filter((row) => row.is_active !== false && (!row.ends_at || dashboardDate(row.ends_at) >= end)).length, uses:discounts.reduce((sum, row) => sum + Number(row.used_count || 0), 0), checkout_recoveries:entityRows("checkout_recovery_sessions").filter((row) => dashboardDate(row.created_at) >= start).length } };
   }
   if (wants("notifications") && requestCan(req, "notifications.view")) modules.notifications = { summary:notificationOverview({ limit:1 }, req).summary };
-  return { period:{ days, date_from:start.toISOString().slice(0, 10), date_to:end.toISOString().slice(0, 10) }, navigation:adminNavigationContext(), modules };
+  return { period:{ days, mode:monthPeriod?"month":"rolling",date_from:start.toISOString().slice(0, 10), date_to:today }, navigation:adminNavigationContext(), modules };
 }
 
 function authOptional(req, _res, next) {
@@ -13288,7 +13308,7 @@ app.post("/api/admin/catalog-bulk/apply", (req,res) => {
 function validatedFinanceExpense(body = {}, existing = {}) {
   const name=String(body.name ?? existing.name ?? "").trim().slice(0,160), amount=Number(body.amount ?? existing.amount);
   const frequency=String(body.frequency ?? existing.frequency ?? "once");
-  const start_date=String(body.start_date ?? existing.start_date ?? "").slice(0,10),end_date=String(body.end_date ?? existing.end_date ?? "").slice(0,10);
+  const start_date=String(body.start_date || existing.start_date || (frequency==="once"?financeDateKey():"")).slice(0,10),end_date=String(body.end_date ?? existing.end_date ?? "").slice(0,10);
   if (!name || !Number.isFinite(amount) || amount < 0 || amount > 10000000 || !["once","daily","weekly","monthly","yearly"].includes(frequency) || !/^\d{4}-\d{2}-\d{2}$/.test(start_date) || (end_date && (!/^\d{4}-\d{2}-\d{2}$/.test(end_date) || end_date < start_date))) fail("INVALID_FINANCE_EXPENSE",422);
   return { name,category:String(body.category ?? existing.category ?? "other").trim().slice(0,80) || "other",amount:moneyValue(amount),frequency,start_date,end_date:end_date||null,is_active:body.is_active===undefined?existing.is_active!==false:body.is_active!==false,notes:String(body.notes ?? existing.notes ?? "").trim().slice(0,1000) };
 }
@@ -13305,8 +13325,8 @@ app.post("/api/admin/finance/expenses",(req,res)=>res.json(ok({ expense:createRe
 app.put("/api/admin/finance/expenses/:id",(req,res)=>{
   const old=getRecord("finance_expenses",req.params.id);
   if(!old)fail("EXPENSE_NOT_FOUND",404);
-  const next=validatedFinanceExpense(req.body,old), effective=String(req.body?.effective_from||new Date().toISOString().slice(0,10)).slice(0,10);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(effective)||effective<new Date().toISOString().slice(0,10))fail("INVALID_EFFECTIVE_DATE",422);
+  const next=validatedFinanceExpense(req.body,old), effective=String(req.body?.effective_from||financeDateKey()).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(effective)||effective<financeDateKey())fail("INVALID_EFFECTIVE_DATE",422);
   const changed=["name","category","amount","frequency","start_date","end_date"].some(key=>String(old[key]??"")!==String(next[key]??""));
   if(changed){
     const versions=asArray(old.versions).map(version=>({...version}));
@@ -13324,14 +13344,14 @@ app.put("/api/admin/finance/expenses/:id",(req,res)=>{
 app.delete("/api/admin/finance/expenses/:id",(req,res)=>{
   const old=getRecord("finance_expenses",req.params.id);
   if(!old)fail("EXPENSE_NOT_FOUND",404);
-  const today=new Date().toISOString().slice(0,10),versions=asArray(old.versions).map(version=>({...version}));
+  const today=financeDateKey(),versions=asArray(old.versions).map(version=>({...version}));
   if(!versions.length)versions.push(financeExpenseVersion(old));
   const current=versions.at(-1);
   if(!current.active_to||current.active_to>=today)current.active_to=dayBeforeFinanceDate(today);
   res.json(ok({ expense:updateRecord("finance_expenses",old.id,{is_active:false,versions}) }));
 });
 app.get("/api/admin/finance/expense-ledger",(req,res)=>{
-  const from=String(req.query.from||new Date().toISOString().slice(0,7)+"-01").slice(0,10),to=String(req.query.to||new Date().toISOString().slice(0,10)).slice(0,10);
+  const from=String(req.query.from||financeDateKey().slice(0,7)+"-01").slice(0,10),to=String(req.query.to||financeDateKey()).slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)fail("INVALID_DATE_RANGE",422);
   res.json(ok({ occurrences:financeExpenseLedgerRows(from,to),from,to }));
 });
@@ -13339,10 +13359,10 @@ app.post("/api/admin/finance/expense-ledger",(req,res)=>{
   const expenseId=Number(req.body?.expense_id),date=String(req.body?.date||"").slice(0,10),status=String(req.body?.status||"");
   const expense=getRecord("finance_expenses",expenseId);
   if(!expense||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!["paid","skipped","due"].includes(status))fail("INVALID_EXPENSE_OCCURRENCE",422);
-  const scheduled=financeExpenseOccurrences(expense,date,date)[0];
-  if(!scheduled)fail("EXPENSE_OCCURRENCE_NOT_FOUND",404);
   const existing=entityRows("finance_expense_occurrences").find(row=>Number(row.expense_id)===expenseId&&row.date===date);
-  const payload={expense_id:expenseId,date,status,amount:existing?.amount??scheduled.amount,paid_at:status==="paid"?new Date().toISOString():null,notes:String(req.body?.notes||existing?.notes||"").slice(0,1000)};
+  const scheduled=financeExpenseOccurrences(expense,date,date)[0]||(existing?.status==="paid"?existing:null);
+  if(!scheduled)fail("EXPENSE_OCCURRENCE_NOT_FOUND",404);
+  const payload={expense_id:expenseId,date,status,name:existing?.name||scheduled.name||expense.name,category:existing?.category||scheduled.category||expense.category,frequency:existing?.frequency||scheduled.frequency||expense.frequency,amount:existing?.amount??scheduled.amount,paid_at:status==="paid"?new Date().toISOString():null,notes:String(req.body?.notes||existing?.notes||"").slice(0,1000)};
   const occurrence=existing?updateRecord("finance_expense_occurrences",existing.id,payload):createRecord("finance_expense_occurrences",payload);
   res.json(ok({occurrence}));
 });
@@ -13363,7 +13383,7 @@ async function runFinanceReport(force = false) {
   if (!force && entityRows("finance_report_runs").some(run=>run.schedule_key===scheduleKey)) return {skipped:true,reason:"already_sent"};
   const end=dateKey,start=new Date(`${end}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate()-(settings.frequency==="daily"?1:settings.frequency==="weekly"?7:30));
-  const from=start.toISOString().slice(0,10),result=financeOverview({date_from:from,date_to:end}),s=result.summary;
+  const from=force?`${dateKey.slice(0,7)}-01`:start.toISOString().slice(0,10),result=financeOverview({date_from:from,date_to:end}),s=result.summary;
   const report={period_from:from,period_to:end,recognized_orders:s.recognized_orders,sales:moneyValue(s.product_revenue+s.shipping_revenue),cogs:s.cogs,shipping_cost:s.shipping_cost,payment_fees:s.payment_fees,operating_cost:s.operating_cost,contribution_profit:s.contribution_profit,net_profit:s.net_profit,currency:s.currency};
   const run=createRecord("finance_report_runs",{schedule_key:force?`manual:${crypto.randomUUID()}`:scheduleKey,status:"processing",report,started_at:new Date().toISOString()});
   const titleAr=`تقرير المالية ${from} — ${end}`,titleEn=`Finance report ${from} — ${end}`;
@@ -13386,7 +13406,7 @@ app.get("/api/admin/finance/export.xlsx",(req,res)=>{
   const sheets=[
     {name:"Summary",rows:[["Metric","Amount"],["Product revenue",s.product_revenue],["Shipping revenue",s.shipping_revenue],["Cost of goods",s.cogs],["Shipping cost",s.shipping_cost],["Payment fees",s.payment_fees],["Operating expenses",s.operating_cost],["Contribution profit",s.contribution_profit],["Net profit",s.net_profit]]},
     {name:"Sales",rows:[["Order","Date","Status","Product revenue","Shipping revenue","COGS","Shipping cost","Payment fees","Contribution profit"],...result.orders.filter(row=>row.recognized).map(row=>[row.order_number,row.date,row.status,row.product_revenue,row.shipping_revenue,row.cogs,row.shipping_cost,row.payment_fee,row.contribution_profit])]},
-    {name:"Expenses",rows:[["Expense","Category","Date","Frequency","Amount"],...result.operating_expenses.map(row=>[row.name,row.category,row.date,row.frequency,row.amount])]}];
+    {name:"Expenses",rows:[["Expense","Category","Date","Frequency","Amount","Status","Paid at"],...result.operating_expenses.map(row=>[row.name,row.category,row.date,row.frequency,row.amount,row.status,row.paid_at||""])]}];
   res.setHeader("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");res.setHeader("Content-Disposition",`attachment; filename="finance-${String(req.query.date_from||"all")}-${String(req.query.date_to||"all")}.xlsx"`);res.send(workbook(sheets));
 });
 
