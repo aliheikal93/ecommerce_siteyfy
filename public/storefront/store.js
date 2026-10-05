@@ -1696,6 +1696,43 @@ function restoreCheckoutFormState(values){
   form.querySelector('[name="payment_method"]:checked')?.dispatchEvent(new Event("change",{bubbles:true}));
 }
 
+const CHECKOUT_DRAFT_PREFIX="siteyfy_checkout_draft:";
+const checkoutDraftMemory=new Map();
+const checkoutDraftFields=new Set("full_name phone email country_code short_address province city district street building_number postal_code additional_number address_notes latitude longitude address_verification_token address_id save_address address_type address_label payment_method shipping_quote_choice".split(" "));
+const checkoutDraftKey=()=>CHECKOUT_DRAFT_PREFIX+String(state.customer?.id||"guest");
+function saveCheckoutDraft(){
+  const form=document.getElementById("checkoutForm");if(!form)return;
+  const values=Object.fromEntries(Object.entries(checkoutFormState()||{}).filter(([name])=>checkoutDraftFields.has(name)));
+  form.querySelectorAll('input[type="checkbox"][name]').forEach(input=>{if(checkoutDraftFields.has(input.name))values[input.name]=input.checked?input.value:"";});
+  const draft={saved_at:Date.now(),values,ui:{drawer_open:document.querySelector("#manualAddressDetails summary")?.getAttribute("aria-expanded")==="true",editor_collapsed:document.getElementById("checkoutAddressEditor")?.classList.contains("is-collapsed"),coupon_code:document.getElementById("couponCode")?.value||""}};
+  checkoutDraftMemory.set(checkoutDraftKey(),draft);try{sessionStorage.setItem(checkoutDraftKey(),JSON.stringify(draft));}catch{}
+}
+function readCheckoutDraft(){
+  let draft=checkoutDraftMemory.get(checkoutDraftKey());try{draft=JSON.parse(sessionStorage.getItem(checkoutDraftKey())||"null")||draft;}catch{}
+  if(!draft?.values||Date.now()-Number(draft.saved_at||0)>86400000){clearCheckoutDraft();return null;}
+  const token=draft.values.address_verification_token;if(token){try{const body=JSON.parse(atob(token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/")));if(!body.exp||body.exp*1000<=Date.now())draft.values.address_verification_token="";}catch{draft.values.address_verification_token="";}}
+  if(new URLSearchParams(location.search).get("payment")==="edfapay")draft.values.payment_method="edfapay";
+  return draft;
+}
+function restoreCheckoutDraft(draft){
+  if(!draft)return;
+  const checkout=document.getElementById("checkoutForm"),values={...draft.values};
+  if(values.payment_method&&![...checkout.querySelectorAll('[name="payment_method"]')].some(input=>input.value===String(values.payment_method)))delete values.payment_method;
+  if(values.address_id&&![...checkout.querySelectorAll('[name="address_id"]')].some(input=>input.value===String(values.address_id))){values.address_id="";draft.ui={...draft.ui,editor_collapsed:false};}
+  restoreCheckoutFormState(values);
+  const drawer=document.getElementById("manualAddressDetails");if(drawer){drawer.open=Boolean(draft.ui?.drawer_open);drawer.querySelector("summary")?.setAttribute("aria-expanded",String(drawer.open));}
+  document.getElementById("checkoutAddressEditor")?.classList.toggle("is-collapsed",Boolean(draft.ui?.editor_collapsed));
+  const form=document.getElementById("checkoutForm"),label=document.getElementById("manualAddressLabel");if(label&&form.elements.city.value&&form.elements.postal_code.value)label.textContent="عدّل العنوان";
+  const coupon=document.getElementById("couponCode");if(coupon)coupon.value=draft.ui?.coupon_code||"";
+}
+function bindCheckoutDraft(form){
+  form.addEventListener("input",saveCheckoutDraft);form.addEventListener("change",saveCheckoutDraft);
+  document.getElementById("manualAddressDetails")?.addEventListener("toggle",saveCheckoutDraft);
+  document.getElementById("toggleCheckoutAddressEditor")?.addEventListener("click",saveCheckoutDraft);
+}
+function clearCheckoutDraft(){checkoutDraftMemory.delete(checkoutDraftKey());try{sessionStorage.removeItem(checkoutDraftKey());}catch{}}
+window.addEventListener("pagehide",saveCheckoutDraft);
+
 async function revalidateCartDiscount(){
   let discount=null;try{discount=JSON.parse(localStorage.getItem("slyrah_discount")||"null");}catch{}
   const codes=appliedPromotionCodes(discount);if(!codes.length)return;
@@ -1912,22 +1949,39 @@ function checkoutFormMarkup(countries, defaultCountry) {
   </form>`;
 }
 
+function cartSummaryMarkup(checkout,totals=cartTotals()){
+  const promoCodes=appliedPromotionCodes(totals.discount);
+  return `<h2>ملخص الطلب</h2><div class="summary-row"><span>المجموع الفرعي</span><strong>${money(totals.subtotal)}</strong></div>${totals.discountAmount?`<div class="summary-row discount"><span>الخصم</span><strong>− ${money(totals.discountAmount)}</strong></div>`:""}${totals.shipping.active?`<div class="summary-row shipping" id="checkoutShippingRow"><span>الشحن${totals.shipping.rule?`<small>${esc(totals.shipping.rule.name_ar||"")}</small>`:""}</span><strong id="checkoutShippingAmount">${checkoutShippingPrice(totals.shipping)}</strong></div>`:""}<div class="coupon-box"><label for="couponCode">هل لديك كود خصم؟</label>${promoCodes.length?`<div class="applied-promo-list">${promoCodes.map(code=>`<button type="button" data-remove-promo="${esc(code)}"><span>${esc(code)}</span>${icon("x",13)}</button>`).join("")}</div>`:""}<div class="coupon-row"><input id="couponCode" value="" placeholder="أدخلي كودًا آخر" /><button id="applyCoupon" type="button">تطبيق</button></div><div class="coupon-message ${totals.discount?"success":""}" id="couponMessage">${totals.discount?`تم تطبيق ${promoCodes.length} كود خصم`:""}</div></div><div class="summary-total"><span>الإجمالي</span><strong id="checkoutTotalAmount">${money(totals.total)}</strong></div>${checkout?`<small class="muted" id="shippingQuoteState"></small><button class="primary-button" style="width:100%" id="placeOrder">تأكيد الطلب</button>`:`<a class="primary-button" style="width:100%" href="/checkout">إتمام الطلب</a>`}`;
+}
+function bindCartSummary(checkout){
+  document.getElementById("applyCoupon").onclick=applyCoupon;
+  document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
+  document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
+  document.getElementById("couponCode")?.addEventListener("input",saveCheckoutDraft);
+}
+function refreshCartSummary(checkout){
+  const summary=document.querySelector(".cart-summary");if(!summary)return;
+  const totals=cartTotals();summary.innerHTML=cartSummaryMarkup(checkout,totals);bindCartSummary(checkout);
+  if(checkout){renderCheckoutPaymentWidgets(totals.total);saveCheckoutDraft();}
+}
+
 function renderCart(checkout=false) {
+  if(checkout)saveCheckoutDraft();
+  const draft=checkout?readCheckoutDraft():null;
   if(!checkout)state.checkoutQuote=null;
   if(!state.cart.length){shell(`${breadcrumbs(checkout?"إتمام الطلب":"السلة")}<section class="container empty-cart"><div>${icon("shopping-bag",58)}<h1>سلة التسوق فارغة</h1><p class="muted">اختاري ما يناسبك من منتجات رداء الحشمة.</p><a class="primary-button" href="/products">العودة إلى المتجر</a></div></section>`);return;}
   const totals=cartTotals();
   const promoCodes=appliedPromotionCodes(totals.discount);
   const countries=state.market?.countries||[];
   const defaultCountry=state.market?.settings?.default_country_code||"SA";
-  shell(`${breadcrumbs(checkout?"إتمام الطلب":"سلة التسوق")}<section class="container cart-page">${checkout?`<h1>إتمام الطلب</h1>${checkoutFormMarkup(countries,defaultCountry)}`:"<h1>سلة التسوق</h1>"}<div class="cart-layout"><div class="cart-items">${state.cart.map(cartItemHtml).join("")}</div><aside class="cart-summary"><h2>ملخص الطلب</h2><div class="summary-row"><span>المجموع الفرعي</span><strong>${money(totals.subtotal)}</strong></div>${totals.discountAmount?`<div class="summary-row discount"><span>الخصم</span><strong>− ${money(totals.discountAmount)}</strong></div>`:""}${totals.shipping.active?`<div class="summary-row shipping" id="checkoutShippingRow"><span>الشحن${totals.shipping.rule?`<small>${esc(totals.shipping.rule.name_ar||"")}</small>`:""}</span><strong id="checkoutShippingAmount">${checkoutShippingPrice(totals.shipping)}</strong></div>`:""}<div class="coupon-box"><label for="couponCode">هل لديك كود خصم؟</label>${promoCodes.length?`<div class="applied-promo-list">${promoCodes.map(code=>`<button type="button" data-remove-promo="${esc(code)}"><span>${esc(code)}</span>${icon("x",13)}</button>`).join("")}</div>`:""}<div class="coupon-row"><input id="couponCode" value="" placeholder="أدخلي كودًا آخر" /><button id="applyCoupon" type="button">تطبيق</button></div><div class="coupon-message ${totals.discount?"success":""}" id="couponMessage">${totals.discount?`تم تطبيق ${promoCodes.length} كود خصم`:""}</div></div><div class="summary-total"><span>الإجمالي</span><strong id="checkoutTotalAmount">${money(totals.total)}</strong></div>${checkout?`<small class="muted" id="shippingQuoteState"></small><button class="primary-button" style="width:100%" id="placeOrder">تأكيد الطلب</button>`:`<a class="primary-button" style="width:100%" href="/checkout">إتمام الطلب</a>`}</aside></div></section>`);
+  shell(`${breadcrumbs(checkout?"إتمام الطلب":"سلة التسوق")}<section class="container cart-page">${checkout?`<h1>إتمام الطلب</h1>${checkoutFormMarkup(countries,defaultCountry)}`:"<h1>سلة التسوق</h1>"}<div class="cart-layout"><div class="cart-items">${state.cart.map(cartItemHtml).join("")}</div><aside class="cart-summary">${cartSummaryMarkup(checkout,totals)}</aside></div></section>`);
   trackCommerceEventOnce(checkout?"begin_checkout":"view_cart",checkout?"begin_checkout":"view_cart",state.cart,{value:totals.total});
   document.querySelectorAll("[data-cart-plus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartPlus),1,checkout));
   document.querySelectorAll("[data-cart-minus]").forEach(button=>button.onclick=()=>changeCartQuantity(Number(button.dataset.cartMinus),-1,checkout));
   document.querySelectorAll("[data-cart-remove]").forEach(button=>button.onclick=()=>removeCartItem(Number(button.dataset.cartRemove),checkout));
-  document.getElementById("applyCoupon").onclick=applyCoupon;
-  document.querySelectorAll("[data-remove-promo]").forEach(button=>button.onclick=()=>removePromotionCode(button.dataset.removePromo,checkout));
-  document.getElementById("placeOrder")?.addEventListener("click",placeOrder);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();bindCheckoutAddressBook();renderCheckoutPaymentWidgets(totals.total);if(new URLSearchParams(location.search).get("payment")==="edfapay"&&state.customer?.addresses?.length&&document.querySelector('[name="payment_method"][value="edfapay"]'))requestAnimationFrame(()=>document.querySelector(".checkout-payment-methods")?.scrollIntoView({block:"center"}));const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["edfapay","tabby"].includes(form.elements.payment_method.value);const note=document.getElementById("checkoutEmailNote");if(note){note.style.display=email.required?"block":"none";note.textContent=email.required?`البريد مطلوب لإتمام ${form.elements.payment_method.value==="tabby"?"الدفع مع تابي":"الدفع بالبطاقة"}.`:"";}};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackPaymentSelection(event.target.value);}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["address_id","country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});}
+  bindCartSummary(checkout);
+  if(checkout)restoreCheckoutDraft(draft);
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();bindCheckoutAddressBook();renderCheckoutPaymentWidgets(totals.total);if(new URLSearchParams(location.search).get("payment")==="edfapay"&&state.customer?.addresses?.length&&document.querySelector('[name="payment_method"][value="edfapay"]'))requestAnimationFrame(()=>document.querySelector(".checkout-payment-methods")?.scrollIntoView({block:"center"}));const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["edfapay","tabby"].includes(form.elements.payment_method.value);const note=document.getElementById("checkoutEmailNote");if(note){note.style.display=email.required?"block":"none";note.textContent=email.required?`البريد مطلوب لإتمام ${form.elements.payment_method.value==="tabby"?"الدفع مع تابي":"الدفع بالبطاقة"}.`:"";}};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackPaymentSelection(event.target.value);}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["address_id","country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});restoreCheckoutDraft(draft);bindCheckoutDraft(form);if(draft)refreshCheckoutQuote();}
 }
 
 function bindCheckoutPhoneInput(){
@@ -2001,7 +2055,7 @@ async function syncCheckoutRecovery(event_type="checkout_updated",overrides={},u
   try{const result=await api(url,{method:"POST",body:JSON.stringify(snapshot)});state.checkoutRecovery={...recovery,status:result.status,stage:result.stage};localStorage.setItem(CHECKOUT_RECOVERY_KEY,JSON.stringify(state.checkoutRecovery));return result;}catch{return null;}
 }
 
-function clearCheckoutRecovery(){state.checkoutRecovery=null;state.checkoutRecoveryPromise=null;localStorage.removeItem(CHECKOUT_RECOVERY_KEY);}
+function clearCheckoutRecovery(){clearCheckoutDraft();state.checkoutRecovery=null;state.checkoutRecoveryPromise=null;localStorage.removeItem(CHECKOUT_RECOVERY_KEY);}
 
 function bindCheckoutRecovery(form){
   const pendingChanges=state.pendingCartChanges.slice();ensureCheckoutRecovery().then(()=>{if(pendingChanges.length)syncCheckoutRecovery("cart_revalidated",{message:`${pendingChanges.length} cart change(s) were applied before checkout.`,page:"checkout",cart_changes:pendingChanges});});
@@ -2088,10 +2142,10 @@ async function promotionTrackingFields(){
 
 async function applyCoupon() {
   const code=document.getElementById("couponCode").value.trim().toUpperCase();const message=document.getElementById("couponMessage");if(!code)return;message.className="coupon-message";message.textContent="جاري التحقق...";const existing=appliedPromotionCodes(cartTotals().discount);const codes=[...new Set([...existing,code])];
-  try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,product_ids:state.cart.map(item=>item.product_id),category_slugs:state.cart.map(item=>item.category_slug),items:state.cart,tracking_action:"apply",attempted_code:code,...tracking})});const rejected=(result.rejected_promotions||[]).find(item=>item.code===code);if(rejected)throw new Error(rejected.reason);localStorage.setItem("slyrah_discount",JSON.stringify(result));renderCart(location.pathname==="/checkout");}catch(error){message.className="coupon-message error";message.textContent=promotionErrorMessage(error.message);}
+  try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,product_ids:state.cart.map(item=>item.product_id),category_slugs:state.cart.map(item=>item.category_slug),items:state.cart,tracking_action:"apply",attempted_code:code,...tracking})});const rejected=(result.rejected_promotions||[]).find(item=>item.code===code);if(rejected)throw new Error(rejected.reason);localStorage.setItem("slyrah_discount",JSON.stringify(result));refreshCartSummary(location.pathname==="/checkout");}catch(error){message.className="coupon-message error";message.textContent=promotionErrorMessage(error.message);}
 }
 
-async function removePromotionCode(code,checkout){const codes=appliedPromotionCodes(cartTotals().discount).filter(item=>item!==code);if(!codes.length){clearDiscount();syncCheckoutRecovery("promotion_removed",{promotion_action:"remove",removed_code:code,message:`Promotion code ${code} was removed.`});renderCart(checkout);return;}try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,items:state.cart,tracking_action:"remove",removed_code:code,...tracking})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}catch{clearDiscount();}renderCart(checkout);}
+async function removePromotionCode(code,checkout){const codes=appliedPromotionCodes(cartTotals().discount).filter(item=>item!==code);if(!codes.length){clearDiscount();syncCheckoutRecovery("promotion_removed",{promotion_action:"remove",removed_code:code,message:`Promotion code ${code} was removed.`});refreshCartSummary(checkout);return;}try{const tracking=await promotionTrackingFields();const result=await api("/api/store/promotions/evaluate",{method:"POST",body:JSON.stringify({codes,order_total:cartTotals().subtotal,items:state.cart,tracking_action:"remove",removed_code:code,...tracking})});localStorage.setItem("slyrah_discount",JSON.stringify(result));}catch{clearDiscount();}refreshCartSummary(checkout);}
 
 const PAYMENT_ATTEMPT_KEY="siteyfy_payment_attempt";
 
