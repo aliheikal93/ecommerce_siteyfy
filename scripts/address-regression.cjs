@@ -1,0 +1,19 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),crypto=require('crypto');
+const source=fs.readFileSync(require('path').resolve(__dirname,'../server.js'),'utf8');
+const extract=(a,b)=>source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)));
+let saved=[],request,config={provider:'saudi_address_pro',is_enabled:true,api_key_encrypted:'TEST_ONLY',language:'A',timeout_ms:3000,cache_days:30};
+const fixture={shortAddress:'ABCD1234',city:'الرياض',district:'الملقا',street:'شارع الاختبار',region:'منطقة الرياض',buildingNumber:'1234',postalCode:'12345',additionalNumber:'6789'};
+const box={crypto,URL,AbortController,setTimeout,clearTimeout,Date,Number,String,Math,entityRows:()=>saved,normalizeShippingIntegrations:()=>({spl_address:config}),decryptIntegrationSecret:x=>x,publicStoreUrl:()=> 'https://example.test/',jwtSecret:'test',jwt:{sign:x=>JSON.stringify(x)},createRecord:(_type,x)=>saved.push(x),fail:(message,status)=>{throw Object.assign(Error(message),{status});},fetch:async(url,options)=>{request={url:String(url),headers:options.headers};return {ok:true,json:async()=>({addresses:[{...fixture,shortAddress:'ZZZZ9999'},fixture]})};}};
+vm.createContext(box);vm.runInContext(extract('function normalizeSaudiShortAddress','function verifiedAddressFromToken')+extract('async function resolveSaudiShortAddress','const imileOmsPublicKey'),box);
+(async()=>{
+const result=await box.resolveSaudiShortAddress('abcd 1234');assert.equal(result.address.city,'الرياض');assert.equal(result.address.postal_code,'12345');assert.equal(result.address.provider,'saudi_address_pro');assert.equal(new URL(request.url).searchParams.get('q'),'ABCD1234');assert.equal(new URL(request.url).searchParams.get('language'),'ar');assert.equal(request.headers['X-API-Key'],'TEST_ONLY');assert(!request.url.includes('TEST_ONLY'));
+assert((await box.resolveSaudiShortAddress('ABCD1234')).cached);
+saved=[];box.fetch=async()=>({ok:true,json:async()=>({addresses:[{...fixture,shortAddress:'ZZZZ9999'}]})});await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_NOT_FOUND/);
+box.fetch=async()=>({ok:false,status:401,json:async()=>({})});await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_HTTP_401/);
+config.is_enabled=false;await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_NOT_CONFIGURED/);
+Object.assign(box,{normalizeMarketSettings:()=>({default_country_code:'SA',enabled_country_codes:['SA']}),normalizeCountries:()=>[{code:'SA',calling_code:'+966'}],verifiedAddressFromToken:()=>null});
+vm.runInContext(extract('function normalizeCheckoutCustomer','async function normalizeVerifiedCheckoutCustomer'),box);
+const customer=box.normalizeCheckoutCustomer({full_name:'اسم اختبار',phone:'0501234567',email:'',country_code:'SA',short_address:'ABCD1234',province:'الرياض',city:'الرياض',district:'الملقا',street:'الاختبار',building_number:'1234',postal_code:'12345'});
+assert.equal(customer.email,'');assert.equal(customer.phone,'+966501234567');assert.equal(customer.first_name,'اسم');assert.equal(customer.last_name,'اختبار');
+console.log('Passed provider contract, exact-code selection, aliases, key in server header, cache, not-found/auth errors, inactive guard, guest with no email and full name.');
+})().catch(e=>{console.error(e);process.exit(1)});

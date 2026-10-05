@@ -1995,6 +1995,7 @@ function normalizeShippingIntegrations(payload = {}, preserveSecrets = true) {
       ...requestedSpl,
       api_key: undefined,
       is_enabled: requestedSpl.is_enabled === true || requestedSpl.is_enabled === "true",
+      provider: requestedSpl.provider === "saudi_address_pro" ? "saudi_address_pro" : "spl",
       api_key_encrypted: splApiKeyEncrypted,
       base_url: String(requestedSpl.base_url || defaultShippingIntegrationSettings.spl_address.base_url).trim(),
       language: requestedSpl.language === "E" ? "E" : "A",
@@ -2802,18 +2803,19 @@ function normalizeSplAddress(row = {}, shortAddress = "") {
   const coordinates = String(addressValue(row, "ObjLatLng", "objLatLng") || "").match(/-?[0-9]+(?:\.[0-9]+)?/g)?.map(Number) || [];
   const directLatitude = Number(addressValue(row, "Latitude", "latitude"));
   const directLongitude = Number(addressValue(row, "Longitude", "longitude"));
+  const cityRegions={"الرياض":"منطقة الرياض","جدة":"منطقة مكة المكرمة","مكة المكرمة":"منطقة مكة المكرمة","الطائف":"منطقة مكة المكرمة","المدينة المنورة":"منطقة المدينة المنورة","الدمام":"المنطقة الشرقية","الخبر":"المنطقة الشرقية","الظهران":"المنطقة الشرقية","تبوك":"منطقة تبوك","أبها":"منطقة عسير","خميس مشيط":"منطقة عسير","بريدة":"منطقة القصيم","حائل":"منطقة حائل","نجران":"منطقة نجران","جازان":"منطقة جازان","الجوف":"منطقة الجوف","عرعر":"منطقة الحدود الشمالية","الباحة":"منطقة الباحة",Riyadh:"Riyadh Region",Jeddah:"Makkah Region",Makkah:"Makkah Region",Madinah:"Madinah Region",Dammam:"Eastern Province",Tabuk:"Tabuk Region",Abha:"Asir Region",Taif:"Makkah Region",Buraidah:"Qassim Region",Hail:"Hail Region",Najran:"Najran Region",Jazan:"Jazan Region",Arar:"Northern Borders Region"};
   const latitude = Number.isFinite(directLatitude) && directLatitude !== 0 ? directLatitude : coordinates.length >= 3 ? coordinates[coordinates.length - 1] : null;
   const longitude = Number.isFinite(directLongitude) && directLongitude !== 0 ? directLongitude : coordinates.length >= 3 ? coordinates[coordinates.length - 2] : null;
   return {
     country_code: "SA",
     short_address: normalizeSaudiShortAddress(shortAddress),
-    province: String(addressValue(row, "RegionName", "regionName", "RegionName_L2") || "").trim(),
+    province: String(addressValue(row, "RegionName", "regionName", "RegionName_L2", "region", "state", "province") || cityRegions[String(addressValue(row,"City","city","City_L2")).trim()] || "").trim(),
     city: String(addressValue(row, "City", "city", "City_L2") || "").trim(),
     district: String(addressValue(row, "District", "district", "District_L2") || "").trim(),
     street: String(addressValue(row, "Street", "street", "Street_L2") || "").trim(),
-    building_number: String(addressValue(row, "BuildingNumber", "buildingNumber") || "").trim(),
-    postal_code: String(addressValue(row, "PostCode", "postCode", "ZipCode", "zipCode") || "").trim(),
-    additional_number: String(addressValue(row, "AdditionalNumber", "additionalNumber") || "").trim(),
+    building_number: String(addressValue(row, "BuildingNumber", "buildingNumber", "building_number") || "").trim(),
+    postal_code: String(addressValue(row, "PostCode", "postCode", "ZipCode", "zipCode", "postalCode", "postal_code") || "").trim(),
+    additional_number: String(addressValue(row, "AdditionalNumber", "additionalNumber", "additional_number") || "").trim(),
     latitude,
     longitude,
     address_line_1: String(addressValue(row, "Address1", "address1") || "").trim(),
@@ -2845,23 +2847,24 @@ async function resolveSaudiShortAddress(shortAddress, { force = false, actor = "
   if (!settings.is_enabled || !apiKey) fail("SPL_ADDRESS_NOT_CONFIGURED", 503);
   const shortAddressHash = crypto.createHash("sha256").update(code).digest("hex");
   const cached = !force && entityRows("address_verifications").find((entry) => {
-    if (entry.short_address_hash !== shortAddressHash || entry.status !== "verified") return false;
+    if (entry.short_address_hash !== shortAddressHash || entry.status !== "verified" || (entry.provider || "spl") !== settings.provider) return false;
     return Date.now() - new Date(entry.verified_at || entry.created_at).getTime() < settings.cache_days * 86400000;
   });
   if (cached?.address) return { address: cached.address, verification_token: splVerificationToken(cached.address), cached: true, verified_at: cached.verified_at };
 
-  const url = new URL(settings.base_url);
+  const pro=settings.provider==="saudi_address_pro";
+  const url = new URL(pro?"https://saudiaddresspro.com/api/address/search":settings.base_url);
   url.searchParams.set("format", "json");
   url.searchParams.set("language", settings.language);
   url.searchParams.set("page", "1");
   url.searchParams.set("encode", "utf8");
   url.searchParams.set("shortaddress", code);
-  url.searchParams.set("api_key", apiKey);
+  if(pro){url.search="";url.searchParams.set("q",code);url.searchParams.set("language",settings.language==="E"?"en":"ar");}else url.searchParams.set("api_key", apiKey);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), settings.timeout_ms);
   let response;
   try {
-    response = await fetch(url, { headers: { Accept: "application/json" }, signal: controller.signal });
+    response = await fetch(url, { headers: { Accept: "application/json",...(pro?{"X-API-Key":apiKey,Origin:new URL(publicStoreUrl("/")).origin}: {}) }, signal: controller.signal });
   } catch (error) {
     fail(error.name === "AbortError" ? "SPL_ADDRESS_TIMEOUT" : "SPL_ADDRESS_UNAVAILABLE", 502);
   } finally {
@@ -2870,13 +2873,13 @@ async function resolveSaudiShortAddress(shortAddress, { force = false, actor = "
   const payload = await response.json().catch(() => null);
   if (!response.ok) fail(`SPL_ADDRESS_HTTP_${response.status}`, 502);
   const rows = payload?.Addresses || payload?.addresses || payload?.result?.Addresses || payload?.result?.addresses || [];
-  const first = Array.isArray(rows) ? rows[0] : rows;
+  const first = Array.isArray(rows) ? (pro?rows.find(row=>normalizeSaudiShortAddress(row.shortAddress||row.ShortAddress||row.short_address)===code):rows[0]) : rows;
   if (payload?.success === false || !first) fail("SPL_ADDRESS_NOT_FOUND", 404);
-  const address = normalizeSplAddress(first, code);
+  const address = {...normalizeSplAddress(first, code),provider:settings.provider};
   if (!address.city || !address.building_number || !address.postal_code) fail("SPL_ADDRESS_INCOMPLETE", 422);
   const verifiedAt = new Date().toISOString();
   createRecord("address_verifications", {
-    provider: "spl",
+    provider: settings.provider,
     actor,
     status: "verified",
     short_address_hash: shortAddressHash,
@@ -7876,7 +7879,7 @@ function normalizeCheckoutCustomer(customer = {}) {
     address_notes: String(customer.address_notes || customer.notes || "").trim(),
     latitude: addressSource.latitude === "" || addressSource.latitude === undefined || addressSource.latitude === null ? null : Number(addressSource.latitude),
     longitude: addressSource.longitude === "" || addressSource.longitude === undefined || addressSource.longitude === null ? null : Number(addressSource.longitude),
-    address_verification: verifiedAddress ? { provider: "spl", status: "verified", verified_at: new Date().toISOString(), provider_reference: verifiedAddress.provider_reference || null } : { provider: null, status: "manual", verified_at: null }
+    address_verification: verifiedAddress ? { provider: verifiedAddress.provider || "spl", status: "verified", verified_at: new Date().toISOString(), provider_reference: verifiedAddress.provider_reference || null } : { provider: null, status: "manual", verified_at: null }
   };
   if (countryCode === "SA" && normalized.short_address && !validSaudiShortAddress(normalized.short_address)) fail("INVALID_SAUDI_SHORT_ADDRESS");
   const required = ["first_name", "last_name", "phone", "province", "city", "district", "street", "building_number", "postal_code"];
@@ -14585,7 +14588,7 @@ app.post("/api/store/shipping/quote", async (req, res, next) => {
 });
 app.get("/api/store/address/sa/config", (_req, res) => {
   const spl = publicShippingIntegrations().spl_address;
-  res.json(ok({ enabled: spl.is_enabled && spl.has_api_key, require_verified_checkout: spl.require_verified_checkout, allow_manual_fallback: spl.allow_manual_fallback, format: "AAAA0000" }));
+  res.json(ok({ enabled: spl.is_enabled && spl.has_api_key, require_verified_checkout: spl.require_verified_checkout, allow_manual_fallback: spl.allow_manual_fallback, provider:spl.provider, format: "AAAA0000" }));
 });
 app.post("/api/store/address/sa/resolve", async (req, res, next) => {
   try {
@@ -14707,6 +14710,7 @@ app.post("/api/orders", async (req, res, next) => {
   if (requestedPaymentMethod === "edfapay" && (!gatewaySettings.providers.edfapay.is_enabled || !gatewaySettings.providers.edfapay.show_at_checkout)) fail("EDFAPAY_NOT_ENABLED", 409);
   if (requestedPaymentMethod === "tabby" && (!gatewaySettings.providers.tabby.is_enabled || !gatewaySettings.providers.tabby.show_at_checkout)) fail("TABBY_NOT_ENABLED", 409);
   if (requestedPaymentMethod === "cod" && !gatewaySettings.cash_on_delivery.is_enabled) fail("CASH_ON_DELIVERY_NOT_ENABLED", 409);
+  if(["edfapay","tabby"].includes(requestedPaymentMethod)&&!customer.email)fail("PAYMENT_EMAIL_REQUIRED",422);
   const suppliedAttemptId = String(req.body?.payment_attempt_id || "").trim();
   if (suppliedAttemptId && !/^[A-Za-z0-9_-]{16,100}$/.test(suppliedAttemptId)) fail("PAYMENT_ATTEMPT_ID_INVALID", 400);
   const hostedPayment = ["tamara", "edfapay", "tabby"].includes(requestedPaymentMethod);

@@ -1439,3 +1439,24 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 .wishlist-count { position:absolute; inset-block-start:-5px; inset-inline-end:-6px; min-width:18px; height:18px; padding-inline:3px; display:grid; place-items:center; border-radius:999px; background:var(--primary); color:#fff; font-size:10px; font-weight:800; line-height:1; }
 .wishlist-count[hidden] { display:none; }
 .toast a { display:inline-block; margin-inline-start:12px; color:#fff; font-weight:800; text-decoration:underline; text-underline-offset:3px; }
+
+/* Checkout address: short code leads; contact and delivery details follow. */
+.checkout-address-fields>.national-address-card { padding:24px; margin-bottom:8px; border:1px solid #ddd4eb; border-radius:14px; background:#faf8fd; }
+.national-address-head strong { font-size:22px; line-height:1.5; margin-top:5px; color:var(--text); }
+.national-address-head>div>span { color:var(--primary); font-size:13px; font-weight:700; }
+.national-address-control { margin-top:18px; grid-template-columns:minmax(0,1fr) auto; gap:12px; }
+.national-address-control input { min-width:0; min-height:60px; font-size:25px; letter-spacing:4px; text-align:center; border-radius:9px; background:white; font-variant-numeric:tabular-nums; }
+.national-address-control button { min-height:60px; border-radius:9px; padding-inline:20px; }
+.national-address-card p { font-size:13px; line-height:1.7; margin-top:12px; }
+.national-address-card[aria-busy="true"] .national-address-control button svg { animation:checkout-address-spin 1s linear infinite; }
+.checkout-label-text small { margin-inline-start:6px; font-size:12px; font-weight:400; color:var(--muted); }
+.checkout-address-fields input[name="email"] { direction:ltr; text-align:start; }
+@keyframes checkout-address-spin { to { transform:rotate(360deg); } }
+@media(max-width:600px){
+ .checkout-address-fields>.national-address-card { padding:18px; }
+ .national-address-head strong { font-size:20px; }
+ .national-address-control { grid-template-columns:minmax(0,1fr); gap:10px; }
+ .national-address-control input { font-size:26px; min-height:60px; }
+ .national-address-control button { min-height:44px; }
+}
+@media(prefers-reduced-motion:reduce){.national-address-card[aria-busy="true"] .national-address-control button svg { animation:none; }}
