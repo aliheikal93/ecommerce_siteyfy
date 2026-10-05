@@ -1883,17 +1883,17 @@ function checkoutFormMarkup(countries, defaultCountry) {
     <div class="checkout-address-editor full ${savedAddresses.length?"is-collapsed":""}" id="checkoutAddressEditor">
     <header class="checkout-address-editor-head"><div><span>${savedAddresses.length?"تعديل بيانات التوصيل":"بيانات التوصيل"}</span><strong id="checkoutAddressEditorTitle">${savedAddresses.length?"العنوان المختار":"أضيفي عنوان التوصيل"}</strong></div>${savedAddresses.length?`<button type="button" id="toggleCheckoutAddressEditor">تعديل العنوان</button>`:""}</header>
     <div class="checkout-address-fields">
+    <label><span class="checkout-label-text">الاسم الكامل<i>*</i></span><input name="full_name" autocomplete="name" placeholder="الاسم واسم العائلة" value="${esc([defaults.first_name,defaults.last_name].filter(Boolean).join(" "))}" required pattern=".*\\S+\\s+\\S+.*" title="اكتبي الاسم واسم العائلة" /></label>
+    <label><span class="checkout-label-text">البريد الإلكتروني <small>(اختياري)</small></span><input name="email" type="email" autocomplete="email" aria-describedby="checkoutEmailNote" value="${esc(defaults.email||"")}" /><small class="checkout-field-hint" id="checkoutEmailNote" aria-live="polite"></small></label>
     ${splEnabled?`<section class="national-address-card full" id="saudiAddressPanel">
-      <div class="national-address-head"><div><span>العنوان الوطني المختصر <i class="checkout-required-star">*</i></span><strong>عنوانك يبدأ بـ 8 خانات</strong></div><span class="address-verification-state" id="addressVerificationState">جاهز للبحث</span></div>
-      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="ABCD 1234" aria-label="العنوان الوطني المختصر" value="${esc(defaults.short_address||"")}" required /><button type="button" id="verifyShortAddress">${icon("map-pin-check",18)}تحقق واملأ العنوان</button></div>
+      <div class="national-address-head"><label for="shortAddress">العنوان الوطني المختصر <i class="checkout-required-star">*</i></label><span class="address-verification-state" id="addressVerificationState">ملء تلقائي</span></div>
+      <div class="national-address-control"><input name="short_address" id="shortAddress" maxlength="9" autocomplete="off" placeholder="ABCD 1234" aria-label="العنوان الوطني المختصر" aria-describedby="nationalAddressMessage" value="${esc(defaults.short_address||"")}" required /><span class="national-address-indicator" aria-hidden="true"><span class="national-address-pin">${icon("map-pin",20)}</span><span class="national-address-spinner" id="addressLookupSpinner" hidden></span></span></div>
       <p id="nationalAddressMessage">4 حروف إنجليزية ثم 4 أرقام. بمجرد اكتماله نملأ تفاصيل عنوانك تلقائيًا.</p>
       <input name="address_verification_token" type="hidden" />
       <input name="latitude" type="hidden" value="${esc(defaults.latitude??"")}" />
       <input name="longitude" type="hidden" value="${esc(defaults.longitude??"")}" />
     </section>`:`<label><span class="checkout-label-text">العنوان الوطني المختصر<i>*</i></span><input name="short_address" maxlength="9" autocomplete="off" placeholder="ABCD 1234" style="direction:ltr;text-transform:uppercase" value="${esc(defaults.short_address||"")}" required /></label>`}
-    <label><span class="checkout-label-text">الاسم الكامل<i>*</i></span><input name="full_name" autocomplete="name" placeholder="الاسم واسم العائلة" value="${esc([defaults.first_name,defaults.last_name].filter(Boolean).join(" "))}" required pattern=".*\\S+\\s+\\S+.*" title="اكتبي الاسم واسم العائلة" /></label>
     <label><span class="checkout-label-text">رقم الجوال<i>*</i></span><div class="checkout-phone-control" id="checkoutPhoneControl"><span id="checkoutPhonePrefix">+966</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="5XXXXXXXX" value="${esc(defaults.phone||"")}" required /></div><small class="checkout-field-hint" id="checkoutPhoneHint">9 أرقام بعد +966</small></label>
-    <label><span class="checkout-label-text">البريد الإلكتروني <small>(اختياري)</small></span><input name="email" type="email" autocomplete="email" aria-describedby="checkoutEmailNote" value="${esc(defaults.email||"")}" /><small class="checkout-field-hint" id="checkoutEmailNote" aria-live="polite"></small></label>
     <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===(defaults.country_code||defaultCountry)?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" value="${esc(defaults.province||"")}" required data-address-field /></label>
     <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" value="${esc(defaults.city||"")}" required data-address-field /></label>
@@ -2011,29 +2011,29 @@ function bindCheckoutRecovery(form){
 
 function bindSaudiAddressVerification(){
   const form=document.getElementById("checkoutForm");if(!form)return;
-  const country=form.elements.country_code,panel=document.getElementById("saudiAddressPanel"),short=form.elements.short_address,token=form.elements.address_verification_token,message=document.getElementById("nationalAddressMessage"),label=document.getElementById("addressVerificationState"),verify=document.getElementById("verifyShortAddress");
-  if(!panel||!short||!token||!verify)return;
+  const country=form.elements.country_code,panel=document.getElementById("saudiAddressPanel"),short=form.elements.short_address,token=form.elements.address_verification_token,message=document.getElementById("nationalAddressMessage"),label=document.getElementById("addressVerificationState"),spinner=document.getElementById("addressLookupSpinner");
+  if(!panel||!short||!token||!spinner)return;
   let timer,sequence=0,controller;
   const codeValue=()=>short.value.toUpperCase().replace(/[^A-Z0-9]/g,"");
   const status=(text,kind="")=>{label.textContent=text;label.className=`address-verification-state ${kind?`is-${kind}`:""}`;};
-  const cancel=()=>{clearTimeout(timer);sequence++;controller?.abort();panel.removeAttribute("aria-busy");verify.disabled=false;verify.innerHTML=`${icon("map-pin-check",18)}البحث عن العنوان`;hydrateIcons();};
+  const cancel=()=>{clearTimeout(timer);sequence++;controller?.abort();panel.removeAttribute("aria-busy");spinner.hidden=true;};
   const updateCountry=()=>{cancel();panel.hidden=country.value!=="SA";panel.style.display=panel.hidden?"none":"";short.required=country.value==="SA";token.value="";};
   country.addEventListener("change",updateCountry);updateCountry();
-  form.querySelectorAll("[data-address-field]").forEach(input=>input.addEventListener("input",()=>{const pending=panel.hasAttribute("aria-busy");cancel();if(token.value||pending){token.value="";status("تم تعديل العنوان","pending");message.textContent="راجعي بيانات التوصيل، أو أعيدي البحث لاسترجاع العنوان الموثق.";}}));
+  form.querySelectorAll("[data-address-field]").forEach(input=>input.addEventListener("input",()=>{const pending=panel.hasAttribute("aria-busy");cancel();if(token.value||pending){token.value="";status("تم تعديل العنوان","pending");message.textContent="راجعي بيانات التوصيل، أو أعيدي كتابة الرمز لاسترجاع العنوان الموثق.";}}));
   const resolve=async()=>{
     const code=codeValue();if(country.value!=="SA"||!panel.isConnected)return;
     if(!/^[A-Z]{4}[0-9]{4}$/.test(code)){status("رمز غير مكتمل","error");message.textContent="اكتبي 4 حروف إنجليزية ثم 4 أرقام.";return;}
-    cancel();const request=++sequence;controller=new AbortController();verify.disabled=true;panel.setAttribute("aria-busy","true");status("جاري البحث","pending");verify.innerHTML=`${icon("loader-circle",18)}جاري البحث`;hydrateIcons();message.textContent="نبحث عن تفاصيل عنوانك…";
+    cancel();const request=++sequence;controller=new AbortController();spinner.hidden=false;panel.setAttribute("aria-busy","true");status("جاري البحث","pending");message.textContent="نبحث عن تفاصيل عنوانك…";
     try{
       const result=await api("/api/store/address/sa/resolve",{method:"POST",signal:controller.signal,body:JSON.stringify({short_address:code})});
       if(request!==sequence||codeValue()!==code||country.value!=="SA"||!panel.isConnected)return;
       const address=result.address||{};["province","city","district","street","building_number","postal_code","additional_number","latitude","longitude"].forEach(name=>{if(form.elements[name]&&address[name]!==null&&address[name]!==undefined)form.elements[name].value=address[name];});
       token.value=result.verification_token||"";status("تم العثور على العنوان","verified");message.textContent=`${address.city||""}${address.district?`، ${address.district}`:""} · راجعي تفاصيل التوصيل أدناه.`;form.dispatchEvent(new Event("change",{bubbles:true}));refreshCheckoutQuote();
     }catch(error){if(request!==sequence||error.name==="AbortError"||!panel.isConnected)return;status("لم يكتمل البحث","error");message.textContent=error.message==="SPL_ADDRESS_NOT_FOUND"?"لم نجد هذا العنوان. راجعي الحروف والأرقام وحاولي مرة أخرى.":"تعذر البحث الآن. يمكنك إعادة المحاولة أو كتابة تفاصيل عنوانك أدناه.";
-    }finally{if(request===sequence&&panel.isConnected){panel.removeAttribute("aria-busy");verify.disabled=false;verify.innerHTML=`${icon("map-pin-check",18)}البحث عن العنوان`;hydrateIcons();}}
+    }finally{if(request===sequence&&panel.isConnected){panel.removeAttribute("aria-busy");spinner.hidden=true;}}
   };
-  short.addEventListener("input",()=>{cancel();const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("جاهز للبحث");message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);});
-  verify.addEventListener("click",resolve);message.setAttribute("aria-live","polite");label.setAttribute("role","status");hydrateIcons();
+  short.addEventListener("input",()=>{cancel();const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("ملء تلقائي");message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);});
+  message.setAttribute("aria-live","polite");label.setAttribute("role","status");hydrateIcons();
 }
 
 function renderCheckoutShippingChoices(quotes=[]){

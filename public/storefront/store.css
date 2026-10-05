@@ -1440,23 +1440,28 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 .wishlist-count[hidden] { display:none; }
 .toast a { display:inline-block; margin-inline-start:12px; color:#fff; font-weight:800; text-decoration:underline; text-underline-offset:3px; }
 
-/* Checkout address: short code leads; contact and delivery details follow. */
-.checkout-address-fields>.national-address-card { padding:24px; margin-bottom:8px; border:1px solid #ddd4eb; border-radius:14px; background:#faf8fd; }
-.national-address-head strong { font-size:22px; line-height:1.5; margin-top:5px; color:var(--text); }
-.national-address-head>div>span { color:var(--primary); font-size:13px; font-weight:700; }
-.national-address-control { margin-top:18px; grid-template-columns:minmax(0,1fr) auto; gap:12px; }
-.national-address-control input { min-width:0; min-height:60px; font-size:25px; letter-spacing:4px; text-align:center; border-radius:9px; background:white; font-variant-numeric:tabular-nums; }
-.national-address-control button { min-height:60px; border-radius:9px; padding-inline:20px; }
-.national-address-card p { font-size:13px; line-height:1.7; margin-top:12px; }
-.national-address-card[aria-busy="true"] .national-address-control button svg { animation:checkout-address-spin 1s linear infinite; }
+/* Contact details first, followed by a compact automatic national-address lookup. */
+.checkout-address-fields>.national-address-card { padding:20px; margin:4px 0; border:1px solid var(--line); border-radius:12px; background:var(--white,#fff); }
+.national-address-head { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:0 0 12px; }
+.national-address-head>label { display:inline-flex; align-items:center; gap:4px; color:var(--text); font-size:14px; font-weight:700; }
+.national-address-head .address-verification-state { font-size:11px; font-weight:600; }
+.national-address-control { display:flex; align-items:center; gap:12px; padding:0 16px; border:1px solid var(--line); border-radius:8px; background:var(--light,#faf9fb); transition:border-color .2s,box-shadow .2s; }
+.national-address-control:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent); }
+.national-address-control input { flex:1; min-width:0; min-height:52px; padding:0; border:0; border-radius:0; outline:none; box-shadow:none; background:transparent; font-size:20px; letter-spacing:3px; text-align:center; font-weight:650; font-variant-numeric:tabular-nums; }
+.national-address-control input:focus { border:0; box-shadow:none; outline:none; }
+.national-address-indicator { width:20px; height:20px; flex:none; display:grid; place-items:center; color:var(--muted); }
+.national-address-pin { display:flex; }
+.national-address-spinner { display:block; width:20px; height:20px; border:2px solid var(--line); border-top-color:var(--primary); border-radius:50%; animation:checkout-address-spin .9s linear infinite; }
+.national-address-spinner[hidden],.national-address-card[aria-busy="true"] .national-address-pin { display:none; }
+.national-address-card p { margin:10px 0 0; min-height:22px; font-size:12px; line-height:1.8; color:var(--muted); }
 .checkout-label-text small { margin-inline-start:6px; font-size:12px; font-weight:400; color:var(--muted); }
 .checkout-address-fields input[name="email"] { direction:ltr; text-align:start; }
 @keyframes checkout-address-spin { to { transform:rotate(360deg); } }
 @media(max-width:600px){
- .checkout-address-fields>.national-address-card { padding:18px; }
- .national-address-head strong { font-size:20px; }
- .national-address-control { grid-template-columns:minmax(0,1fr); gap:10px; }
- .national-address-control input { font-size:26px; min-height:60px; }
- .national-address-control button { min-height:44px; }
+ .checkout-address-fields>.national-address-card { padding:16px; }
+ .national-address-head { gap:8px; }
+ .national-address-head>label { font-size:13px; }
+ .national-address-control { padding-inline:12px; }
+ .national-address-control input { font-size:20px; letter-spacing:2px; }
 }
-@media(prefers-reduced-motion:reduce){.national-address-card[aria-busy="true"] .national-address-control button svg { animation:none; }}
+@media(prefers-reduced-motion:reduce){.national-address-spinner { animation-duration:2s; }.national-address-control { transition:none; }}
