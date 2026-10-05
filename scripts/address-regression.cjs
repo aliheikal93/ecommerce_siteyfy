@@ -10,6 +10,7 @@ const result=await box.resolveSaudiShortAddress('abcd 1234');assert.equal(result
 assert((await box.resolveSaudiShortAddress('ABCD1234')).cached);
 saved=[];box.fetch=async()=>({ok:true,json:async()=>({addresses:[{...fixture,shortAddress:'ZZZZ9999'}]})});await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_NOT_FOUND/);
 box.fetch=async()=>({ok:false,status:401,json:async()=>({})});await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_HTTP_401/);
+box.fetch=async()=>({ok:false,status:404,json:async()=>({errorCode:"NOT_FOUND"})});await assert.rejects(()=>box.resolveSaudiShortAddress("ABCD1234"),/SPL_ADDRESS_NOT_FOUND/);
 config.is_enabled=false;await assert.rejects(()=>box.resolveSaudiShortAddress('ABCD1234'),/SPL_ADDRESS_NOT_CONFIGURED/);
 Object.assign(box,{normalizeMarketSettings:()=>({default_country_code:'SA',enabled_country_codes:['SA']}),normalizeCountries:()=>[{code:'SA',calling_code:'+966'}],verifiedAddressFromToken:()=>null});
 vm.runInContext(extract('function normalizeCheckoutCustomer','async function normalizeVerifiedCheckoutCustomer'),box);

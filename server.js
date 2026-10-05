@@ -2871,7 +2871,10 @@ async function resolveSaudiShortAddress(shortAddress, { force = false, actor = "
     clearTimeout(timeout);
   }
   const payload = await response.json().catch(() => null);
-  if (!response.ok) fail(`SPL_ADDRESS_HTTP_${response.status}`, 502);
+  if (!response.ok) {
+    if (pro && response.status === 404 && payload?.errorCode === "NOT_FOUND") fail("SPL_ADDRESS_NOT_FOUND", 404);
+    fail(`SPL_ADDRESS_HTTP_${response.status}`, 502);
+  }
   const rows = payload?.Addresses || payload?.addresses || payload?.result?.Addresses || payload?.result?.addresses || [];
   const first = Array.isArray(rows) ? (pro?rows.find(row=>normalizeSaudiShortAddress(row.shortAddress||row.ShortAddress||row.short_address)===code):rows[0]) : rows;
   if (payload?.success === false || !first) fail("SPL_ADDRESS_NOT_FOUND", 404);
