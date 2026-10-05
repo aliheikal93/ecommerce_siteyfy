@@ -1894,7 +1894,7 @@ function checkoutFormMarkup(countries, defaultCountry) {
       <input name="latitude" type="hidden" value="${esc(defaults.latitude??"")}" />
       <input name="longitude" type="hidden" value="${esc(defaults.longitude??"")}" />
     </section>`:`<label><span class="checkout-label-text">العنوان الوطني المختصر<i>*</i></span><input name="short_address" maxlength="9" autocomplete="off" placeholder="ABCD 1234" style="direction:ltr;text-transform:uppercase" value="${esc(defaults.short_address||"")}" required /></label>`}
-    ${splEnabled?`<details class="checkout-manual-address full" id="manualAddressDetails" ${(defaults.country_code||defaultCountry)!=="SA"?"open":""}><summary>املأ بيانات العنوان بنفسك</summary><div class="checkout-manual-fields">`:`<div class="checkout-manual-fields full">`}
+    ${splEnabled?`<details class="checkout-manual-address full" id="manualAddressDetails" ${(defaults.country_code||defaultCountry)!=="SA"?"open":""}><summary aria-expanded="false"><span class="checkout-drawer-triangle" aria-hidden="true"></span><span id="manualAddressLabel">املأ العنوان بنفسك</span></summary><div class="checkout-manual-drawer"><div class="checkout-manual-fields">`:`<div class="checkout-manual-fields full">`}
     <label><span class="checkout-label-text">الدولة<i>*</i></span><select name="country_code" required>${countries.map(country=>`<option value="${country.code}" ${country.code===(defaults.country_code||defaultCountry)?"selected":""}>${country.code==="SA"?"🇸🇦 ":""}${esc(country.name_ar||country.name_en)}</option>`).join("")}</select></label>
     <label><span class="checkout-label-text">المنطقة<i>*</i></span><input name="province" autocomplete="address-level1" value="${esc(defaults.province||"")}" required data-address-field /></label>
     <label><span class="checkout-label-text">المدينة<i>*</i></span><input name="city" autocomplete="address-level2" value="${esc(defaults.city||"")}" required data-address-field /></label>
@@ -1903,7 +1903,7 @@ function checkoutFormMarkup(countries, defaultCountry) {
     <label><span class="checkout-label-text">رقم المبنى<i>*</i></span><input name="building_number" inputmode="numeric" value="${esc(defaults.building_number||"")}" required data-address-field /></label>
     <label><span class="checkout-label-text">الرمز البريدي<i>*</i></span><input name="postal_code" inputmode="numeric" autocomplete="postal-code" value="${esc(defaults.postal_code||"")}" required data-address-field /></label>
     <label>الرقم الإضافي للعنوان<input name="additional_number" inputmode="numeric" value="${esc(defaults.additional_number||"")}" data-address-field /></label>
-    ${splEnabled?`</div></details>`:`</div>`}
+    ${splEnabled?`</div></div></details>`:`</div>`}
     ${state.customer?`<label class="full checkout-save-address"><input type="checkbox" name="save_address" value="true" /><span>حفظ هذا العنوان في حسابي</span><select name="address_type"><option value="home">المنزل</option><option value="work">العمل</option><option value="other">عنوان آخر</option></select><input name="address_label" placeholder="اسم العنوان" /></label>`:""}
     </div></div>
     <fieldset class="checkout-shipping-methods full" id="checkoutShippingMethods" hidden><legend>شركة الشحن</legend><div id="checkoutShippingChoices"></div></fieldset>
@@ -2015,7 +2015,19 @@ function bindSaudiAddressVerification(){
   const form=document.getElementById("checkoutForm");if(!form)return;
   const country=form.elements.country_code,panel=document.getElementById("saudiAddressPanel"),short=form.elements.short_address,token=form.elements.address_verification_token,message=document.getElementById("nationalAddressMessage"),label=document.getElementById("addressVerificationState"),spinner=document.getElementById("addressLookupSpinner");
   const manual=document.getElementById("manualAddressDetails");
-  form.addEventListener("invalid",event=>{if(manual?.contains(event.target))manual.open=true;},true);
+  const manualLabel=document.getElementById("manualAddressLabel"),summary=manual?.querySelector("summary"),drawer=manual?.querySelector(".checkout-manual-drawer");
+  let drawerAnimation,drawerOpen=Boolean(manual?.open);
+  const openDrawer=(open,animate=true)=>{
+    if(!manual||!drawer)return;
+    const height=manual.open?drawer.getBoundingClientRect().height:0;
+    drawerAnimation?.cancel();drawerOpen=open;summary.setAttribute("aria-expanded",String(open));
+    if(!animate||!drawer.animate||matchMedia("(prefers-reduced-motion: reduce)").matches){manual.open=open;drawer.style.overflow="";return;}
+    manual.open=true;drawer.style.overflow="hidden";
+    const animation=drawer.animate({height:[`${height}px`,open?`${drawer.scrollHeight}px`:"0px"],opacity:[open?0.5:1,open?1:0]},{duration:280,easing:"cubic-bezier(.22,1,.36,1)"});
+    drawerAnimation=animation;animation.onfinish=()=>{if(drawerAnimation!==animation)return;manual.open=open;drawer.style.overflow="";drawerAnimation=null;};
+  };
+  if(summary){summary.setAttribute("aria-expanded",String(drawerOpen));summary.addEventListener("click",event=>{event.preventDefault();openDrawer(!drawerOpen);});}
+  form.addEventListener("invalid",event=>{if(manual?.contains(event.target))openDrawer(true,false);},true);
   if(!panel||!short||!token||!spinner)return;
   let timer,sequence=0,controller;
   const codeValue=()=>short.value.toUpperCase().replace(/[^A-Z0-9]/g,"");
@@ -2023,20 +2035,20 @@ function bindSaudiAddressVerification(){
   const cancel=()=>{clearTimeout(timer);sequence++;controller?.abort();panel.removeAttribute("aria-busy");spinner.hidden=true;};
   const updateCountry=()=>{cancel();panel.hidden=country.value!=="SA";panel.style.display=panel.hidden?"none":"";short.required=country.value==="SA";token.value="";};
   country.addEventListener("change",updateCountry);updateCountry();
-  form.querySelectorAll("[data-address-field]").forEach(input=>input.addEventListener("input",()=>{const pending=panel.hasAttribute("aria-busy");cancel();if(token.value||pending){token.value="";status("تم تعديل العنوان","pending");message.textContent="راجعي بيانات التوصيل، أو أعيدي كتابة الرمز لاسترجاع العنوان الموثق.";}}));
+  form.querySelectorAll("[data-address-field]").forEach(input=>input.addEventListener("input",()=>{const pending=panel.hasAttribute("aria-busy");cancel();if(token.value||pending){token.value="";status("تم تعديل العنوان","pending");message.hidden=true;message.textContent="";}}));
   const resolve=async()=>{
     const code=codeValue();if(country.value!=="SA"||!panel.isConnected)return;
     if(!/^[A-Z]{4}[0-9]{4}$/.test(code)){status("رمز غير مكتمل","error");message.textContent="اكتبي 4 حروف إنجليزية ثم 4 أرقام.";return;}
-    cancel();const request=++sequence;controller=new AbortController();spinner.hidden=false;panel.setAttribute("aria-busy","true");status("جاري البحث","pending");message.textContent="نبحث عن تفاصيل عنوانك…";
+    cancel();const request=++sequence;controller=new AbortController();spinner.hidden=false;panel.setAttribute("aria-busy","true");status("جاري البحث","pending");message.hidden=false;message.textContent="نبحث عن تفاصيل عنوانك…";
     try{
       const result=await api("/api/store/address/sa/resolve",{method:"POST",signal:controller.signal,body:JSON.stringify({short_address:code})});
       if(request!==sequence||codeValue()!==code||country.value!=="SA"||!panel.isConnected)return;
       const address=result.address||{};["province","city","district","street","building_number","postal_code","additional_number","latitude","longitude"].forEach(name=>{if(form.elements[name]&&address[name]!==null&&address[name]!==undefined)form.elements[name].value=address[name];});
-      token.value=result.verification_token||"";status("تم العثور على العنوان","verified");message.textContent=`${address.city||""}${address.district?`، ${address.district}`:""} · يمكنك تعديل العنوان من «املأ بيانات العنوان بنفسك».`;form.dispatchEvent(new Event("change",{bubbles:true}));refreshCheckoutQuote();
-    }catch(error){if(request!==sequence||error.name==="AbortError"||!panel.isConnected)return;status("لم يكتمل البحث","error");message.textContent=error.message==="SPL_ADDRESS_NOT_FOUND"?"لم نجد هذا العنوان. راجعي الحروف والأرقام وحاولي مرة أخرى.":"تعذر البحث الآن. يمكنك إعادة المحاولة أو الضغط على «املأ بيانات العنوان بنفسك».";
+      token.value=result.verification_token||"";status("تم العثور على العنوان","verified");message.textContent="";message.hidden=true;if(manualLabel)manualLabel.textContent="عدّل العنوان";form.dispatchEvent(new Event("change",{bubbles:true}));refreshCheckoutQuote();
+    }catch(error){if(request!==sequence||error.name==="AbortError"||!panel.isConnected)return;status("لم يكتمل البحث","error");message.hidden=false;message.textContent=error.message==="SPL_ADDRESS_NOT_FOUND"?"لم نجد هذا العنوان. راجعي الحروف والأرقام وحاولي مرة أخرى.":"تعذر البحث الآن. يمكنك إعادة المحاولة أو الضغط على «املأ بيانات العنوان بنفسك».";
     }finally{if(request===sequence&&panel.isConnected){panel.removeAttribute("aria-busy");spinner.hidden=true;}}
   };
-  short.addEventListener("input",()=>{cancel();const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("");message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);});
+  short.addEventListener("input",()=>{cancel();const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("");message.hidden=false;if(manualLabel)manualLabel.textContent="املأ العنوان بنفسك";message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);});
   message.setAttribute("aria-live","polite");label.setAttribute("role","status");hydrateIcons();
 }
 

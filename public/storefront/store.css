@@ -1474,3 +1474,24 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 .checkout-manual-address[open] .checkout-manual-fields { margin-top:12px; }
 .address-verification-state[hidden] { display:none; }
 @media(max-width:600px){.checkout-manual-fields { grid-template-columns:1fr; }}
+
+/* Aligned contact rows and an animated, keyboard-accessible address drawer. */
+.checkout-address-editor { padding:24px; background:#fff; border-radius:12px; }
+.checkout-address-fields { gap:16px; }
+.checkout-address-fields>label { align-content:start; gap:8px; }
+.checkout-address-fields>.full { grid-column:1/-1; }
+.checkout-label-text { min-height:20px; display:flex; align-items:center; gap:4px; }
+.checkout-address-fields>label>input,.checkout-phone-control input { min-height:48px; height:48px; border-radius:8px; }
+.checkout-phone-control>span { border-radius:8px 0 0 8px; }
+.checkout-phone-control.is-saudi input { border-radius:0 8px 8px 0; }
+.checkout-address-fields>.national-address-card { margin:0; padding:16px; background:var(--light,#faf9fb); border-radius:10px; }
+.national-address-control { background:#fff; }
+#nationalAddressMessage[hidden] { display:none; }
+.checkout-manual-address>summary { width:100%; gap:8px; padding:4px 0; text-decoration:none; }
+.checkout-manual-address>summary:hover { color:var(--text); }
+.checkout-drawer-triangle { width:0; height:0; border-block:4px solid transparent; border-inline-start:6px solid currentColor; transition:transform .28s cubic-bezier(.22,1,.36,1); }
+.checkout-manual-address>summary[aria-expanded="true"] .checkout-drawer-triangle { transform:rotate(-90deg); }
+.checkout-manual-drawer { min-width:0; }
+.checkout-manual-address[open] .checkout-manual-fields { margin-top:0; padding-top:12px; padding-bottom:4px; }
+@media(max-width:600px){.checkout-address-editor { padding:16px; }.checkout-address-fields { gap:14px; }}
+@media(prefers-reduced-motion:reduce){.checkout-drawer-triangle { transition:none; }}
