@@ -1465,3 +1465,12 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
  .national-address-control input { font-size:20px; letter-spacing:2px; }
 }
 @media(prefers-reduced-motion:reduce){.national-address-spinner { animation-duration:2s; }.national-address-control { transition:none; }}
+
+/* Manual delivery fields stay available without crowding automatic checkout. */
+.checkout-manual-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.checkout-manual-address>summary { list-style:none; display:flex; align-items:center; min-height:44px; width:fit-content; color:var(--primary); font-size:13px; font-weight:600; text-decoration:underline; text-underline-offset:4px; cursor:pointer; }
+.checkout-manual-address>summary::-webkit-details-marker { display:none; }
+.checkout-manual-address>summary:focus-visible { outline:2px solid var(--primary); outline-offset:4px; border-radius:4px; }
+.checkout-manual-address[open] .checkout-manual-fields { margin-top:12px; }
+.address-verification-state[hidden] { display:none; }
+@media(max-width:600px){.checkout-manual-fields { grid-template-columns:1fr; }}
