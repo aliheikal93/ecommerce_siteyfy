@@ -1704,7 +1704,7 @@ function saveCheckoutDraft(){
   const form=document.getElementById("checkoutForm");if(!form)return;
   const values=Object.fromEntries(Object.entries(checkoutFormState()||{}).filter(([name])=>checkoutDraftFields.has(name)));
   form.querySelectorAll('input[type="checkbox"][name]').forEach(input=>{if(checkoutDraftFields.has(input.name))values[input.name]=input.checked?input.value:"";});
-  const draft={saved_at:Date.now(),values,ui:{drawer_open:document.querySelector("#manualAddressDetails summary")?.getAttribute("aria-expanded")==="true",editor_collapsed:document.getElementById("checkoutAddressEditor")?.classList.contains("is-collapsed"),coupon_code:document.getElementById("couponCode")?.value||""}};
+  const draft={saved_at:Date.now(),values,ui:{drawer_open:document.querySelector("#manualAddressDetails summary")?.getAttribute("aria-expanded")==="true",editor_collapsed:document.getElementById("checkoutAddressEditor")?.classList.contains("is-collapsed"),coupon_code:document.getElementById("couponCode")?.value||"",address_resolved:document.getElementById("nationalAddressMessage")?.classList.contains("is-address-summary"),address_error:document.getElementById("shortAddress")?.getAttribute("aria-invalid")==="true"?document.getElementById("nationalAddressMessage")?.textContent:""}};
   checkoutDraftMemory.set(checkoutDraftKey(),draft);try{sessionStorage.setItem(checkoutDraftKey(),JSON.stringify(draft));}catch{}
 }
 function readCheckoutDraft(){
@@ -1723,6 +1723,7 @@ function restoreCheckoutDraft(draft){
   const drawer=document.getElementById("manualAddressDetails");if(drawer){drawer.open=Boolean(draft.ui?.drawer_open);drawer.querySelector("summary")?.setAttribute("aria-expanded",String(drawer.open));}
   document.getElementById("checkoutAddressEditor")?.classList.toggle("is-collapsed",Boolean(draft.ui?.editor_collapsed));
   const form=document.getElementById("checkoutForm"),label=document.getElementById("manualAddressLabel");if(label&&form.elements.city.value&&form.elements.postal_code.value)label.textContent="عدّل العنوان";
+  const addressMessage=document.getElementById("nationalAddressMessage");if(draft.ui?.address_error){showCheckoutFieldError(form.elements.short_address,draft.ui.address_error);}else if(addressMessage&&form.elements.short_address.value&&form.elements.city.value&&form.elements.postal_code.value&&(draft.ui?.address_resolved||form.elements.address_verification_token?.value)){addressMessage.hidden=false;addressMessage.classList.add("is-address-summary");addressMessage.textContent=checkoutAddressText(draft.values);}
   const coupon=document.getElementById("couponCode");if(coupon)coupon.value=draft.ui?.coupon_code||"";
 }
 function bindCheckoutDraft(form){
@@ -1981,7 +1982,49 @@ function renderCart(checkout=false) {
   document.querySelectorAll("[data-cart-remove]").forEach(button=>button.onclick=()=>removeCartItem(Number(button.dataset.cartRemove),checkout));
   bindCartSummary(checkout);
   if(checkout)restoreCheckoutDraft(draft);
-  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();bindCheckoutAddressBook();renderCheckoutPaymentWidgets(totals.total);if(new URLSearchParams(location.search).get("payment")==="edfapay"&&state.customer?.addresses?.length&&document.querySelector('[name="payment_method"][value="edfapay"]'))requestAnimationFrame(()=>document.querySelector(".checkout-payment-methods")?.scrollIntoView({block:"center"}));const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["edfapay","tabby"].includes(form.elements.payment_method.value);const note=document.getElementById("checkoutEmailNote");if(note){note.style.display=email.required?"block":"none";note.textContent=email.required?`البريد مطلوب لإتمام ${form.elements.payment_method.value==="tabby"?"الدفع مع تابي":"الدفع بالبطاقة"}.`:"";}};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackPaymentSelection(event.target.value);}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["address_id","country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});restoreCheckoutDraft(draft);bindCheckoutDraft(form);if(draft)refreshCheckoutQuote();}
+  if(checkout){bindSaudiAddressVerification();bindCheckoutPhoneInput();bindCheckoutAddressBook();renderCheckoutPaymentWidgets(totals.total);if(new URLSearchParams(location.search).get("payment")==="edfapay"&&state.customer?.addresses?.length&&document.querySelector('[name="payment_method"][value="edfapay"]'))requestAnimationFrame(()=>document.querySelector(".checkout-payment-methods")?.scrollIntoView({block:"center"}));const form=document.getElementById("checkoutForm"),email=form.elements.email;const syncEmailRequirement=()=>{email.required=["edfapay","tabby"].includes(form.elements.payment_method.value);if(email.validity.valid)clearCheckoutFieldError(email);const note=document.getElementById("checkoutEmailNote");if(note){note.style.display=email.required?"block":"none";note.textContent=email.required?`البريد مطلوب لإتمام ${form.elements.payment_method.value==="tabby"?"الدفع مع تابي":"الدفع بالبطاقة"}.`:"";}};form.querySelectorAll('[name="payment_method"]').forEach(input=>input.addEventListener("change",event=>{syncEmailRequirement();if(event.isTrusted)trackPaymentSelection(event.target.value);}));syncEmailRequirement();bindCheckoutRecovery(form);let quoteTimer;const quoteFields=new Set(["address_id","country_code","province","city","district","street","building_number","postal_code","short_address","latitude","longitude","payment_method"]);form.addEventListener("change",event=>{if(!quoteFields.has(event.target?.name))return;clearTimeout(quoteTimer);quoteTimer=setTimeout(()=>refreshCheckoutQuote(),250);});restoreCheckoutDraft(draft);bindCheckoutDraft(form);bindCheckoutValidation(form);if(draft)refreshCheckoutQuote();}
+}
+
+function checkoutAddressText(address={}){
+  return [address.city,address.district,address.street,address.building_number?`مبنى ${address.building_number}`:"",address.postal_code?`الرمز البريدي ${address.postal_code}`:""].filter(Boolean).join("، ");
+}
+function checkoutFieldReason(input){
+  const name=input.name,validity=input.validity;
+  const label=input.closest("label")?.querySelector(".checkout-label-text")?.textContent.replace(/[＊*]/g,"").trim()||({short_address:"العنوان الوطني المختصر",additional_number:"الرقم الإضافي"})[name]||"هذا الحقل";
+  if(name==="short_address"&&!validity.valid&&!validity.valueMissing)return "الرمز خطأ يرجي اعادة كتابته او ملأ البيانات يدويا";
+  if(name==="email"&&validity.valueMissing)return "يرجى إدخال البريد الإلكتروني لإتمام الدفع بهذه الوسيلة.";
+  if(validity.valueMissing||input.required&&!String(input.value||"").trim())return `يرجى إدخال ${label}.`;
+  if(name==="full_name")return "يرجى كتابة الاسم واسم العائلة.";
+  if(name==="email")return "يرجى كتابة بريد إلكتروني صحيح، مثل name@example.com.";
+  if(name==="phone")return input.form.elements.country_code.value==="SA"?"رقم الجوال يجب أن يبدأ بـ 5 ويتكون من 9 أرقام بعد +966.":"يرجى كتابة رقم جوال صحيح مع مفتاح الدولة.";
+  if(name==="postal_code")return "الرمز البريدي يجب أن يتكون من 5 أرقام.";
+  if(name==="building_number")return "رقم المبنى يجب أن يتكون من 4 أرقام.";
+  if(name==="additional_number")return "الرقم الإضافي يجب أن يتكون من 4 أرقام.";
+  return "يرجى مراجعة صيغة البيانات في هذا الحقل.";
+}
+function showCheckoutFieldError(input,text){
+  if(!input)return;const wrapper=input.closest("label")||input.closest(".national-address-control")||input;
+  const id=input.name==="short_address"?"nationalAddressMessage":`checkout-error-${input.name}`;
+  let error=document.getElementById(id);if(!error){error=document.createElement("small");error.id=id;error.className="checkout-field-error";error.setAttribute("role","status");wrapper.appendChild(error);}
+  error.hidden=false;error.textContent=text;error.classList.remove("is-address-summary");error.classList.add("checkout-field-error");input.setAttribute("aria-invalid","true");input.setAttribute("aria-errormessage",id);
+  input.setAttribute("aria-describedby",[...new Set([...(input.getAttribute("aria-describedby")||"").split(/\s+/).filter(Boolean),id])].join(" "));
+  wrapper.classList.add("has-checkout-error");wrapper.classList.remove("checkout-error-pulse");void wrapper.offsetWidth;wrapper.classList.add("checkout-error-pulse");
+}
+function clearCheckoutFieldError(input){
+  if(!input)return;input.removeAttribute("aria-invalid");const id=input.getAttribute("aria-errormessage");input.removeAttribute("aria-errormessage");
+  if(id){const error=document.getElementById(id);if(error){error.hidden=true;error.classList.remove("checkout-field-error");}if(id!=="nationalAddressMessage")input.setAttribute("aria-describedby",(input.getAttribute("aria-describedby")||"").split(/\s+/).filter(value=>value!==id).join(" "));}
+  (input.closest("label")||input.closest(".national-address-control"))?.classList.remove("has-checkout-error","checkout-error-pulse");
+}
+function bindCheckoutValidation(form){
+  let firstInvalid,timer;
+  const rules=()=>{const saudi=form.elements.country_code.value==="SA";
+    [["short_address",saudi?"[A-Za-z]{4} ?[0-9]{4}":""],["postal_code",saudi?"[0-9]{5}":""],["building_number",saudi?"[0-9]{4}":""],["additional_number",saudi?"[0-9]{4}":""]].forEach(([name,pattern])=>{const input=form.elements[name];if(input){if(pattern)input.pattern=pattern;else input.removeAttribute("pattern");}});
+  };rules();form.elements.country_code.addEventListener("change",rules);
+  form.addEventListener("invalid",event=>{event.preventDefault();const input=event.target;showCheckoutFieldError(input,checkoutFieldReason(input));input.closest("#checkoutAddressEditor")?.classList.remove("is-collapsed");if(!firstInvalid)firstInvalid=input;clearTimeout(timer);timer=setTimeout(()=>{const target=firstInvalid;firstInvalid=null;if(!target?.isConnected)return;target.focus({preventScroll:true});const wrapper=target.closest("label")||target.closest(".national-address-card")||target;wrapper.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"center"});},0);},true);
+  const update=input=>{if(input?.matches("[data-address-field]")&&input.required)input.setCustomValidity(input.value&&!input.value.trim()?"يرجى إدخال بيانات صحيحة.":"");if(!input?.matches("input,select,textarea")||input.type==="hidden")return;if(input.validity.valid)clearCheckoutFieldError(input);else if(input.hasAttribute("aria-invalid"))showCheckoutFieldError(input,checkoutFieldReason(input));};
+  form.addEventListener("input",event=>update(event.target));form.addEventListener("change",event=>update(event.target));
+  form.addEventListener("focusout",event=>{const input=event.target;if(input?.matches("input,select,textarea")&&input.type!=="hidden"&&!input.validity.valid)showCheckoutFieldError(input,checkoutFieldReason(input));});
+  form.addEventListener("submit",event=>{event.preventDefault();placeOrder();});
 }
 
 function bindCheckoutPhoneInput(){
@@ -2097,12 +2140,12 @@ function bindSaudiAddressVerification(){
     try{
       const result=await api("/api/store/address/sa/resolve",{method:"POST",signal:controller.signal,body:JSON.stringify({short_address:code})});
       if(request!==sequence||codeValue()!==code||country.value!=="SA"||!panel.isConnected)return;
-      const address=result.address||{};["province","city","district","street","building_number","postal_code","additional_number","latitude","longitude"].forEach(name=>{if(form.elements[name]&&address[name]!==null&&address[name]!==undefined)form.elements[name].value=address[name];});
-      token.value=result.verification_token||"";status("تم العثور على العنوان","verified");message.textContent="";message.hidden=true;if(manualLabel)manualLabel.textContent="عدّل العنوان";form.dispatchEvent(new Event("change",{bubbles:true}));refreshCheckoutQuote();
-    }catch(error){if(request!==sequence||error.name==="AbortError"||!panel.isConnected)return;status("لم يكتمل البحث","error");message.hidden=false;message.textContent=error.message==="SPL_ADDRESS_NOT_FOUND"?"لم نجد هذا العنوان. راجعي الحروف والأرقام وحاولي مرة أخرى.":"تعذر البحث الآن. يمكنك إعادة المحاولة أو الضغط على «املأ بيانات العنوان بنفسك».";
+      const address=result.address||{};["province","city","district","street","building_number","postal_code","additional_number","latitude","longitude"].forEach(name=>{if(form.elements[name]&&address[name]!==null&&address[name]!==undefined){form.elements[name].value=address[name];form.elements[name].setCustomValidity("");clearCheckoutFieldError(form.elements[name]);}});
+      token.value=result.verification_token||"";status("تم العثور على العنوان","verified");clearCheckoutFieldError(short);message.hidden=false;message.className="is-address-summary";message.textContent=checkoutAddressText(address);if(manualLabel)manualLabel.textContent="عدّل العنوان";form.dispatchEvent(new Event("change",{bubbles:true}));refreshCheckoutQuote();
+    }catch(error){if(request!==sequence||error.name==="AbortError"||!panel.isConnected)return;status("");message.hidden=false;openDrawer(true);showCheckoutFieldError(short,["SPL_ADDRESS_NOT_FOUND","INVALID_SAUDI_SHORT_ADDRESS"].includes(error.message)?"الرمز خطأ يرجي اعادة كتابته او ملأ البيانات يدويا":"تعذر التحقق من العنوان الآن، يرجى ملء البيانات يدويا.");form.dispatchEvent(new Event("change",{bubbles:true}));
     }finally{if(request===sequence&&panel.isConnected){panel.removeAttribute("aria-busy");spinner.hidden=true;}}
   };
-  short.addEventListener("input",()=>{cancel();const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("");message.hidden=false;if(manualLabel)manualLabel.textContent="املأ العنوان بنفسك";message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);});
+  short.addEventListener("input",()=>{cancel();clearCheckoutFieldError(short);message.classList.remove("is-address-summary");const clean=codeValue().slice(0,8);short.value=clean.length>4?`${clean.slice(0,4)} ${clean.slice(4)}`:clean;token.value="";status("");message.hidden=false;if(manualLabel)manualLabel.textContent="املأ العنوان بنفسك";message.textContent="4 حروف إنجليزية ثم 4 أرقام. نملأ العنوان تلقائيًا عند اكتمال الرمز.";if(/^[A-Z]{4}[0-9]{4}$/.test(clean))timer=setTimeout(resolve,450);else if(clean.length===8){status("");showCheckoutFieldError(short,"الرمز خطأ يرجي اعادة كتابته او ملأ البيانات يدويا");openDrawer(true);}});
   message.setAttribute("aria-live","polite");label.setAttribute("role","status");hydrateIcons();
 }
 
@@ -2195,6 +2238,7 @@ function continueGatewayPayment(result,attempt,button){
 
 async function placeOrder(options={}) {
   const retryClosedAttempt=options?.retryClosedAttempt!==false;
+  const initialForm=document.getElementById("checkoutForm");if(initialForm&&!initialForm.reportValidity())return;
   const initialButton=document.getElementById("placeOrder");if(!initialButton)return;initialButton.disabled=true;initialButton.textContent="جاري التحقق من الأسعار...";
   const cartCurrent=await revalidateVisibleCart({force:true});if(!cartCurrent)return;
   const form=document.getElementById("checkoutForm"),button=document.getElementById("placeOrder");if(!form||!button)return;

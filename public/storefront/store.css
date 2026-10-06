@@ -1495,3 +1495,15 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 .checkout-manual-address[open] .checkout-manual-fields { margin-top:0; padding-top:12px; padding-bottom:4px; }
 @media(max-width:600px){.checkout-address-editor { padding:16px; }.checkout-address-fields { gap:14px; }}
 @media(prefers-reduced-motion:reduce){.checkout-drawer-triangle { transition:none; }}
+
+/* Clear address feedback and inline checkout validation. */
+.checkout-address-editor,.national-address-card { min-width:0; }
+.national-address-card p.is-address-summary { color:var(--text); font-size:14px; font-weight:650; line-height:1.9; white-space:nowrap; overflow-x:auto; max-width:100%; }
+.checkout-form .checkout-field-error,.national-address-card p.checkout-field-error { color:#b42318; font-size:12px; font-weight:550; line-height:1.7; }
+.checkout-form label.has-checkout-error>input,.checkout-form label.has-checkout-error>select,.checkout-form label.has-checkout-error>textarea,.has-checkout-error .checkout-phone-control input,.has-checkout-error .checkout-phone-control>span,.national-address-control.has-checkout-error { border-color:#d92d20; }
+.checkout-form label.has-checkout-error:has(input[type="radio"]) { outline:1px solid #d92d20; border-radius:8px; }
+.checkout-error-pulse>input,.checkout-error-pulse>select,.checkout-error-pulse>textarea,.checkout-error-pulse .checkout-phone-control,.national-address-control.checkout-error-pulse { animation:checkout-error-pulse .85s ease-in-out 2; }
+@keyframes checkout-error-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(217,45,32,0); } 50% { box-shadow:0 0 0 4px rgba(217,45,32,.18); } }
+@media(prefers-reduced-motion:reduce){.checkout-error-pulse>input,.checkout-error-pulse>select,.checkout-error-pulse>textarea,.checkout-error-pulse .checkout-phone-control,.national-address-control.checkout-error-pulse { animation:none; }}
+
+.checkout-form [aria-invalid="true"]:focus { outline:none; border-color:#d92d20; box-shadow:0 0 0 3px rgba(217,45,32,.16); }
