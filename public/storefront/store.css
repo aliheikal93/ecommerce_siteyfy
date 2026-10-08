@@ -1507,3 +1507,16 @@ button:focus-visible,a:focus-visible { outline:3px solid var(--primary); outline
 @media(prefers-reduced-motion:reduce){.checkout-error-pulse>input,.checkout-error-pulse>select,.checkout-error-pulse>textarea,.checkout-error-pulse .checkout-phone-control,.national-address-control.checkout-error-pulse { animation:none; }}
 
 .checkout-form [aria-invalid="true"]:focus { outline:none; border-color:#d92d20; box-shadow:0 0 0 3px rgba(217,45,32,.16); }
+
+/* Dependent Saudi address suggestions share the checkout field geometry. */
+.checkout-location-field { position:relative; min-width:0; }
+.checkout-location-field>input:focus:not([aria-invalid="true"]) { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent); }
+.checkout-location-field:has(.checkout-location-menu:not([hidden])) { z-index:20; }
+.checkout-location-menu { position:absolute; inset-inline:0; top:100%; margin-top:6px; overflow:hidden; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 4px 16px rgba(44,31,52,.1); }
+.checkout-location-menu[hidden] { display:none; }
+.checkout-location-menu.is-above { top:auto; bottom:100%; margin-top:0; margin-bottom:6px; }
+.checkout-location-menu [role="listbox"] { max-height:236px; overflow-y:auto; overscroll-behavior:contain; scroll-behavior:auto; }
+.checkout-location-menu button { display:block; width:100%; min-height:44px; border:0; border-radius:0; padding:10px 12px; background:transparent; color:var(--text); font:inherit; font-size:14px; text-align:start; cursor:pointer; }
+.checkout-location-menu button:hover,.checkout-location-menu button[aria-selected="true"] { color:var(--primary); background:var(--light,#faf9fb); }
+.checkout-location-menu button:active { background:color-mix(in srgb,var(--primary) 12%,#fff); }
+.checkout-location-status { display:block; padding:10px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; line-height:1.7; }

@@ -15,6 +15,7 @@ import zlib from "node:zlib";
 import { launch } from "chrome-launcher";
 import { fileURLToPath } from "node:url";
 import { workbook } from "./features/xlsx.js";
+import { saudiLocationOptions } from "./features/saudi-locations.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -14588,6 +14589,12 @@ app.post("/api/store/shipping/quote", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+app.get("/api/store/address/sa/locations", (req, res) => {
+  const kind = String(req.query.kind || "regions");
+  if (!["regions", "cities", "districts"].includes(kind)) fail("INVALID_ADDRESS_LOOKUP_KIND", 400);
+  const result = saudiLocationOptions({ kind, region:String(req.query.region || "").slice(0,128), city:String(req.query.city || "").slice(0,128) });
+  res.set("Cache-Control", "public, max-age=86400").json(ok(result));
 });
 app.get("/api/store/address/sa/config", (_req, res) => {
   const spl = publicShippingIntegrations().spl_address;
